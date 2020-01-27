@@ -1,0 +1,18 @@
+= RC11 =
+
+This repository contains a coq development of the Repaired C11 Memory Model presented in this http://plv.mpi-sws.org/scfix/paper.pdf[article].
+
+== Use ==
+
+You can compile the project by running `make`.
+
+If https://github.com/xavierleroy/coq2html[coq2html] is in your path, you can generate the documentation by running `./generate_doc.sh`.
+
+If you want to use https://coq.inria.fr/refman/practical-tools/utilities.html#documenting-coq-files-with-coqdoc[coqdoc], you can run `make html` (it won't look as good as what coq2html produces though).
+
+== Files ==
+
+- `util.v` : definition of relations, sequencing of relations, acyclicity and useful lemmas about them
+- `exec.v` : definition of a complete program execution
+- `rc11.v` : definition of the validity of an execution on the RC11 memory model and on the classical SC model
+- `prefix.v` : definition of the prefix of an execution and lemmas about them
