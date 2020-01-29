@@ -63,7 +63,7 @@ We say that an event happens-before another one if there is a path between the
 two events consisting of [sb] and [sw] edges *)
 
 Definition hb (exec: Execution) :=
-  (exec.(sb) ;; sw exec)⁺.
+  (rel_union exec.(sb) (sw exec))⁺.
   
 (** ** SC-before *)
 

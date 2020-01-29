@@ -248,11 +248,11 @@ happens-before relation of the execution *)
 
 Lemma not_trans_hb_prefix_incl : forall pre ex,
   prefix pre ex ->
-  rel_incl (pre.(sb) ;; (sw pre)) (ex.(sb) ;; (sw ex)).
+  rel_incl (rel_union pre.(sb) (sw pre)) (rel_union ex.(sb) (sw ex)).
 Proof.
-  intros pre ex Hpre x y [z [H1 H2]]; exists z; split.
-  - apply (sb_prefix_incl Hpre). auto.
-  - apply (sw_prefix_incl Hpre). auto.
+  intros pre ex Hpre x y [H | H].
+  - left. apply (sb_prefix_incl Hpre). auto.
+  - right. apply (sw_prefix_incl Hpre). auto.
 Qed.
 
 Lemma hb_prefix_incl : forall pre ex,

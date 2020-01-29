@@ -9,6 +9,8 @@ Author: Quentin Ladeveze, Inria Paris, France
 Require Import Ensembles.
 From RC11 Require Import util.
 
+Import RelNotations.
+
 Set Implicit Arguments.
 
 (** The file contains the definition of complete executions. It corresponds to 
@@ -287,6 +289,45 @@ it has a mode stronger or equal to [m] *)
 
 Definition F_seqmode (m: Mode) : Rln Event :=
   rel_seq F (E_seqmode m).
+  
+(** ** Relations restrictions *)
+
+(** [res_eq_loc r] restricts a relation [r] to the pairs of events that affect 
+the same location *)
+
+Definition res_eq_loc (r: Rln Event) :=
+  fun x => fun y =>
+    r x y /\
+    (get_loc x) = (get_loc y).
+
+(** [res_neq_loc r] restricts a relation [r] to the pairs of events that affect 
+a different location *)
+
+Definition res_neq_loc (r: Rln Event) :=
+  fun x => fun y =>
+    r x y /\
+    (get_loc x) <> (get_loc y).
+
+(** [res_mode m r] restricts a relation [r] to the pairs of events that have mode
+[m] *)
+
+Definition res_mode (m: Mode) (r: Rln Event) :=
+  (E_eqmode m) ;; r ;; (E_eqmode m).
+
+Lemma res_mode_simp : forall m r x y,
+  (res_mode m r) x y ->
+  (get_mode x) = m /\
+  (get_mode y) = m /\
+  r x y.
+Proof.
+  intros m r x y H.
+  destruct H as [z [[H0 H1] H2]].
+  destruct H2 as [z1 [H3 [H4 H5]]]. 
+  repeat (try split).
+  - auto.
+  - rewrite H4 in H5. auto.
+  - rewrite H4 in H3. rewrite <- H0 in H3. auto.
+Qed.
 
 (** ** Sequenced before *)
 
@@ -303,7 +344,6 @@ Definition valid_sb (evts: set Event) (sb : Rln Event) : Prop :=
     (get_val e) = Some 0 /\
     ~(In _ (dom sb) e) /\
     forall e', In _ (dom sb) e' -> sb e e').
-
 
 (** ** Read-modify-write relation *)
 
@@ -376,23 +416,6 @@ Definition valid_mo (evts: set Event) (mo : Rln Event) : Prop :=
     is_write w2) /\
   (forall l, linear_strict_order (mo_for_loc mo l) evts).
 
-(** ** Relations restrictions *)
-
-(** [res_eq_loc r] restricts a relation [r] to the pairs of events that affect 
-the same location *)
-
-Definition res_eq_loc (r: Rln Event) :=
-  fun x => fun y =>
-    r x y /\
-    (get_loc x) = (get_loc y).
-
-(** [res_neq_loc r] restricts a relation [r] to the pairs of events that affect 
-a different location *)
-
-Definition res_neq_loc (r: Rln Event) :=
-  fun x => fun y =>
-    r x y /\
-    (get_loc x) <> (get_loc y).
 
 (** * Executions *)
 
@@ -427,6 +450,34 @@ Definition valid_exec (e: Execution) : Prop :=
  
 Ltac destruct_val_exec H :=
   destruct H as [Hevts_v [Hsb_v [Hrmw_v [Hrf_v Hmo_v]]]].
+
+(** *** Lemmas about valid executions *)
+
+(** In a valid execution, the origin of a reads-from is a write event *)
+
+Lemma rf_orig_write : forall ex x y,
+  valid_exec ex ->
+  (rf ex) x y ->
+  is_write x.
+Proof.
+  intros ex x y Hval Hrf.
+  destruct_val_exec Hval.
+  destruct Hrf_v as [Hrf_v _].
+  destruct (Hrf_v x y Hrf) as [_ [_ [Hw _]]].
+  auto.
+Qed.
+
+Lemma rf_dest_read : forall ex x y,
+  valid_exec ex ->
+  (rf ex) x y ->
+  is_read y.
+Proof.
+  intros ex x y Hval Hrf.
+  destruct_val_exec Hval.
+  destruct Hrf_v as [Hrf_v _].
+  destruct (Hrf_v x y Hrf) as [_ [_ [_ [Hw _]]]].
+  auto.
+Qed.
   
 (** ** Getters *)
 
