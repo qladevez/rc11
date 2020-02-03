@@ -73,7 +73,9 @@ Definition weaker_mode (m1 m2 : Mode) : Prop :=
 
 Definition stronger_or_eq_mode (m1 m2 : Mode) : Prop :=
   ~(weaker_mode m1 m2).
-  
+
+Hint Unfold stronger_or_eq_mode : exec.
+
 (** *** Read mode *)
 
 (** A read event can have mode non-atomic, relaxed, acquire or sequentially
@@ -272,6 +274,15 @@ Definition E_seqmode (m: Mode) : Rln Event :=
   fun x => fun y => (x = y) /\
                     stronger_or_eq_mode (get_mode x) m.
 
+Lemma e_seqmode_refl : forall x m m',
+  (get_mode x) = m' ->
+  stronger_or_eq_mode m' m ->
+  (E_seqmode m) x x.
+Proof.
+  intros x m m' Hmode Hstr.
+  split; auto. rewrite Hmode. auto.
+Qed.
+
 (** Every write event is in relation [(W_seqmode m)] with itself if and only if 
 it has a mode strong or equal to [m] *)
 
@@ -314,6 +325,20 @@ Definition res_neq_loc (r: Rln Event) :=
 Definition res_mode (m: Mode) (r: Rln Event) :=
   (E_eqmode m) ;; r ;; (E_eqmode m).
 
+Lemma res_mode_conds : forall m r x y,
+  (get_mode x) = m /\
+  (get_mode y) = m /\
+  r x y ->
+  (res_mode m r) x y.
+Proof.
+  intros m r x y [Hfst [Hsnd Hr]].
+  exists x; split.
+  - split; auto.
+  - exists y; split.
+    + auto.
+    + split; auto.
+Qed.
+
 Lemma res_mode_simp : forall m r x y,
   (res_mode m r) x y ->
   (get_mode x) = m /\
@@ -327,6 +352,30 @@ Proof.
   - auto.
   - rewrite H4 in H5. auto.
   - rewrite H4 in H3. rewrite <- H0 in H3. auto.
+Qed.
+
+Lemma res_mode_fst_mode : forall m r x y,
+  (res_mode m r) x y ->
+  (get_mode x) = m.
+Proof.
+  intros m r x y H.
+  destruct (res_mode_simp H) as [Hfst [Hsnd Hr]]. auto.
+Qed.
+
+Lemma res_mode_snd_mode : forall m r x y,
+  (res_mode m r) x y ->
+  (get_mode y) = m.
+Proof.
+  intros m r x y H.
+  destruct (res_mode_simp H) as [Hfst [Hsnd Hr]]. auto.
+Qed.
+
+Lemma res_mode_rel : forall m r x y,
+  (res_mode m r) x y ->
+  r x y.
+Proof.
+  intros m r x y H.
+  destruct (res_mode_simp H) as [Hfst [Hsnd Hr]]. auto.
 Qed.
 
 (** ** Sequenced before *)
@@ -476,6 +525,18 @@ Proof.
   destruct_val_exec Hval.
   destruct Hrf_v as [Hrf_v _].
   destruct (Hrf_v x y Hrf) as [_ [_ [_ [Hw _]]]].
+  auto.
+Qed.
+
+Lemma rf_same_loc : forall ex x y,
+  valid_exec ex ->
+  (rf ex) x y ->
+  (get_loc x) = (get_loc y).
+Proof.
+  intros ex x y Hval Hrf.
+  destruct_val_exec Hval.
+  destruct Hrf_v as [Hrf_v _].
+  destruct (Hrf_v x y Hrf) as [_ [_ [_ [_ [H _]]]]].
   auto.
 Qed.
   

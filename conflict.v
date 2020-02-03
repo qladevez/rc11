@@ -32,53 +32,60 @@ Definition c_events (e: Execution) : Rln Event :=
 
 (** * SC-consistent prefixes *)
 
-Lemma hb_incl_sbrfsc: forall ex,
+Lemma nt_rfsc_incl_hb: forall ex,
+  valid_exec ex ->
+  rel_incl (res_mode Sc (rf ex)) (rel_union (sb ex) (sw ex)).
+Proof.
+  intros ex Hval x y H.
+  right. exists x; split.
+  { apply (e_seqmode_refl x (res_mode_fst_mode H)).
+    unfold stronger_or_eq_mode. auto. }
+    exists x; split.
+    { right. auto. }
+    exists x; split.
+    { exists x; split.
+    { destruct H as [z [[Heq Hmode] [z' [Hrf Heq']]]].
+      rewrite <- Heq in Hrf.
+      repeat (try split); apply (rf_orig_write x z' Hval Hrf). }
+      exists x; split.
+      { right. auto. }
+      exists x; split.
+      { destruct H as [z [[Heq Hmode] [z' [Hrf Heq']]]].
+      rewrite <- Heq in Hrf.
+      exists x; split.
+      - repeat (try split); apply (rf_orig_write x z' Hval Hrf).
+      - repeat (try split). unfold stronger_or_eq_mode. rewrite Hmode. auto.
+      }
+      apply trc_step. right. auto.
+    }
+    exists y; split.
+    { destruct H as [z [[Heq Hmode] [z' [Hrf [Heq' Hmode']]]]].
+      rewrite <- Heq in Hrf. rewrite Heq' in Hrf. auto. }
+    exists y; split.
+    { destruct H as [z [[Heq Hmode] [z' [Hrf [Heq' Hmode']]]]].
+      rewrite <- Heq in Hrf. rewrite Heq' in Hrf.
+      exists y; split.
+      - repeat (try split); apply (rf_dest_read x y Hval Hrf).
+      - split; auto. unfold stronger_or_eq_mode. rewrite Heq' in Hmode'.
+        rewrite Hmode'. auto.
+    }
+    exists y; split.
+    { right. auto. }
+    { split; auto.
+      destruct H as [z [_ [z' [_ [Heq Hmode]]]]].
+      rewrite Heq in Hmode. rewrite Hmode.
+      unfold stronger_or_eq_mode. auto.
+    }
+Qed.
+
+Lemma sbrfsc_incl_hb: forall ex,
   valid_exec ex ->
   rel_incl (rel_union (sb ex) (res_mode Sc (rf ex))⁺) (hb ex).
 Proof.
   intros ex Hval x y H. induction H as [|z1 z2 z3 H IH H' IH'].
   - apply trc_step. destruct H as [H|H].
     + left. auto.
-    + right. exists x; split.
-      { destruct H as [z [[Heq Hmode] _]].
-        split; auto. rewrite Hmode.
-        unfold stronger_or_eq_mode. auto. }
-      exists x; split.
-      { right. auto. }
-      exists x; split.
-      { exists x; split.
-        { destruct H as [z [[Heq Hmode] [z' [Hrf Heq']]]].
-          rewrite <- Heq in Hrf.
-          repeat (try split); apply (rf_orig_write x z' Hval Hrf). }
-        exists x; split.
-        { right. auto. }
-        exists x; split.
-        { destruct H as [z [[Heq Hmode] [z' [Hrf Heq']]]].
-          rewrite <- Heq in Hrf.
-          exists x; split.
-          - repeat (try split); apply (rf_orig_write x z' Hval Hrf).
-          - repeat (try split). unfold stronger_or_eq_mode. rewrite Hmode. auto.
-        }
-        apply trc_step. right. auto.
-      }
-      exists y; split.
-      { destruct H as [z [[Heq Hmode] [z' [Hrf [Heq' Hmode']]]]].
-        rewrite <- Heq in Hrf. rewrite Heq' in Hrf. auto. }
-      exists y; split.
-      { destruct H as [z [[Heq Hmode] [z' [Hrf [Heq' Hmode']]]]].
-        rewrite <- Heq in Hrf. rewrite Heq' in Hrf.
-        exists y; split.
-        - repeat (try split); apply (rf_dest_read x y Hval Hrf).
-        - split; auto. unfold stronger_or_eq_mode. rewrite Heq' in Hmode'.
-          rewrite Hmode'. auto.
-      }
-      exists y; split.
-      { right. auto. }
-      { split; auto.
-        destruct H as [z [_ [z' [_ [Heq Hmode]]]]].
-        rewrite Heq in Hmode. rewrite Hmode.
-        unfold stronger_or_eq_mode. auto.
-      }
+    + apply (nt_rfsc_incl_hb ex Hval). auto.
   - apply trc_ind with (z := z3).
     + apply IH.
     + apply IH'.
@@ -111,7 +118,7 @@ Proof.
     as [Hres' | Hcontr'].
   (* If y and x are related by ex.(sb U rf_sc)⁺ *)
   - destruct H11cons as [Hco _].
-    apply (hb_incl_sbrfsc ex Hval) in Hres'.
+    apply (sbrfsc_incl_hb ex Hval) in Hres'.
     destruct (coherence_no_future_read Hco) with (x := x).
     exists y; split; auto.
   (* If y and x are not related by ex.(sb U rf_sc)⁺ *)
@@ -174,7 +181,7 @@ Proof.
     as [Hres' | Hcontr'].
   (* If y and x are related by ex.(sb U rf_sc)⁺ *)
   - destruct H11cons as [Hco _].
-    apply (hb_incl_sbrfsc ex Hval) in Hres'.
+    apply (sbrfsc_incl_hb ex Hval) in Hres'.
     destruct (coherence_coherence_ww Hco) with (x := x).
     exists y; split; auto.
   (* If y and x are not related by ex.(sb U rf_sc)⁺ *)
@@ -237,7 +244,7 @@ Proof.
     as [Hres' | Hcontr'].
   (* If y and x are related by ex.(sb U rf_sc)⁺ *)
   - destruct H11cons as [Hco _].
-    apply (hb_incl_sbrfsc ex Hval) in Hres'.
+    apply (sbrfsc_incl_hb ex Hval) in Hres'.
     destruct H as [z [H1 H2]].
     destruct (coherence_coherence_wr Hco) with (x := z).
     exists y; split.
@@ -273,23 +280,73 @@ Qed.
 and of the extended communication relation restricted to pairs of SC events is
 acyclic *)
 
-Lemma sb_eco_sc_incl_psc : forall ex,
-  rel_incl (res_mode Sc (rel_union (sb ex) (eco ex))) (psc ex).
+
+Lemma sb_sc_eco_sc_incl_psc : forall ex,
+  valid_exec ex ->
+  rel_incl (rel_union (res_mode Sc (sb ex))
+           (rel_union (res_mode Sc (rf ex))
+           (rel_union (res_mode Sc (mo ex))
+                      (res_mode Sc (rb ex)))))
+           (psc ex).
 Proof.
-  intros ex x y H.
-  destruct H as [z [[Heq Hsc] [z' [H [Heq' Hsc']]]]].
-  rewrite <- Heq in H; rewrite Heq' in H.
-  destruct H as [H | H].
-  { left. exists x; split.
-    { left. split; auto. }
+  intros ex Hval x y H.
+  destruct H as [Hsb | [Hrf | [Hmo | Hrb]]]; left.
+  - exists x; split.
+    { left. split; auto. apply (res_mode_fst_mode Hsb). }
     exists y; split.
-    { left. auto. }
-    left; split; auto. rewrite <- Heq'. auto.
-  }
-  induction H.
-  - destruct H as [H | [H | H]].
-    + 
-Admitted.
+    { left. apply (res_mode_rel Hsb). }
+    { left. split; auto. apply (res_mode_snd_mode Hsb). }
+  - exists x; split.
+    { left. split; auto. apply (res_mode_fst_mode Hrf). }
+    exists y; split.
+    { right; right; left. split.
+      - apply tc_incl_itself. apply (nt_rfsc_incl_hb ex Hval). auto.
+      - apply res_mode_rel in Hrf. apply (rf_same_loc x y Hval Hrf).
+    }
+    left. split; auto. apply (res_mode_snd_mode Hrf).
+  - exists x; split.
+    { left. split; auto. apply (res_mode_fst_mode Hmo). }
+    exists y; split.
+    { right; right; right; left.
+      apply (res_mode_rel Hmo). }
+    { left. split; auto. apply (res_mode_snd_mode Hmo). }
+  - exists x; split.
+    { left. split; auto. apply (res_mode_fst_mode Hrb). }
+    exists y; split.
+    { right; right; right; right.
+      apply (res_mode_rel Hrb). }
+    { left. split; auto. apply (res_mode_snd_mode Hrb). }
+Qed.
+
+Lemma there_is_a_problem : exists ex,
+  ~(sc_consistent ex) /\
+  rc11_consistent ex /\
+  (exists x,
+    (rel_union (sb ex)
+    (rel_union (res_mode Sc (rf ex))
+    (rel_union (res_mode Sc (mo ex))
+               (res_mode Sc (rb ex)))))⁺ x x).
+Proof.
+  intros ex Hrc.
+  
+
+Lemma sb_sc_eco_sc_ac_impl_sb_eco_sc_ac: forall ex,
+  acyclic (rel_union (res_mode Sc (sb ex))
+          (rel_union (res_mode Sc (rf ex))
+          (rel_union (res_mode Sc (mo ex))
+                     (res_mode Sc (rb ex))))) ->
+  acyclic (rel_union (sb ex)
+          (rel_union (res_mode Sc (rf ex))
+          (rel_union (res_mode Sc (mo ex))
+                     (res_mode Sc (rb ex))))).
+Proof.
+  intros ex Hac x H. apply (Hac x).
+  
+  induction H as [|z1 z2 z3 H IH H' IH'].
+  - destruct H as [H | [H | [H | H]]]; apply trc_step.
+    + left. destruct (classic ((get_mode y) = Sc)).
+      * apply res_mode_conds; repeat (try split); auto.
+  - 
 
 Lemma sb_eco_sc_acyclic: forall ex,
   rc11_consistent ex ->
