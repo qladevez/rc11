@@ -6,6 +6,7 @@ C/C++11; Lahav, Vafeiadis, Kang et al., PLDI 2017)
 Author: Quentin Ladeveze, Inria Paris, France
 *)
 
+Require Import Relations.
 Require Import Ensembles.
 From RC11 Require Import util.
 
@@ -157,7 +158,7 @@ Definition valid_mode (e: Event) : Prop :=
 
 (** Are the modes of a set of events valid *)
 
-Definition valid_evts (evts: set Event) : Prop :=
+Definition valid_evts (evts: Ensemble Event) : Prop :=
   forall e, (In _ evts e) -> valid_mode e.
 
 (** ** Getter functions *)
@@ -203,20 +204,20 @@ Definition Elt := Event.
 
 (** This extension is called a linear extension (LE) *)
 
-Parameter LE : Rln Event -> Rln Event.
+Parameter LE : relation Event -> relation Event.
 
 (** A relation is included in its linear extension and this extension is
 a strict linear order (i.e. it is total) *)
 
-Parameter OE : forall (s S:set Event) (r:Rln Event),
+Axiom OE : forall (s S:Ensemble Event) (r:relation Event),
   Included _ s S ->
   partial_order r s ->
-  rel_incl r (LE r) /\
+  r ⊆  (LE r) /\
   linear_strict_order (LE r) S.
 
 (** The linear extension of a strict linear order on events is itself *)
 
-Parameter le_lso : forall (s:set Event) (r:Rln Event),
+Axiom le_lso : forall (s:Ensemble Event) (r:relation Event),
   linear_strict_order r s -> LE r = r.
 End OEEvt.
 
@@ -228,49 +229,49 @@ Import OEEvt.
 
 (** Every write event is in relation [W] with itself *)
 
-Definition W : Rln Event :=
+Definition W : relation Event :=
   fun x => fun y => 
     (x = y) /\ is_write x /\ is_write y.
 
 (** Every read event is in relation [R] with itself *)
 
-Definition R : Rln Event :=
+Definition R : relation Event :=
   fun x => fun y => (x = y) /\ is_read x /\ is_read y.
 
 (** Every fence event is in relation [F] with itself *)
 
-Definition F : Rln Event :=
+Definition F : relation Event :=
   fun x => fun y => (x = y) /\ is_fence x /\ is_fence y.
 
 (** Every event is in relation [(E_eqmode m)] with itself if and only if it has 
 mode [m] *)
 
-Definition E_eqmode (m: Mode) : Rln Event :=
+Definition E_eqmode (m: Mode) : relation Event :=
   fun x => fun y => (x = y) /\
                     (get_mode x) = m.
 
 (** Every write event is in relation [(W_eqmode m)] with itself if and only if it
 has mode [m] *)
 
-Definition W_eqmode (m: Mode) : Rln Event :=
-  rel_seq W (E_eqmode m).
+Definition W_eqmode (m: Mode) : relation Event :=
+  W ;; (E_eqmode m).
 
 (** Every fence event is in relation [(F_eqmode m)] with itself if and only if it
 has mode [m] *)
 
-Definition F_eqmode (m: Mode) : Rln Event :=
-  rel_seq F (E_eqmode m).
+Definition F_eqmode (m: Mode) : relation Event :=
+  F ;; (E_eqmode m).
 
 (** Every read event is in relation [(R_eqmode m)] with itself if and only if it
 has mode [m] *)
 
-Definition R_eqmode (m: Mode) : Rln Event :=
-  rel_seq R (E_eqmode m).
+Definition R_eqmode (m: Mode) : relation Event :=
+  R ;; (E_eqmode m).
 
 (** Every event is in relation [(E_seqmode m)] with itself if and only if it has
 a mode strong or equal to [m] *)
 
-Definition E_seqmode (m: Mode) : Rln Event :=
+Definition E_seqmode (m: Mode) : relation Event :=
   fun x => fun y => (x = y) /\
                     stronger_or_eq_mode (get_mode x) m.
 
@@ -286,27 +287,27 @@ Qed.
 (** Every write event is in relation [(W_seqmode m)] with itself if and only if 
 it has a mode strong or equal to [m] *)
 
-Definition W_seqmode (m: Mode) : Rln Event :=
-  rel_seq W (E_seqmode m).
+Definition W_seqmode (m: Mode) : relation Event :=
+  W ;; (E_seqmode m).
 
 (** Every read event is in relation [(R_seqmode m)] with itself if and only if 
 it has a mode strong or equal to [m] *)
 
-Definition R_seqmode (m: Mode) : Rln Event :=
-  rel_seq R (E_seqmode m).
+Definition R_seqmode (m: Mode) : relation Event :=
+  R ;; (E_seqmode m).
 
 (** Every fence event is in relation [(F_seqmode m)] with itself if and only if
 it has a mode stronger or equal to [m] *)
 
-Definition F_seqmode (m: Mode) : Rln Event :=
-  rel_seq F (E_seqmode m).
+Definition F_seqmode (m: Mode) : relation Event :=
+  F ;; (E_seqmode m).
   
 (** ** Relations restrictions *)
 
 (** [res_eq_loc r] restricts a relation [r] to the pairs of events that affect 
 the same location *)
 
-Definition res_eq_loc (r: Rln Event) :=
+Definition res_eq_loc (r: relation Event) :=
   fun x => fun y =>
     r x y /\
     (get_loc x) = (get_loc y).
@@ -314,7 +315,7 @@ Definition res_eq_loc (r: Rln Event) :=
 (** [res_neq_loc r] restricts a relation [r] to the pairs of events that affect 
 a different location *)
 
-Definition res_neq_loc (r: Rln Event) :=
+Definition res_neq_loc (r: relation Event) :=
   fun x => fun y =>
     r x y /\
     (get_loc x) <> (get_loc y).
@@ -322,7 +323,7 @@ Definition res_neq_loc (r: Rln Event) :=
 (** [res_mode m r] restricts a relation [r] to the pairs of events that have mode
 [m] *)
 
-Definition res_mode (m: Mode) (r: Rln Event) :=
+Definition res_mode (m: Mode) (r: relation Event) :=
   (E_eqmode m) ;; r ;; (E_eqmode m).
 
 Lemma res_mode_conds : forall m r x y,
@@ -384,7 +385,7 @@ Qed.
 if for each location, there is an initialisation event that sets the location
 to 0, is sequenced before all the events of the program and after no events *)
 
-Definition valid_sb (evts: set Event) (sb : Rln Event) : Prop :=
+Definition valid_sb (evts: Ensemble Event) (sb : relation Event) : Prop :=
   (linear_strict_order sb evts) /\
   (Included _ (udr sb) (evts)) /\
   (forall (l : Loc),
@@ -407,7 +408,7 @@ pair if their modes are one of the following pairs:
 - [(Sc, Sc)]
  *)
  
-Definition valid_rmw_pair (sb : Rln Event) (r: Event) (w: Event) : Prop :=
+Definition valid_rmw_pair (sb : relation Event) (r: Event) (w: Event) : Prop :=
   match (get_mode r, get_mode w) with
   | (Rlx, Rlx) | (Acq, Rlx) | (Rlx, Rel) | (Acq, Rel) | (Sc, Sc) =>
     (is_read r /\
@@ -419,7 +420,7 @@ Definition valid_rmw_pair (sb : Rln Event) (r: Event) (w: Event) : Prop :=
 
 (** A read-modify-write relation is a set of read-modify-write pairs *)
 
-Definition valid_rmw (sb : Rln Event) (rmw : Rln Event) : Prop :=
+Definition valid_rmw (sb : relation Event) (rmw : relation Event) : Prop :=
   forall r w, rmw r w -> valid_rmw_pair sb r w.
 
 (** ** Reads-from relation *)
@@ -430,7 +431,7 @@ To put it more simply, the read-from relation connects every read event to
 exactly one write event that wrote the value it reads
 *)
 
-Definition valid_rf (evts : set Event) (rf : Rln Event) : Prop :=
+Definition valid_rf (evts : Ensemble Event) (rf : relation Event) : Prop :=
   (forall w r, 
     rf w r ->
     (In _ evts w /\
@@ -451,13 +452,13 @@ It correponds to write serialisation in some other works on axiomatic memory
 models.
 *)
 
-Definition mo_for_loc (mo : Rln Event) (l : Loc) : Rln Event :=
+Definition mo_for_loc (mo : relation Event) (l : Loc) : relation Event :=
   fun w1 => fun w2 =>
     mo w1 w2 /\
     (get_loc w1) = (Some l) /\
     (get_loc w2) = (Some l).
 
-Definition valid_mo (evts: set Event) (mo : Rln Event) : Prop :=
+Definition valid_mo (evts: Ensemble Event) (mo : relation Event) : Prop :=
   (forall w1 w2, mo w1 w2 ->
     In _ evts w1 /\
     In _ evts w2 /\
@@ -478,11 +479,11 @@ Definition valid_mo (evts: set Event) (mo : Rln Event) : Prop :=
 *)
 
 Record Execution : Type := mkex {
-  evts : set Event;
-  sb : Rln Event;
-  rmw : Rln Event;
-  rf : Rln Event;
-  mo : Rln Event;
+  evts : Ensemble Event;
+  sb : relation Event;
+  rmw : relation Event;
+  rf : relation Event;
+  mo : relation Event;
 }.
 
 Definition valid_exec (e: Execution) : Prop :=
@@ -542,10 +543,10 @@ Qed.
   
 (** ** Getters *)
 
-Definition reads (ex: Execution) : set Event :=
+Definition reads (ex: Execution) : Ensemble Event :=
   fun e => (In _ ex.(evts) e) /\ is_read e.
 
-Definition writes (ex: Execution) : set Event :=
+Definition writes (ex: Execution) : Ensemble Event :=
   fun e => (In _ ex.(evts) e) /\ is_write e.
 
 (** ** Completeness *)

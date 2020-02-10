@@ -6,6 +6,7 @@ C/C++11; Lahav, Vafeiadis, Kang et al., PLDI 2017)
 Author: Quentin Ladeveze, Inria Paris, France
 *)
 
+Require Import Relations.
 From RC11 Require Import util.
 From RC11 Require Import exec.
 
@@ -24,7 +25,7 @@ event sequenced before [w] by the modification order. It corresponds to the
 from-read relation in some other works on axiomatic memory models. *)
 
 Definition rb (exec: Execution) :=
-  rel_seq (inv_strict exec.(rf)) exec.(mo).
+  (exec.(rf) ^-1) ;; exec.(mo).
 
 (** ** Extended coherence order *)
 
@@ -33,7 +34,7 @@ reads-from, modification order and reads-before. It corresponds to the
 communication relation in some other works on axiomatic memory models *)
 
 Definition eco (exec: Execution) :=
-  tc (rel_union exec.(rf) (rel_union exec.(mo) (rb exec))).
+  (exec.(rf) <+> exec.(mo) <+> (rb exec))⁺.
 
 (** ** Release sequence *)
 
@@ -63,15 +64,16 @@ We say that an event happens-before another one if there is a path between the
 two events consisting of [sb] and [sw] edges *)
 
 Definition hb (exec: Execution) :=
-  (rel_union exec.(sb) (sw exec))⁺.
+  (exec.(sb) <+> (sw exec))⁺.
   
 (** ** SC-before *)
 
 Definition scb (exec: Execution) :=
-  rel_union exec.(sb)
- (rel_union ((res_neq_loc exec.(sb)) ;; (hb exec) ;; (res_neq_loc exec.(sb)))
- (rel_union (res_eq_loc (hb exec))
- (rel_union exec.(mo) (rb exec)))).
+ exec.(sb) <+> 
+ ((res_neq_loc exec.(sb)) ;; (hb exec) ;; (res_neq_loc exec.(sb))) <+>
+ (res_eq_loc (hb exec)) <+>
+ exec.(mo) <+> 
+ (rb exec).
 
 (** ** Partial-SC base *)
 
@@ -79,9 +81,9 @@ Definition scb (exec: Execution) :=
 occur *)
 
 Definition psc_base (exec: Execution) :=
-  (rel_union (E_eqmode Sc) ((F_eqmode Sc) ;; ((hb exec) ?))) ;;
+  ((E_eqmode Sc) <+> ((F_eqmode Sc) ;; ((hb exec) ?))) ;;
   (scb exec) ;;
-  (rel_union (E_eqmode Sc) (((hb exec) ?) ;; (F_eqmode Sc))).  
+  ((E_eqmode Sc) <+> (((hb exec) ?) ;; (F_eqmode Sc))).  
 
 (** ** Partial-SC fence *)
 
@@ -90,13 +92,13 @@ occur *)
 
 Definition psc_fence (exec: Execution) :=
   (F_eqmode Sc) ;;
-  (rel_union (hb exec) ((hb exec) ;; (eco exec) ;; (hb exec))) ;;
+  ((hb exec) <+> ((hb exec) ;; (eco exec) ;; (hb exec))) ;;
   (F_eqmode Sc).
 
 (** ** Partial SC *)
 
 Definition psc (exec: Execution) :=
-  rel_union (psc_base exec) (psc_fence exec).
+  (psc_base exec) <+> (psc_fence exec).
 
 (** * RC11-consistency *)
 
@@ -118,10 +120,10 @@ should not occur before itself. *)
 Lemma coherence_irr_hb:
   forall ex, (coherence ex) -> (forall x, ~ (hb ex) x x).
 Proof.
-  intros ex H x Hnot. unfold coherence, rel_seq, not in H.
+  intros ex H x Hnot.
   apply (H x). exists x; split.
   - auto.
-  - apply maybe_reflexive.
+  - right.
 Qed.
 
 (** In a coherent execution, [rf];[hb] is irreflexive. This means that an event
@@ -134,8 +136,7 @@ Proof.
   destruct Hnot as [z Hnot].
   apply (H z). exists x. destruct Hnot; split.
   - auto.
-  - unfold eco, rel_union, maybe. left.
-    apply trc_step. auto.
+  - left. left. left. auto.
 Qed.
 
 (** In a coherent execution, [mo];[rf];[hb] is irreflexive. This means that a
@@ -161,8 +162,9 @@ Proof.
   destruct Hnot as [z [Hmo [z' [Hr Hhb]]]].
   apply (H z'). exists x; split.
   - auto.
-  - unfold eco, rel_union, maybe. left.
-    apply trc_ind with (z := z); apply trc_step; auto.
+  - left. right with (y := z); apply t_step.
+    + right. left. auto.
+    + left. auto.
 Qed.
 
 (** In a coherent execution, [mo];[hb] is irreflexive. This means that a write
@@ -175,8 +177,7 @@ Proof.
   destruct Hnot as [z [Hmo Hhb]].
   apply (H z). exists x; split.
   - auto.
-  - unfold eco, rel_union, maybe. left.
-    apply trc_step. auto.
+  - left. left. right. left. auto.
 Qed.
 
 (** In a coherent execution, [mo];[hb];[rf-1] is irreflexive. This means that
@@ -198,15 +199,15 @@ following pattern in executions:
 Lemma coherence_coherence_wr:
   forall ex, 
     (coherence ex) -> 
-    (forall x, ~ (ex.(mo) ;; (hb ex) ;; (inv_strict ex.(rf))) x x).
+    (forall x, ~ (ex.(mo) ;; (hb ex) ;; (ex.(rf) ^-1)) x x).
 Proof.
   intros ex H x Hnot.
   destruct Hnot as [z [Hmo [y [Hhb Hinvrf]]]].
   apply (H z). exists y; split.
   - auto.
-  - left.
-    apply trc_step. right. right.
-    unfold rb, rel_seq. exists x. auto.
+  - left. left.
+    right. right.
+    exists x. auto.
 Qed.
 
 (** In a coherent execution, [mo];[rf];[hb];[rf-1] is irreflexive. This means
@@ -228,13 +229,13 @@ modification order. We forbid the following pattern in executions:
 Lemma coherence_coherence_rr:
   forall ex,
     (coherence ex) ->
-    (forall x, ~ (ex.(mo) ;; ex.(rf) ;; (hb ex) ;; (inv_strict ex.(rf))) x x).
+    (forall x, ~ (ex.(mo) ;; ex.(rf) ;; (hb ex) ;; (ex.(rf)) ^-1) x x).
 Proof.
   intros ex H x Hnot.
   destruct Hnot as [w [Hmo [y [Hrf [z [Hhb Hinvrf]]]]]].
   apply (H y). exists z; split.
   - auto.
-  - left. apply trc_ind with (z := w); apply trc_step.
+  - left. right with (y := w); left.
     + right. right. exists x; split; auto.
     + left. auto.
 Qed.
@@ -245,7 +246,7 @@ Qed.
 adjacent in [eco]: there is no write event in between *)
 
 Definition atomicity (exec: Execution) :=
-  forall x y, ~ (rel_inter exec.(rmw) ((rb exec) ;; exec.(mo))) x y.
+  forall x y, ~ (exec.(rmw) <*> ((rb exec) ;; exec.(mo))) x y.
 
 (** ** SC *)
 
@@ -262,7 +263,7 @@ the value written by a write event depends on the value read by a read event,
 which reads from this same write event. *)
 
 Definition no_thin_air (exec: Execution) :=
-  acyclic (rel_union exec.(sb) exec.(rf)).
+  acyclic (exec.(sb) <+> exec.(rf)).
 
 (** ** RC11-consistent executions *)
 
@@ -285,7 +286,4 @@ Definition rc11_consistent (exec: Execution) :=
 
 Definition sc_consistent (exec: Execution) :=
   (atomicity exec) /\
-  (acyclic (rel_union exec.(sb)
-           (rel_union exec.(rf)
-           (rel_union exec.(mo)
-                      (rb exec))))).
+  (acyclic (exec.(sb) <+> exec.(rf) <+> exec.(mo) <+> (rb exec))).
