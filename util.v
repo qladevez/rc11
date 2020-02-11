@@ -9,8 +9,7 @@ Author: Quentin Ladeveze, Inria Paris, France
 Require Import Relations.
 Require Import Ensembles.
 From ATBR Require Import ATBR Model_StdRelations.
-
-
+Import Load.
 
 Definition inter {A:Type} (r1 r2 : relation A) :=
   fun x => fun y => (r1 x y) /\
@@ -23,9 +22,10 @@ Infix " <*> " := inter (at level 50, left associativity).
 Infix " ;; " := comp (at level 41, right associativity).
 Infix " == " := (same_relation _) (at level 70).
 Infix " ⊆ " := (inclusion _) (at level 75).
-Notation "R ⁺" := (clos_trans _ R) (at level 20).
 Notation "R ?" := (clos_refl _ R) (at level 15).
 Notation "R **" := (clos_refl_trans _ R) (at level 25).
+Definition tc {A} (R : relation A) := R ;; R**.
+Notation "R ⁺" := (tc R) (at level 20).
 Notation "R ^-1" := (transp _ R) (at level 14).
 
 End RelNotations.
@@ -88,19 +88,22 @@ Axiom le_lso : forall (s:Ensemble Elt) (r:relation Elt),
 
 End OrdExt.
 
-Lemma refl_trans_equiv {A:Type} (r: relation A):
-  r ** = r ? ⁺.
+Lemma inclusion_as_eq A (R S : relation A) : inclusion A R S <-> R <+> S == S.
 Proof.
-  apply ext_rel. split; intros x y H.
-  - induction H.
-    + left; left; auto.
-    + left; right; auto.
-    + right with (y := y); auto.
-  - induction H.
-    + induction H.
-      * apply rt_step. auto.
-      * apply rt_refl.
-    + apply rt_trans with (y := y); auto.
+  compute; intuition eauto.
+Qed.
+
+Ltac kleene X := try (rewrite -> inclusion_as_eq in *);
+                 unfold "⁺" in *; 
+                 fold_relAlg X;
+                 kleene_reflexivity.
+
+(** A relation is included in its transitive closure *)
+
+Lemma tc_incl_itself {A:Type} (R: relation A):
+  R ⊆  R⁺.
+Proof.
+  kleene A.
 Qed.
 
 (** There is an immediate edge between two elements [a] and [b] of a strict partial 
@@ -135,30 +138,23 @@ Proof.
   intros x y [_ [_ H]]. auto.
 Qed.
 
-Lemma tc_incl : forall  {E : Type}  (r1 r2 : relation E),
+Lemma tc_incl {A : Type}  (r1 r2 : relation A):
   r1 ⊆ r2 -> r1⁺ ⊆  r2⁺.
 Proof.
-intros A r r' Hinc x y H. induction H.
-  - left. apply (Hinc x y). auto.
-  - right with (y := y); auto.
+intros H.
+rewrite -> inclusion_as_eq in *. unfold "⁺".
+apply ext_rel in H. rewrite <- H.
+kleene A.
 Qed.
 
 Lemma ac_incl {A : Set}  {r1 r2 : relation A} :
-  acyclic r2 ->  r1 ⊆ r2 -> acyclic r1.
+  acyclic r2 -> r1 ⊆ r2 -> acyclic r1.
 Proof.
 intros Hac Hinc x Hnot. apply (Hac x).
 apply tc_incl in Hinc. apply Hinc in Hnot. auto.
 Qed.
 
-(** A relation is included in its transitive closure *)
 
-Lemma tc_incl_itself: forall (E:Type) (r: relation E),
-  r ⊆  r⁺.
-Proof.
-intros E r.
-intros x y H.
-left. auto.
-Qed.
 
 
 
