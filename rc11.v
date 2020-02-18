@@ -136,7 +136,7 @@ Proof.
   destruct Hnot as [z Hnot].
   apply (H z). exists x. destruct Hnot; split.
   - auto.
-  - left. left. left. auto.
+  - left. apply tc_incl_itself. left. auto.
 Qed.
 
 (** In a coherent execution, [mo];[rf];[hb] is irreflexive. This means that a
@@ -162,7 +162,7 @@ Proof.
   destruct Hnot as [z [Hmo [z' [Hr Hhb]]]].
   apply (H z'). exists x; split.
   - auto.
-  - left. right with (y := z); apply t_step.
+  - left. apply tc_trans with (y := z); apply tc_incl_itself.
     + right. left. auto.
     + left. auto.
 Qed.
@@ -177,7 +177,7 @@ Proof.
   destruct Hnot as [z [Hmo Hhb]].
   apply (H z). exists x; split.
   - auto.
-  - left. left. right. left. auto.
+  - left. apply tc_incl_itself. right. left. auto.
 Qed.
 
 (** In a coherent execution, [mo];[hb];[rf-1] is irreflexive. This means that
@@ -205,7 +205,7 @@ Proof.
   destruct Hnot as [z [Hmo [y [Hhb Hinvrf]]]].
   apply (H z). exists y; split.
   - auto.
-  - left. left.
+  - left. apply tc_incl_itself.
     right. right.
     exists x. auto.
 Qed.
@@ -232,10 +232,10 @@ Lemma coherence_coherence_rr:
     (forall x, ~ (ex.(mo) ;; ex.(rf) ;; (hb ex) ;; (ex.(rf)) ^-1) x x).
 Proof.
   intros ex H x Hnot.
-  destruct Hnot as [w [Hmo [y [Hrf [z [Hhb Hinvrf]]]]]].
-  apply (H y). exists z; split.
+  destruct Hnot as [w [Hmo [y' [Hrf [z [Hhb Hinvrf]]]]]].
+  apply (H y'). exists z; split.
   - auto.
-  - left. right with (y := w); left.
+  - left. apply tc_trans with (y := w); apply tc_incl_itself.
     + right. right. exists x; split; auto.
     + left. auto.
 Qed.

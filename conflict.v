@@ -20,8 +20,6 @@ Import RelNotations.
 some properties about executions that contain (or don't contain) conflicting
 events *)
 
-Check res_mode.
-
 (** * Conflicting events *)
 
 Definition c_events (e: Execution) : relation Event :=
@@ -83,13 +81,18 @@ Lemma sbrfsc_incl_hb: forall ex,
   valid_exec ex ->
   (((sb ex) <+> (res_mode Sc (rf ex)))⁺) ⊆ (hb ex).
 Proof.
-  intros ex Hval x y H. induction H as [|z1 z2 z3 H IH H' IH'].
-  - left. destruct H as [H|H].
-    + left. auto.
+  intros ex Hval x y H.
+  destruct H as [z [H1 H2]].
+  exists z; split.
+  - destruct H1 as [H1|H1].
+    + left; auto.
     + apply (nt_rfsc_incl_hb ex Hval). auto.
-  - right with (y := z2).
-    + apply IH.
-    + apply IH'.
+  - clear H1. induction H2 as [ y z H | y | z1 z2 z3 H IH H' IH' ].
+    + apply rt_step. destruct H as [H|H].
+      * left; auto.
+      * apply (nt_rfsc_incl_hb ex Hval). auto.
+    + apply rt_refl.
+    + apply rt_trans with (y:=z2); auto.
 Qed.
 
 Lemma rf_prefix_in_sbrfsc_ex: forall pre ex,
@@ -105,7 +108,7 @@ Proof.
   destruct (classic ((get_mode x) = Sc /\ (get_mode y) = Sc)) 
     as [[Hxsc Hysc] | HNotSc].
   (* If x and y are Sc, then they are related by (ex.rf)_sc *)
-  { left. right. 
+  { apply tc_incl_itself. right. 
     exists x; split. { split; auto. }
     exists y; split. { auto. }
     split; auto. }
@@ -217,7 +220,7 @@ closure of the union of the sequenced-before the reads-from restricted to SC
 events relations of this execution and of the modification order restricted to 
 SC events of this execution *)
 
-Lemma rb_prefix_in_sbrfscmo_ex: forall pre ex,
+Lemma rb_prefix_in_sbrfscrb_ex: forall pre ex,
   valid_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
@@ -281,7 +284,6 @@ Qed.
 and of the extended communication relation restricted to pairs of SC events is
 acyclic *)
 
-
 Lemma sb_sc_eco_sc_incl_psc : forall ex,
   valid_exec ex ->
   ((res_mode Sc (sb ex)) <+> (res_mode Sc (rf ex)) <+> (res_mode Sc (mo ex)) <+>
@@ -315,22 +317,56 @@ Proof.
       apply (res_mode_rel Hrb). }
     { left. split; auto. apply (res_mode_snd_mode Hrb). }
 Qed.
-  
 
-Lemma sb_sc_eco_sc_ac_impl_sb_eco_sc_ac: forall ex,
-  acyclic ((res_mode Sc (sb ex)) <+> (res_mode Sc (rf ex)) <+> 
-           (res_mode Sc (mo ex)) <+> (res_mode Sc (rb ex))) ->
-  acyclic ((sb ex) <+> (res_mode Sc (rf ex)) <+> (res_mode Sc (mo ex)) <+>
+Lemma sb_sc_eco_sc_ac_impl_sb_eco_sc_ac ex:
+  valid_exec ex ->
+  acyclic ((res_mode Sc (sb ex)) <+> 
+           (res_mode Sc (rf ex)) <+> 
+           (res_mode Sc (mo ex)) <+>
+           (res_mode Sc (rb ex))) ->
+  acyclic ((sb ex) <+> 
+           (res_mode Sc (rf ex)) <+> 
+           (res_mode Sc (mo ex)) <+>
            (res_mode Sc (rb ex))).
 Proof.
-  admit.
+  intros Hval H.
+  byabsurd.
+  rewrite (dcmp_in_res_neq_res Sc (sb ex)) in Hcontr.
+  rewrite <- union_assoc in Hcontr.
+  assert (acyclic (res_neq_mode Sc (sb ex))) as Hprob.
+  { destruct_val_exec Hval. destruct Hsb_v as [Hlin _].
+    apply lin_strict_ac in Hlin.
+    apply ac_incl with (r1 := (res_neq_mode Sc (sb ex))) in Hlin.
+    - auto.
+    - apply res_neq_incl. }
+  apply not_acyclic_is_cyclic in Hcontr.
+  destruct Hcontr as [w Hcontr].
+  apply (ac_union w) with (r1 := (res_mode Sc (rf ex) <+> res_mode Sc (mo ex) <+> res_mode Sc (rb ex)) <+> res_mode Sc (sb ex)) in Hprob.
+  - admit.
+  - rewrite union_comm. auto.
+  - rewrite <- union_assoc. rewrite union_comm in Hcontr.
+    rewrite <- union_assoc in Hcontr. rewrite union_comm in Hcontr.
+    rewrite (union_comm (res_mode Sc (sb ex)) _). 
+    rewrite <- union_assoc in Hcontr. rewrite <- union_assoc in Hcontr.
+    rewrite <- union_assoc. rewrite <- union_assoc. auto.
+    rewrite <- union_assoc in Hcontr. auto.
 Admitted.
 
-Lemma sb_eco_sc_acyclic: forall ex,
+Lemma sb_eco_sc_acyclic ex:
+  valid_exec ex ->
   rc11_consistent ex ->
-  acyclic ((sb ex) <+> (res_mode Sc (eco ex))).
+  acyclic ((sb ex) <+> 
+           (res_mode Sc (rf ex)) <+> 
+           (res_mode Sc (mo ex)) <+>
+           (res_mode Sc (rb ex))).
 Proof.
-Admitted.
+  intros Hval Hrc11.
+  apply sb_sc_eco_sc_ac_impl_sb_eco_sc_ac.
+  - apply Hval.
+  - destruct Hrc11 as [_ [_ [Hsc _]]].
+    apply (ac_incl _ _ Hsc).
+    apply (sb_sc_eco_sc_incl_psc _ Hval).
+Qed.
 
 (** If the prefix of an RC11-concistent execution doesn't contain any pair of 
 conflicting events, it is SC-consistent *)
@@ -346,5 +382,27 @@ Proof.
   split.
   - destruct (prefix_rc11_consistent Hrc11 Hpre) as [_ [Hat _]].
     auto.
-  - admit.
-Admitted.
+  - apply (ac_incl _ _ (tc_ac_is_ac _ (sb_eco_sc_acyclic _ Hval Hrc11))).
+    repeat (apply union_incl).
+    + apply (incl_trans2 _ _ _ (tc_incl_itself _)).
+      incl_union_r; incl_union_r; incl_union_r.
+      apply (sb_prefix_incl Hpre).
+    + repeat (rewrite -> union_assoc);
+      apply (incl_trans2 _ _ _ (incl_tc_union _ _)); incl_union_r.
+      repeat (rewrite -> union_assoc);
+      apply (incl_trans2 _ _ _ (incl_tc_union _ _)); incl_union_r.
+      apply (rf_prefix_in_sbrfsc_ex _ _ Hval Hrc11 Hpre Hconflict).
+    + repeat (rewrite -> union_assoc);
+      apply (incl_trans2 _ _ _ (incl_tc_union _ _)); incl_union_r.
+      rewrite -> union_assoc;
+      apply (incl_trans2 _ _ _ (incl_tc_union _ _)).
+      apply (incl_trans2 _ _ _ (incl_union_of_tc_right _ _)).
+      apply (mo_prefix_in_sbrfscmo_ex _ _ Hval Hrc11 Hpre Hconflict).
+    + rewrite (union_comm (res_mode _ (mo _)) _).
+      repeat (rewrite -> union_assoc);
+      apply (incl_trans2 _ _ _ (incl_tc_union _ _)); incl_union_r.
+      rewrite -> union_assoc;
+      apply (incl_trans2 _ _ _ (incl_tc_union _ _)).
+      apply (incl_trans2 _ _ _ (incl_union_of_tc_right _ _)).
+      apply (rb_prefix_in_sbrfscrb_ex _ _ Hval Hrc11 Hpre Hconflict).
+Qed.

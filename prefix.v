@@ -210,9 +210,9 @@ Proof.
   }
   destruct H as [z3 [Hwrlx H]]. exists z3; split. auto.
   apply maybe_rf_seq_rmw_prefix_incl in Hpre as H'.
-  apply tc_incl in H'. 
-  rewrite <- refl_trans_equiv in H'.
-  rewrite <- refl_trans_equiv in H'. 
+  apply tc_incl in H'.
+  rewrite refl_trans_equiv in H'.
+  rewrite refl_trans_equiv in H'. 
   apply H' in H. auto.
 Qed.
 
@@ -380,11 +380,11 @@ Proof.
     { split. auto. exists z; auto. }
     apply Hat in Hcontr. destruct Hcontr.
   (* Prefixing preserves the SC condition *)
-  - apply (ac_incl Hsc (psc_prefix_incl Hpre)).
+  - apply (ac_incl _ _ Hsc (psc_prefix_incl Hpre)).
   (* Prefixing preserves the No-Thin-Air condition *)
   - assert (((sb pre) <+> (rf pre)) ⊆ ((sb ex) <+> (rf ex))) as Hincl.
     + intros x y H. destruct H as [H | H].
       * left. apply (sb_prefix_incl Hpre). auto.
       * right. apply (rf_prefix_incl Hpre). auto.
-    + apply (ac_incl Hoota Hincl).
+    + apply (ac_incl _ _ Hoota Hincl).
 Qed.

@@ -8,6 +8,7 @@ Author: Quentin Ladeveze, Inria Paris, France
 
 Require Import Relations.
 Require Import Ensembles.
+Require Import Classical_Prop.
 From RC11 Require Import util.
 
 Import RelNotations.
@@ -377,6 +378,39 @@ Lemma res_mode_rel : forall m r x y,
 Proof.
   intros m r x y H.
   destruct (res_mode_simp H) as [Hfst [Hsnd Hr]]. auto.
+Qed.
+
+
+Definition res_neq_mode (m:Mode) (r: relation Event) :=
+  fun x => fun y => r x y /\
+                    ((get_mode x) <> m \/
+                     (get_mode y) <> m).
+
+Lemma dcmp_in_res_neq_res (m: Mode) (r: relation Event) :
+  r = (res_neq_mode m r) <+> (res_mode m r).
+Proof.
+  apply ext_rel. split; intros x y H.
+  - destruct (classic ((get_mode x) = m));
+    destruct (classic ((get_mode y) = m)).
+    + right. exists x; split.
+      { split; auto. }
+      exists y; split; auto.
+      split; auto.
+    + left. compute. auto.
+    + left. compute. auto.
+    + left. compute. auto.
+  - destruct H as [[H1 H2] | H]; auto.
+    apply (res_mode_rel H).
+Qed.
+
+Lemma res_neq_incl (m:Mode) (r1: relation Event):
+  (res_neq_mode m r1) ⊆ r1.
+Proof.
+  rewrite inclusion_as_eq.
+  cut (res_neq_mode m r1 <+> (res_neq_mode m r1 <+> res_mode m r1) ==
+       (res_neq_mode m r1 <+> res_mode m r1)).
+  - intros H. rewrite <- dcmp_in_res_neq_res in H; auto.
+  - kleene Event.
 Qed.
 
 (** ** Sequenced before *)
