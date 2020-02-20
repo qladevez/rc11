@@ -500,7 +500,6 @@ Definition valid_mo (evts: Ensemble Event) (mo : relation Event) : Prop :=
     is_write w2) /\
   (forall l, linear_strict_order (mo_for_loc mo l) evts).
 
-
 (** * Executions *)
 
 (** ** Validity *)
@@ -551,6 +550,8 @@ Proof.
   auto.
 Qed.
 
+(** In a valid execution, the destination of a reads-from is a read event *)
+
 Lemma rf_dest_read : forall ex x y,
   valid_exec ex ->
   (rf ex) x y ->
@@ -563,6 +564,9 @@ Proof.
   auto.
 Qed.
 
+(** In a valid execution, two events related by read-from affect the same 
+location *)
+
 Lemma rf_same_loc : forall ex x y,
   valid_exec ex ->
   (rf ex) x y ->
@@ -573,6 +577,58 @@ Proof.
   destruct Hrf_v as [Hrf_v _].
   destruct (Hrf_v x y Hrf) as [_ [_ [_ [_ [H _]]]]].
   auto.
+Qed.
+
+(** In a valid execution, events related by read-from belong to the set of
+events of the execution *)
+
+Lemma rf_orig_evts (ex: Execution) (x y: Event):
+  valid_exec ex ->
+  (rf ex) x y ->
+  In _ (evts ex) x.
+Proof.
+  intros Hval Hrf.
+  destruct_val_exec Hval.
+  destruct Hrf_v as [Hrf_v _].
+  apply Hrf_v in Hrf as [Hfin _].
+  auto.
+Qed.
+
+Lemma rf_dest_evts (ex: Execution) (x y : Event):
+  valid_exec ex ->
+  (rf ex) x y ->
+  In _ (evts ex) y.
+Proof.
+  intros Hval Hrf.
+  destruct_val_exec Hval.
+  destruct Hrf_v as [Hrf_v _].
+  apply Hrf_v in Hrf as [_ [Hfin _]].
+  auto.
+Qed.
+
+(** In a valid execution, events related by sequenced-before belong to the set
+of events of the execution *)
+
+Lemma sb_orig_evts (ex: Execution) (x y : Event):
+  valid_exec ex ->
+  (sb ex) x y ->
+  In _ (evts ex) x.
+Proof.
+  intros Hval Hsb.
+  destruct_val_exec Hval.
+  destruct Hsb_v as [_ [Hsb_v _]].
+  apply Hsb_v. left; exists y; auto.
+Qed.
+
+Lemma sb_dest_evts (ex: Execution) (x y : Event):
+  valid_exec ex ->
+  (sb ex) x y ->
+  In _ (evts ex) y.
+Proof.
+  intros Hval Hsb.
+  destruct_val_exec Hval.
+  destruct Hsb_v as [_ [Hsb_v _]].
+  apply Hsb_v. right; exists x; auto.
 Qed.
   
 (** ** Getters *)

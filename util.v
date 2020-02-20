@@ -17,6 +17,8 @@ Import Load.
 (** Notations, lemmas and tactics, mostly about relations that are useful in the 
 rest of this development. *)
 
+(** ** Tactics *)
+
 (** A tactic to reason #<i>ad absurdum</i>#. *)
 
 Ltac byabsurd :=
@@ -30,6 +32,14 @@ proof *)
 Ltac destruct_disjunction H :=
   destruct H as [H|H];
   try (destruct_disjunction H).
+
+(** ** Sets *)
+
+Lemma intersection_included_itself {A:Type} (s1 s2 : Ensemble A):
+  Included _ (Intersection _ s1 s2) s1.
+Proof.
+  intros x [H1 H2]; auto.
+Qed.
 
 (** ** Notations *)
 

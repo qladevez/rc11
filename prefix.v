@@ -34,17 +34,36 @@ of [E] restricted to the subparts of the relation relating elements of [E'] *)
 
 Definition prefix (e' e : Execution) : Prop :=
   (Included _ e'.(evts) e.(evts)) /\
-  (Same_set _ (ran e.(sb)) (ran e'.(sb))) /\
   (forall a b, (e.(sb) <+> e.(rf)) a b ->
                In _ e'.(evts) b ->
                In _ e'.(evts) a) /\
-  (e'.(sb) == (res_eset e'.(evts) e.(sb))) /\
-  (e'.(rf) == (res_eset e'.(evts) e.(rf))) /\
-  (e'.(mo) == (res_eset e'.(evts) e.(mo))) /\
-  (e'.(rmw) == (res_eset e'.(evts) e.(rmw))).
+  (e'.(sb) == e.(sb)) /\
+  (e'.(rf) == e.(rf)) /\
+  (e'.(mo) == e.(mo)) /\
+  (e'.(rmw) == e.(rmw)).
 
 Ltac destruct_prefix H :=
-  destruct H as [Hevts [Hinit [Hclosed [Hsb [Hrf [Hmo Hrmw]]]]]].
+  destruct H as [Hevts [Hclosed [Hsb [Hrf [Hmo Hrmw]]]]].
+
+(** ** Lemmas *)
+
+(** An execution is a prefix of itself *)
+
+Lemma prefix_itself (ex : Execution):
+  valid_exec ex ->
+  prefix ex ex.
+Proof.
+  intros Hval.
+  split; [|split; [|split; [|split; [|split]]]].
+  - compute; auto.
+  - intros a b [Hsb|Hrf] Hin.
+    + apply sb_orig_evts with (y:=b); auto.
+    + apply rf_orig_evts with (y:=b); auto.
+  - compute; auto.
+  - compute; auto.
+  - compute; auto.
+  - compute; auto.
+Qed.
 
 (** If a relation [R] is included in a relation [R'], the relation [R]
 restricted to pairs of events affecting the same location is included in the
@@ -80,8 +99,8 @@ Lemma sb_prefix_incl : forall pre ex,
   pre.(sb) ⊆ ex.(sb).
 Proof.
   intros pre ex Hpre. destruct_prefix Hpre.
-  intros x y Hsb'. apply Hsb in Hsb'. 
-  destruct Hsb' as [_ [_ H]]; auto.
+  intros x y Hsb'. apply Hsb in Hsb'.
+  auto. 
 Qed.
 
 (** The reads-from relation of an execution prefix is included in the reads-from
@@ -93,7 +112,7 @@ Lemma rf_prefix_incl : forall pre ex,
 Proof.
   intros pre ex Hpre. destruct_prefix Hpre.
   intros x y Hrf'. apply Hrf in Hrf'. 
-  destruct Hrf' as [_ [_ H]]; auto.
+  auto.
 Qed.
 
 (** The modification order of an execution prefix is included in the 
@@ -105,7 +124,7 @@ Lemma mo_prefix_incl : forall pre ex,
 Proof.
   intros pre ex Hpre. destruct_prefix Hpre.
   intros x y Hmo'. apply Hmo in Hmo'. 
-  destruct Hmo' as [_ [_ H]]; auto.
+  auto.
 Qed.
 
 (** The read-modify-write relation of an execution prefix is included in the 
@@ -116,8 +135,8 @@ Lemma rmw_prefix_incl : forall pre ex,
   pre.(rmw) ⊆ ex.(rmw).
 Proof.
   intros pre ex Hpre. destruct_prefix Hpre.
-  intros x y Hrmw'. apply Hrmw in Hrmw'. 
-  destruct Hrmw' as [_ [_ H]]; auto.
+  intros x y Hrmw'. apply Hrmw in Hrmw'.
+  auto.
 Qed.
 
 (** The reads-before relation of an execution prefix is included in the 
@@ -130,8 +149,8 @@ Proof.
   intros Hpre x y H.
   destruct H as [z [Hinvrf Hmo']]. 
   exists z; split; destruct_prefix Hpre.
-  - apply Hrf in Hinvrf. unfold transp. apply res_eset_incl in Hinvrf. auto.
-  - apply Hmo in Hmo'. apply res_eset_incl in Hmo'. auto.
+  - apply Hrf in Hinvrf. unfold transp. auto.
+  - apply Hmo in Hmo'. auto.
 Qed.
 
 (** Restricting the reads-before relation is the same as applying the definition
@@ -139,23 +158,14 @@ of reads-before on reads-from and modification order restricted *)
 
 Lemma rb_res_evts : forall pre ex,
   prefix pre ex ->
-  (rb pre) == (res_eset pre.(evts) (rb ex)).
+  (rb pre) == (rb ex).
 Proof.
   intros pre ex Hpre. split; intros x y H.
-  - repeat (try split).
-    + destruct H as [z [H _]]. destruct_prefix Hpre.
-      apply Hrf in H. destruct H as [_ [H _]]. auto.
-    + destruct H as [z [_ H]]. destruct_prefix Hpre.
-      apply Hmo in H. destruct H as [_ [H _]]. auto.
-    + apply (rb_prefix_incl Hpre H).
-  - destruct H as [H1 [H2 [z [Hinvrf Hmo2]]]].
+  - apply (rb_prefix_incl Hpre H).
+  - destruct H as [z [H1 H2]].
     destruct_prefix Hpre. exists z; split.
-    + apply Hrf; split; auto. apply Hclosed with (b := x).
-      * right. apply Hinvrf.
-      * auto.
-    + apply Hmo; split; auto. apply Hclosed with (b := x).
-      * right. apply Hinvrf.
-      * auto.
+    + apply Hrf; auto.
+    + apply Hmo; auto.
 Qed.
 
 (** The extended communication relation of an execution prefix is included in

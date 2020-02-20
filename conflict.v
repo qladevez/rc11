@@ -20,7 +20,9 @@ Import RelNotations.
 some properties about executions that contain (or don't contain) conflicting
 events *)
 
-(** * Conflicting events *)
+(** * Conflicts *)
+
+(** ** Conflicting events *)
 
 Definition c_events (e: Execution) : relation Event :=
   fun x => fun y =>
@@ -29,7 +31,34 @@ Definition c_events (e: Execution) : relation Event :=
     ~ (((sb e) <+> (res_mode Sc (rf e)))⁺) x y /\
     ~ (((sb e) <+> (res_mode Sc (rf e)))⁺) y x.
 
-(** * SC-consistent prefixes *)
+
+Definition not_conflicting (ex: Execution) : Prop :=
+  forall x y, ~(c_events ex) x y.
+
+Definition conflicting (ex: Execution) : Prop :=
+  exists x y, (c_events ex) x y.
+
+Lemma not_no_conflict_is_exist_conflict (ex: Execution):
+  ~(not_conflicting ex) <-> (conflicting ex).
+Proof.
+  split; intros H.
+  - byabsurd. destruct H. intros x y H.
+    apply Hcontr. exists x, y. auto.
+  - intros Hcontr. destruct H as [x [y H]].
+    destruct (Hcontr _ _ H).
+Qed.
+
+Lemma not_exists_conflict_is_no_conflict (ex: Execution):
+  ~(conflicting ex) <-> (not_conflicting ex).
+Proof.
+  split; intros H.
+  - intros x y Hcontr. apply H. exists x,y; auto.
+  - intros [x [y Hcontr]].
+    destruct (H _ _ Hcontr).
+Qed.
+
+
+(** ** SC-consistent prefixes *)
 
 Lemma nt_rfsc_incl_hb: forall ex,
   valid_exec ex ->
@@ -99,7 +128,7 @@ Lemma rf_prefix_in_sbrfsc_ex: forall pre ex,
   valid_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
-  (forall x y, ~ (c_events pre) x y) ->
+  not_conflicting pre ->
   (rf pre) ⊆ (((sb ex) <+> ((res_mode Sc (rf ex))))⁺).
 Proof.
   intros pre ex Hval H11cons Hpre Hnoconflict x y H.
@@ -161,7 +190,7 @@ Lemma mo_prefix_in_sbrfscmo_ex: forall pre ex,
   valid_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
-  (forall x y, ~ (c_events pre) x y) ->
+  not_conflicting pre ->
   (mo pre) ⊆ ((((sb ex) <+> ((res_mode Sc (rf ex))))⁺) <+> 
                                (res_mode Sc (mo ex))).
 Proof.
@@ -224,7 +253,7 @@ Lemma rb_prefix_in_sbrfscrb_ex: forall pre ex,
   valid_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
-  (forall x y, ~ (c_events pre) x y) ->
+  not_conflicting pre ->
   (rb pre) ⊆ ((((sb ex) <+> ((res_mode Sc (rf ex))))⁺) <+>
                                (res_mode Sc (rb ex))).
 Proof.
@@ -375,7 +404,7 @@ Lemma no_conflict_prefix_sc : forall pre ex,
   valid_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
-  (forall x y, ~ (c_events pre) x y) ->
+  not_conflicting pre ->
   sc_consistent pre.
 Proof.
   intros pre ex Hval Hrc11 Hpre Hconflict.
@@ -405,4 +434,19 @@ Proof.
       apply (incl_trans2 _ _ _ (incl_tc_union _ _)).
       apply (incl_trans2 _ _ _ (incl_union_of_tc_right _ _)).
       apply (rb_prefix_in_sbrfscrb_ex _ _ Hval Hrc11 Hpre Hconflict).
+Qed.
+
+(** If an execution is not SC-consistent, it contains (a) pair(s) of conflicting
+event(s) *)
+
+Lemma exec_sc_no_conflict (ex: Execution) :
+  valid_exec ex ->
+  rc11_consistent ex ->
+  ~(sc_consistent ex) ->
+  conflicting ex.
+Proof.
+  intros Hval Hrc11 Hsc. apply not_no_conflict_is_exist_conflict. 
+  intros Hconf. apply Hsc.
+  apply (no_conflict_prefix_sc ex ex); auto.
+  apply prefix_itself. apply Hval.
 Qed.
