@@ -6,14 +6,14 @@ C/C++11; Lahav, Vafeiadis, Kang et al., PLDI 2017)
 Author: Quentin Ladeveze, Inria Paris, France
 *)
 
-Require Import Relations.
 Require Import Ensembles.
 Require Import Classical_Prop.
+Require Import Nat.
 From RC11 Require Import util.
+From RelationAlgebra Require Import 
+  lattice prop monoid rel kat_tac normalisation kleene kat.
 
-Import RelNotations.
-
-Set Implicit Arguments.
+Open Scope rel_notations.
 
 (** The file contains the definition of complete executions. It corresponds to 
 section 3.1 (and to the very first paragraph of section 3.2) of the article *)
@@ -51,6 +51,21 @@ Inductive Mode : Set :=
 
 (** *** Modes ordering *)
 
+Definition eq_mode (m1 m2 : Mode) : bool :=
+  match (m1, m2) with
+  | (Na, Na)
+  | (Rlx, Rlx)
+  | (Acq, Acq)
+  | (Rel, Rel)
+  | (AcqRel, AcqRel)
+  | (Sc, Sc) => true
+  | _ => false
+  end.
+
+Lemma eq_mode_refl (m: Mode):
+  eq_mode m m.
+Proof. destruct m; auto. Qed.
+
 (** There is a strict partial order on modes such that:
 
 - [Na] is weaker than [Rlx]
@@ -58,23 +73,23 @@ Inductive Mode : Set :=
 - [Acq] and [Rel] are weaker than [AcqRel]
 - [AcqRel] is weaker than [Sc]. *)
 
-Definition weaker_mode (m1 m2 : Mode) : Prop :=
+Definition weaker_mode (m1 m2 : Mode) : bool :=
   match (m1, m2) with
-  | (Na, Na) => False
-  | (Na, _) => True
-  | (Rlx, Na) | (Rlx, Rlx) => False
-  | (Rlx, _) => True
-  | (Acq, AcqRel) | (Acq, Sc) => True
-  | (Acq, _) => False
-  | (Rel, AcqRel) | (Rel, Sc) => True
-  | (Rel, _) => False
-  | (AcqRel, Sc) => True
-  | (AcqRel, _) => False
-  | (Sc, _) => False
+  | (Na, Na) => false
+  | (Na, _) => true
+  | (Rlx, Na) | (Rlx, Rlx) => false
+  | (Rlx, _) => true
+  | (Acq, AcqRel) | (Acq, Sc) => true
+  | (Acq, _) => false
+  | (Rel, AcqRel) | (Rel, Sc) => true
+  | (Rel, _) => false
+  | (AcqRel, Sc) => true
+  | (AcqRel, _) => false
+  | (Sc, _) => false
   end.
 
-Definition stronger_or_eq_mode (m1 m2 : Mode) : Prop :=
-  ~(weaker_mode m1 m2).
+Definition stronger_or_eq_mode (m1 m2 : Mode) : bool :=
+  negb (weaker_mode m1 m2).
 
 Hint Unfold stronger_or_eq_mode : exec.
 
@@ -125,6 +140,7 @@ Inductive Event : Type :=
 | Write (m: Mode) (l: Loc) (v: Val)
 | Fence (m: Mode).
 
+
 Definition is_read (e: Event) : Prop :=
   match e with
   | Read _ _ _ =>  True
@@ -146,6 +162,7 @@ Definition is_fence (e: Event) : Prop :=
   | Fence _ => True
   end.
 
+
 (** ** Validity conditions *)
 
 (** Is the mode of an event valid *)
@@ -160,7 +177,7 @@ Definition valid_mode (e: Event) : Prop :=
 (** Are the modes of a set of events valid *)
 
 Definition valid_evts (evts: Ensemble Event) : Prop :=
-  forall e, (In _ evts e) -> valid_mode e.
+  (forall e, (In _ evts e) -> valid_mode e).
 
 (** ** Getter functions *)
 
@@ -205,20 +222,20 @@ Definition Elt := Event.
 
 (** This extension is called a linear extension (LE) *)
 
-Parameter LE : relation Event -> relation Event.
+Parameter LE : rlt Event -> rlt Event.
 
 (** A relation is included in its linear extension and this extension is
 a strict linear order (i.e. it is total) *)
 
-Axiom OE : forall (s S:Ensemble Event) (r:relation Event),
+Axiom OE : forall (s S:Ensemble Event) (r:rlt Event),
   Included _ s S ->
   partial_order r s ->
-  r ⊆  (LE r) /\
+  r ≦  (LE r) /\
   linear_strict_order (LE r) S.
 
 (** The linear extension of a strict linear order on events is itself *)
 
-Axiom le_lso : forall (s:Ensemble Event) (r:relation Event),
+Axiom le_lso : forall (s:Ensemble Event) (r:rlt Event),
   linear_strict_order r s -> LE r = r.
 End OEEvt.
 
@@ -228,51 +245,89 @@ Import OEEvt.
 
 (** ** Identity relations *)
 
-(** Every write event is in relation [W] with itself *)
+Definition E : dset Event := top.
 
-Definition W : relation Event :=
-  fun x => fun y => 
-    (x = y) /\ is_write x /\ is_write y.
+Definition R : dset Event :=
+  fun e =>
+    match e with
+    | Read _ _ _ => top
+    | _ => bot
+    end.
 
-(** Every read event is in relation [R] with itself *)
+Definition W : dset Event :=
+  fun e =>
+    match e with
+    | Write _ _ _ => top
+    | _ => bot
+    end.
 
-Definition R : relation Event :=
-  fun x => fun y => (x = y) /\ is_read x /\ is_read y.
+Definition F : dset Event :=
+  fun e =>
+    match e with
+    | Fence _ => top
+    | _ => bot
+    end.
 
-(** Every fence event is in relation [F] with itself *)
+Definition M (m:Mode) : dset Event :=
+  fun e =>
+    if (eq_mode (get_mode e) m) then top else bot.
 
-Definition F : relation Event :=
-  fun x => fun y => (x = y) /\ is_fence x /\ is_fence y.
+Lemma M_get_mode_equiv (e: Event) (m: Mode):
+  (M m) e <-> (get_mode e) = m.
+Proof.
+  split;
+  unfold M; destruct (get_mode e); simpl;
+  destruct m; simpl;
+  intuition congruence.
+Qed.
 
+Lemma M_get_mode_refl (e: Event) (m: Mode):
+  [M m] e e <-> (get_mode e) = m.
+Proof.
+  split; intros H.
+  - unfold inj in H. simpl in H.
+    destruct H as [_ H].
+    apply M_get_mode_equiv. auto.
+  - split; auto.
+    apply M_get_mode_equiv. auto.
+Qed.
+
+Definition Mse (m: Mode) : dset Event :=
+  fun e =>
+    if (stronger_or_eq_mode (get_mode e) m) then top else bot.
+
+(*
 (** Every event is in relation [(E_eqmode m)] with itself if and only if it has 
 mode [m] *)
 
-Definition E_eqmode (m: Mode) : relation Event :=
+Definition E_eqmode (m: Mode) : rlt Event :=
   fun x => fun y => (x = y) /\
                     (get_mode x) = m.
+
+Definition 
 
 (** Every write event is in relation [(W_eqmode m)] with itself if and only if it
 has mode [m] *)
 
-Definition W_eqmode (m: Mode) : relation Event :=
-  W ;; (E_eqmode m).
+Definition W_eqmode (m: Mode) : rlt Event :=
+  [W] ⋅ (E_eqmode m).
 
 (** Every fence event is in relation [(F_eqmode m)] with itself if and only if it
 has mode [m] *)
 
-Definition F_eqmode (m: Mode) : relation Event :=
-  F ;; (E_eqmode m).
+Definition F_eqmode (m: Mode) : rlt Event :=
+  [F] ⋅ (E_eqmode m).
 
 (** Every read event is in relation [(R_eqmode m)] with itself if and only if it
 has mode [m] *)
 
-Definition R_eqmode (m: Mode) : relation Event :=
-  R ;; (E_eqmode m).
+Definition R_eqmode (m: Mode) : rlt Event :=
+  [R] ⋅ (E_eqmode m).
 
 (** Every event is in relation [(E_seqmode m)] with itself if and only if it has
 a mode strong or equal to [m] *)
 
-Definition E_seqmode (m: Mode) : relation Event :=
+Definition E_seqmode (m: Mode) : rlt Event :=
   fun x => fun y => (x = y) /\
                     stronger_or_eq_mode (get_mode x) m.
 
@@ -288,27 +343,48 @@ Qed.
 (** Every write event is in relation [(W_seqmode m)] with itself if and only if 
 it has a mode strong or equal to [m] *)
 
-Definition W_seqmode (m: Mode) : relation Event :=
-  W ;; (E_seqmode m).
+Definition W_seqmode (m: Mode) : rlt Event :=
+  [W] ⋅ (E_seqmode m).
 
 (** Every read event is in relation [(R_seqmode m)] with itself if and only if 
 it has a mode strong or equal to [m] *)
 
-Definition R_seqmode (m: Mode) : relation Event :=
-  R ;; (E_seqmode m).
+Definition R_seqmode (m: Mode) : rlt Event :=
+  [R] ⋅ (E_seqmode m).
 
 (** Every fence event is in relation [(F_seqmode m)] with itself if and only if
 it has a mode stronger or equal to [m] *)
 
-Definition F_seqmode (m: Mode) : relation Event :=
-  F ;; (E_seqmode m).
-  
+Definition F_seqmode (m: Mode) : rlt Event :=
+  [F] ⋅ (E_seqmode m).
+*)
+
+(** No event can be both a write event an read event *)
+
+Lemma rw_0: [R] ⋅ [W] ≦ empty.
+Proof.
+  intros x y H.
+  destruct H as [z [Heqx Hw] [Heqy Hr]].
+  rewrite Heqy in Hr.
+  destruct x, y; cbv in Hw, Hr;
+  intuition congruence.
+Qed.
+
+Lemma wr_0: [W] ⋅ [R] ≦ empty.
+Proof.
+  intros x y H.
+  destruct H as [z [Heqx Hr] [Heqy Hw]].
+  rewrite Heqy in Hw.
+  destruct x, y; cbv in Hw, Hr;
+  intuition congruence.
+Qed.
+
 (** ** Relations restrictions *)
 
 (** [res_eq_loc r] restricts a relation [r] to the pairs of events that affect 
 the same location *)
 
-Definition res_eq_loc (r: relation Event) :=
+Definition res_eq_loc (r: rlt Event) : rlt Event :=
   fun x => fun y =>
     r x y /\
     (get_loc x) = (get_loc y).
@@ -316,16 +392,35 @@ Definition res_eq_loc (r: relation Event) :=
 (** [res_neq_loc r] restricts a relation [r] to the pairs of events that affect 
 a different location *)
 
-Definition res_neq_loc (r: relation Event) :=
+Definition res_neq_loc (r: rlt Event) : rlt Event :=
   fun x => fun y =>
     r x y /\
     (get_loc x) <> (get_loc y).
 
+(** Restricting relations to the event that affect the same location, or that
+affect a different location preserve inclusion of relations *)
+
+Lemma res_loc_incl (r1 r2: rlt Event) :
+  r1 ≦ r2 -> (res_eq_loc r1) ≦ (res_eq_loc r2).
+Proof.
+  intros H x y [Hr1 Heqloc].
+  split; auto.
+  apply H; auto.
+Qed.
+
+Lemma res_neq_loc_incl (r1 r2: rlt Event):
+  r1 ≦ r2 -> (res_neq_loc r1) ≦ (res_neq_loc r2).
+Proof.
+  intros H x y [Hr1 Hneqloc].
+  split; auto.
+  apply H; auto.
+Qed.
+
 (** [res_mode m r] restricts a relation [r] to the pairs of events that have mode
 [m] *)
 
-Definition res_mode (m: Mode) (r: relation Event) :=
-  (E_eqmode m) ;; r ;; (E_eqmode m).
+Definition res_mode (m: Mode) (r: rlt Event) :=
+  [M m] ⋅ r ⋅ [M m].
 
 Lemma res_mode_conds : forall m r x y,
   (get_mode x) = m /\
@@ -334,26 +429,24 @@ Lemma res_mode_conds : forall m r x y,
   (res_mode m r) x y.
 Proof.
   intros m r x y [Hfst [Hsnd Hr]].
-  exists x; split.
-  - split; auto.
-  - exists y; split.
-    + auto.
-    + split; auto.
+  exists y.
+  - exists x; try split; auto.
+    apply M_get_mode_equiv. auto.
+  - split; [|apply M_get_mode_equiv]; auto.
 Qed.
 
-Lemma res_mode_simp : forall m r x y,
+Lemma res_mode_simp {m:Mode} {r: relation _} {x y: _}:
   (res_mode m r) x y ->
   (get_mode x) = m /\
   (get_mode y) = m /\
   r x y.
 Proof.
-  intros m r x y H.
-  destruct H as [z [[H0 H1] H2]].
-  destruct H2 as [z1 [H3 [H4 H5]]]. 
+  intros H.
+  destruct H as [z [z' [H1 H2] H3] [H4 H5]]. 
   repeat (try split).
-  - auto.
-  - rewrite H4 in H5. auto.
-  - rewrite H4 in H3. rewrite <- H0 in H3. auto.
+  - apply M_get_mode_equiv. auto.
+  - apply M_get_mode_equiv. rewrite H4 in H5. auto.
+  - rewrite <- H1 in H3. rewrite H4 in H3. auto.
 Qed.
 
 Lemma res_mode_fst_mode : forall m r x y,
@@ -372,45 +465,31 @@ Proof.
   destruct (res_mode_simp H) as [Hfst [Hsnd Hr]]. auto.
 Qed.
 
-Lemma res_mode_rel : forall m r x y,
+Lemma res_mode_rel {m: Mode} {r: relation _} {x y: _}:
   (res_mode m r) x y ->
   r x y.
 Proof.
-  intros m r x y H.
+  intros H.
   destruct (res_mode_simp H) as [Hfst [Hsnd Hr]]. auto.
 Qed.
 
+Definition res_neq_mode (m:Mode) (r: rlt Event) :=
+  [!M m] ⋅ r ⋅ [!M m] ⊔
+  [M m] ⋅ r ⋅ [!M m] ⊔
+  [!M m] ⋅ r ⋅ [M m].
 
-Definition res_neq_mode (m:Mode) (r: relation Event) :=
-  fun x => fun y => r x y /\
-                    ((get_mode x) <> m \/
-                     (get_mode y) <> m).
-
-Lemma dcmp_in_res_neq_res (m: Mode) (r: relation Event) :
-  r = (res_neq_mode m r) <+> (res_mode m r).
+Lemma dcmp_in_res_neq_res (m: Mode) (r: rlt Event) :
+  r = (res_neq_mode m r) ⊔ (res_mode m r).
 Proof.
-  apply ext_rel. split; intros x y H.
-  - destruct (classic ((get_mode x) = m));
-    destruct (classic ((get_mode y) = m)).
-    + right. exists x; split.
-      { split; auto. }
-      exists y; split; auto.
-      split; auto.
-    + left. compute. auto.
-    + left. compute. auto.
-    + left. compute. auto.
-  - destruct H as [[H1 H2] | H]; auto.
-    apply (res_mode_rel H).
+  apply ext_rel.
+  unfold res_neq_mode, res_mode.
+  kat.
 Qed.
 
-Lemma res_neq_incl (m:Mode) (r1: relation Event):
-  (res_neq_mode m r1) ⊆ r1.
+Lemma res_neq_incl (m:Mode) (r1: rlt Event):
+  (res_neq_mode m r1) ≦ r1.
 Proof.
-  rewrite inclusion_as_eq.
-  cut (res_neq_mode m r1 <+> (res_neq_mode m r1 <+> res_mode m r1) ==
-       (res_neq_mode m r1 <+> res_mode m r1)).
-  - intros H. rewrite <- dcmp_in_res_neq_res in H; auto.
-  - kleene Event.
+  unfold res_neq_mode. kat.
 Qed.
 
 (** ** Sequenced before *)
@@ -419,13 +498,13 @@ Qed.
 if for each location, there is an initialisation event that sets the location
 to 0, is sequenced before all the events of the program and after no events *)
 
-Definition valid_sb (evts: Ensemble Event) (sb : relation Event) : Prop :=
+Definition valid_sb (evts: Ensemble Event) (sb : rlt Event) : Prop :=
   (linear_strict_order sb evts) /\
   (Included _ (udr sb) (evts)) /\
   (forall (l : Loc),
   exists (e: Event),
     (get_loc e) = Some l /\
-    (get_val e) = Some 0 /\
+    (get_val e) = Some O /\
     ~(In _ (dom sb) e) /\
     forall e', In _ (dom sb) e' -> sb e e').
 
@@ -442,7 +521,7 @@ pair if their modes are one of the following pairs:
 - [(Sc, Sc)]
  *)
  
-Definition valid_rmw_pair (sb : relation Event) (r: Event) (w: Event) : Prop :=
+Definition valid_rmw_pair (sb : rlt Event) (r: Event) (w: Event) : Prop :=
   match (get_mode r, get_mode w) with
   | (Rlx, Rlx) | (Acq, Rlx) | (Rlx, Rel) | (Acq, Rel) | (Sc, Sc) =>
     (is_read r /\
@@ -454,7 +533,7 @@ Definition valid_rmw_pair (sb : relation Event) (r: Event) (w: Event) : Prop :=
 
 (** A read-modify-write relation is a set of read-modify-write pairs *)
 
-Definition valid_rmw (sb : relation Event) (rmw : relation Event) : Prop :=
+Definition valid_rmw (sb : rlt Event) (rmw : rlt Event) : Prop :=
   forall r w, rmw r w -> valid_rmw_pair sb r w.
 
 (** ** Reads-from relation *)
@@ -465,40 +544,105 @@ To put it more simply, the read-from relation connects every read event to
 exactly one write event that wrote the value it reads
 *)
 
-Definition valid_rf (evts : Ensemble Event) (rf : relation Event) : Prop :=
+Definition valid_rf (evts : Ensemble Event) (rf : rlt Event) : Prop :=
   (forall w r, 
     rf w r ->
     (In _ evts w /\
      In _ evts r /\
-     is_write w /\
-     is_read r /\
      (get_loc w) = (get_loc r) /\
      (get_val w) = (get_val r))) /\
+  ([W]⋅rf⋅[R] ≡ rf) /\
   (forall w1 w2 r,
     (rf w1 r) /\ (rf w2 r) -> w1 = w2).
+
+(** The sequence of read-from and of the converse of read-from is a reflexive
+relation. This means that each read can read the value of only one write *)
+
+Lemma rf_unique (evts: Ensemble Event) (rf: rlt Event):
+  valid_rf evts rf ->
+  rf⋅rf° ≦ 1.
+Proof.
+  intros Hval x y [z Hrf Hrfconv].
+  simp_cnv Hrfconv.
+  destruct Hval as [_ [_ H]].
+  generalize (H x y z). 
+  intuition auto.
+Qed.
+
+Lemma rf_incl_same_loc (evts: Ensemble Event) (rf r: rlt Event):
+  valid_rf evts rf ->
+  rf ≦ r ->
+  rf ≦ res_eq_loc r.
+Proof.
+  intros Hval Hincl x y Hrf.
+  destruct Hval as [Hval _].
+  destruct (Hval _ _ Hrf) as [_ [_ [Hsameloc _]]].
+  split; auto. apply Hincl; auto.
+Qed.
+
+Lemma rf_valid_test_right (evts: Ensemble Event) (rf: rlt Event) (t: dset Event):
+  valid_rf evts rf ->
+  valid_rf evts (rf ⋅ [t]).
+Proof.
+  intros Hval.
+  unfold valid_rf in *.
+  destruct Hval as [Hv1 [Hv2 Hv3]].
+  split.
+  - intros w r.
+    intros [z Hrf [Heq _]].
+    rewrite Heq in Hrf.
+    destruct (Hv1 w r Hrf) as [? [? [? ?]]].
+    split; [|split;[|split]]; auto.
+  - split.
+    + rewrite <- Hv2 at 2. kat.
+    + intros w1 w2 r. intros [Hw1 Hw2].
+      apply (Hv3 w1 w2 r).
+      split.
+      * destruct Hw1 as [z H [Heq _]]. rewrite Heq in H. auto.
+      * destruct Hw2 as [z H [Heq _]]. rewrite Heq in H. auto.
+Qed.
+
+Lemma rf_valid_test_left (evts: Ensemble Event) (rf: rlt Event) (t: dset Event):
+  valid_rf evts rf ->
+  valid_rf evts ([t] ⋅ rf).
+Proof.
+  intros Hval.
+  unfold valid_rf in *.
+  destruct Hval as [Hv1 [Hv2 Hv3]].
+  split.
+  - intros w r.
+    intros [z [Heq _] Hrf].
+    rewrite <- Heq in Hrf.
+    destruct (Hv1 w r Hrf) as [? [? [? ?]]].
+    split; [|split;[|split]]; auto.
+  - split.
+    + rewrite <- Hv2 at 2. kat.
+    + intros w1 w2 r. intros [Hw1 Hw2].
+      apply (Hv3 w1 w2 r).
+      split.
+      * destruct Hw1 as [z [Heq _] H]. rewrite <- Heq in H. auto.
+      * destruct Hw2 as [z [Heq _] H]. rewrite <- Heq in H. auto.
+Qed.
 
 (** ** Modification order *)
 
 (** The modification order is a strict partial order on the write events, which 
 is the disjoint union of total orders on the write events to a specific location
 for each location.
-It correponds to write serialisation in some other works on axiomatic memory
-models.
+It correponds to write serialisation or coherence order in some other works on 
+axiomatic memory models.
 *)
 
-Definition mo_for_loc (mo : relation Event) (l : Loc) : relation Event :=
+Definition mo_for_loc (mo : rlt Event) (l : Loc) : rlt Event :=
   fun w1 => fun w2 =>
     mo w1 w2 /\
     (get_loc w1) = (Some l) /\
     (get_loc w2) = (Some l).
 
-Definition valid_mo (evts: Ensemble Event) (mo : relation Event) : Prop :=
-  (forall w1 w2, mo w1 w2 ->
-    In _ evts w1 /\
-    In _ evts w2 /\
-    is_write w1 /\
-    is_write w2) /\
-  (forall l, linear_strict_order (mo_for_loc mo l) evts).
+Definition valid_mo (evts: Ensemble Event) (mo : rlt Event) : Prop :=
+  ([W]⋅mo⋅[W] ≡ mo) /\
+  (partial_order mo evts) /\
+  (forall l, total_rel (mo_for_loc mo l) evts).
 
 (** * Executions *)
 
@@ -513,10 +657,10 @@ Definition valid_mo (evts: Ensemble Event) (mo : relation Event) : Prop :=
 
 Record Execution : Type := mkex {
   evts : Ensemble Event;
-  sb : relation Event;
-  rmw : relation Event;
-  rf : relation Event;
-  mo : relation Event;
+  sb : rlt Event;
+  rmw : rlt Event;
+  rf : rlt Event;
+  mo : rlt Event;
 }.
 
 Definition valid_exec (e: Execution) : Prop :=
@@ -536,71 +680,82 @@ Ltac destruct_val_exec H :=
 
 (** *** Lemmas about valid executions *)
 
+Section ValidExecs.
+
+Variable ex : Execution.
+Variable val_exec : valid_exec ex.
+
 (** In a valid execution, the origin of a reads-from is a write event *)
 
-Lemma rf_orig_write : forall ex x y,
-  valid_exec ex ->
+Lemma rf_orig_write x y:
   (rf ex) x y ->
   is_write x.
 Proof.
-  intros ex x y Hval Hrf.
-  destruct_val_exec Hval.
-  destruct Hrf_v as [Hrf_v _].
-  destruct (Hrf_v x y Hrf) as [_ [_ [Hw _]]].
-  auto.
+  intros Hrf.
+  destruct_val_exec val_exec.
+  destruct Hrf_v as [_ [Hrf_v _]].
+  apply Hrf_v in Hrf.
+  destruct Hrf as [z [z' Hw Hrf] Hr].
+  destruct Hw as [Heq Hw].
+  destruct x. simpl in Hw.
+  - inversion Hw.
+  - cbv; auto.
+  - inversion Hw.
 Qed.
 
 (** In a valid execution, the destination of a reads-from is a read event *)
 
-Lemma rf_dest_read : forall ex x y,
-  valid_exec ex ->
+Lemma rf_dest_read x y:
   (rf ex) x y ->
   is_read y.
 Proof.
-  intros ex x y Hval Hrf.
-  destruct_val_exec Hval.
-  destruct Hrf_v as [Hrf_v _].
-  destruct (Hrf_v x y Hrf) as [_ [_ [_ [Hw _]]]].
-  auto.
+  intros Hrf.
+  destruct_val_exec val_exec.
+  destruct Hrf_v as [_ [Hrf_v _]].
+  apply Hrf_v in Hrf.
+  destruct Hrf as [z [z' Hw Hrf] Hr].
+  destruct Hr as [Heq Hr].
+  rewrite Heq in Hr.
+  destruct y; simpl in Hr.
+  - cbv; auto.
+  - inversion Hr.
+  - inversion Hr.
 Qed.
 
 (** In a valid execution, two events related by read-from affect the same 
 location *)
 
-Lemma rf_same_loc : forall ex x y,
-  valid_exec ex ->
+Lemma rf_same_loc x y:
   (rf ex) x y ->
   (get_loc x) = (get_loc y).
 Proof.
-  intros ex x y Hval Hrf.
-  destruct_val_exec Hval.
+  intros Hrf.
+  destruct_val_exec val_exec.
   destruct Hrf_v as [Hrf_v _].
-  destruct (Hrf_v x y Hrf) as [_ [_ [_ [_ [H _]]]]].
+  destruct (Hrf_v x y Hrf) as [_ [_ [Hloc _]]].
   auto.
 Qed.
 
 (** In a valid execution, events related by read-from belong to the set of
 events of the execution *)
 
-Lemma rf_orig_evts (ex: Execution) (x y: Event):
-  valid_exec ex ->
+Lemma rf_orig_evts (x y: Event):
   (rf ex) x y ->
   In _ (evts ex) x.
 Proof.
-  intros Hval Hrf.
-  destruct_val_exec Hval.
+  intros Hrf.
+  destruct_val_exec val_exec.
   destruct Hrf_v as [Hrf_v _].
   apply Hrf_v in Hrf as [Hfin _].
   auto.
 Qed.
 
-Lemma rf_dest_evts (ex: Execution) (x y : Event):
-  valid_exec ex ->
+Lemma rf_dest_evts (x y : Event):
   (rf ex) x y ->
   In _ (evts ex) y.
 Proof.
-  intros Hval Hrf.
-  destruct_val_exec Hval.
+  intros Hrf.
+  destruct_val_exec val_exec.
   destruct Hrf_v as [Hrf_v _].
   apply Hrf_v in Hrf as [_ [Hfin _]].
   auto.
@@ -609,27 +764,27 @@ Qed.
 (** In a valid execution, events related by sequenced-before belong to the set
 of events of the execution *)
 
-Lemma sb_orig_evts (ex: Execution) (x y : Event):
-  valid_exec ex ->
+Lemma sb_orig_evts (x y : Event):
   (sb ex) x y ->
   In _ (evts ex) x.
 Proof.
-  intros Hval Hsb.
-  destruct_val_exec Hval.
+  intros Hsb.
+  destruct_val_exec val_exec.
   destruct Hsb_v as [_ [Hsb_v _]].
   apply Hsb_v. left; exists y; auto.
 Qed.
 
-Lemma sb_dest_evts (ex: Execution) (x y : Event):
-  valid_exec ex ->
+Lemma sb_dest_evts (x y : Event):
   (sb ex) x y ->
   In _ (evts ex) y.
 Proof.
-  intros Hval Hsb.
-  destruct_val_exec Hval.
+  intros Hsb.
+  destruct_val_exec val_exec.
   destruct Hsb_v as [_ [Hsb_v _]].
   apply Hsb_v. right; exists x; auto.
 Qed.
+
+End ValidExecs.
   
 (** ** Getters *)
 

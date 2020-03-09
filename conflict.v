@@ -6,6 +6,8 @@ C/C++11; Lahav, Vafeiadis, Kang et al., PLDI 2017)
 Author: Quentin Ladeveze, Inria Paris, France
 *)
 
+From RelationAlgebra Require Import 
+  lattice prop monoid rel kat_tac normalisation kleene kat rewriting.
 Require Import Ensembles.
 Require Import Relations.
 Require Import Classical_Prop.
@@ -13,8 +15,6 @@ From RC11 Require Import util.
 From RC11 Require Import exec.
 From RC11 Require Import rc11.
 From RC11 Require Import prefix.
-
-Import RelNotations.
 
 (** This file contains the definition of the pairs of conflicting events and
 some properties about executions that contain (or don't contain) conflicting
@@ -28,8 +28,8 @@ Definition c_events (e: Execution) : relation Event :=
   fun x => fun y =>
     ((get_mode x) <> Sc \/
      (get_mode y) <> Sc) /\
-    ~ (((sb e) <+> (res_mode Sc (rf e)))⁺) x y /\
-    ~ (((sb e) <+> (res_mode Sc (rf e)))⁺) y x.
+    ~ (((sb e) ⊔ (res_mode Sc (rf e)))^+) x y /\
+    ~ (((sb e) ⊔ (res_mode Sc (rf e)))^+) y x.
 
 
 Definition not_conflicting (ex: Execution) : Prop :=
@@ -57,126 +57,110 @@ Proof.
     destruct (H _ _ Hcontr).
 Qed.
 
-
+Ltac solve_test_ineq :=
+  unfold inj; simpl;
+  intros x y [Heq Hmode]; split; auto;
+  unfold Mse; unfold M in Hmode;
+  destruct (get_mode x); simpl in *;
+  intuition eauto.
+  
 (** ** SC-consistent prefixes *)
 
-Lemma nt_rfsc_incl_hb: forall ex,
+Lemma nt_rfsc_incl_hb {ex: Execution}:
   valid_exec ex ->
-  (res_mode Sc (rf ex)) ⊆  ((sb ex) <+> (sw ex)).
+  [M Sc] ⋅ rf ex ⋅ [M Sc] ≦  sw ex.
 Proof.
-  intros ex Hval x y H.
-  right. exists x; split.
-  { apply (e_seqmode_refl x (res_mode_fst_mode H)).
-    unfold stronger_or_eq_mode. auto. }
-    exists x; split.
-    { right. }
-    exists x; split.
-    { exists x; split.
-    { destruct H as [z [[Heq Hmode] [z' [Hrf Heq']]]].
-      rewrite <- Heq in Hrf.
-      repeat (try split); apply (rf_orig_write x z' Hval Hrf). }
-      exists x; split.
-      { right. }
-      exists x; split.
-      { destruct H as [z [[Heq Hmode] [z' [Hrf Heq']]]].
-      rewrite <- Heq in Hrf.
-      exists x; split.
-      - repeat (try split); apply (rf_orig_write x z' Hval Hrf).
-      - repeat (try split). unfold stronger_or_eq_mode. rewrite Hmode. auto.
-      }
-      apply rt_refl.
-    }
-    exists y; split.
-    { destruct H as [z [[Heq Hmode] [z' [Hrf [Heq' Hmode']]]]].
-      rewrite <- Heq in Hrf. rewrite Heq' in Hrf. auto. }
-    exists y; split.
-    { destruct H as [z [[Heq Hmode] [z' [Hrf [Heq' Hmode']]]]].
-      rewrite <- Heq in Hrf. rewrite Heq' in Hrf.
-      exists y; split.
-      - repeat (try split); apply (rf_dest_read x y Hval Hrf).
-      - split; auto. unfold stronger_or_eq_mode. rewrite Heq' in Hmode'.
-        rewrite Hmode'. auto.
-    }
-    exists y; split.
-    { right. }
-    { split; auto.
-      destruct H as [z [_ [z' [_ [Heq Hmode]]]]].
-      rewrite Heq in Hmode. rewrite Hmode.
-      unfold stronger_or_eq_mode. auto.
-    }
+  intros Hval.
+  unfold sw.
+  rewrite <- !one_incl_refl, !dotx1.
+  apply incl_dot_test_right.
+  solve_test_ineq.
+  apply incl_dot_test_right.
+  solve_test_ineq.
+  rewrite <- !dotA.
+  apply incl_dot_test_left.
+  solve_test_ineq.
+  rewrite !dotA.
+  unfold rs.
+  rewrite <- one_incl_refl, <- one_incl_rtc, !dotx1, dtest.
+  rewrite (rf_wr _ Hval) at 1.
+  mrewrite (test_dot_comm _ R).
+  apply incl_dot_test_right. auto.
+  rewrite (test_in_one _ (M Sc)) at 2.
+  rewrite (test_in_one _ R).
+  rewrite !dotx1.
+  apply incl_dot; auto.
+  rewrite test_dot_comm.
+  apply incl_dot; auto.
+  solve_test_ineq.
 Qed.
 
-Lemma sbrfsc_incl_hb: forall ex,
+Lemma sbrfsc_incl_hb {ex: Execution}:
   valid_exec ex ->
-  (((sb ex) <+> (res_mode Sc (rf ex)))⁺) ⊆ (hb ex).
+  (sb ex ⊔ ([M Sc] ⋅ rf ex ⋅ [M Sc]))^+ ≦ hb ex.
 Proof.
-  intros ex Hval x y H.
-  destruct H as [z [H1 H2]].
-  exists z; split.
-  - destruct H1 as [H1|H1].
-    + left; auto.
-    + apply (nt_rfsc_incl_hb ex Hval). auto.
-  - clear H1. induction H2 as [ y z H | y | z1 z2 z3 H IH H' IH' ].
-    + apply rt_step. destruct H as [H|H].
-      * left; auto.
-      * apply (nt_rfsc_incl_hb ex Hval). auto.
-    + apply rt_refl.
-    + apply rt_trans with (y:=z2); auto.
+  intros Hval.
+  unfold hb.
+  apply tc_incl.
+  apply incl_cup; auto.
+  apply (nt_rfsc_incl_hb Hval).
 Qed.
 
-Lemma rf_prefix_in_sbrfsc_ex: forall pre ex,
+Lemma rf_prefix_in_sbrfsc_ex {pre ex: Execution}:
   valid_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
   not_conflicting pre ->
-  (rf pre) ⊆ (((sb ex) <+> ((res_mode Sc (rf ex))))⁺).
+  (rf pre) ≦ (((sb ex) ⊔ ((res_mode Sc (rf ex))))^+).
 Proof.
-  intros pre ex Hval H11cons Hpre Hnoconflict x y H.
+  intros Hval H11cons Hpre Hnoconflict x y H.
   (* We suppose that x and y are related by ex.rf *)
   apply (rf_prefix_incl Hpre) in H.
   destruct (classic ((get_mode x) = Sc /\ (get_mode y) = Sc)) 
     as [[Hxsc Hysc] | HNotSc].
   (* If x and y are Sc, then they are related by (ex.rf)_sc *)
   { apply tc_incl_itself. right. 
-    exists x; split. { split; auto. }
-    exists y; split. { auto. }
-    split; auto. }
-  destruct (classic ((((sb ex) <+> (res_mode Sc (rf ex))) ⁺) x y)) 
+    exists y. exists x.
+    - apply M_get_mode_refl; auto.
+    - auto.
+    - apply M_get_mode_refl; auto.
+  }
+  destruct (classic ((((sb ex) ⊔ (res_mode Sc (rf ex))) ^+) x y)) 
     as [Hres | Hcontr].
   { auto. }
   (* We suppose that x and y are not both sc events and that they are not
-    related by ex.(sb U rf_sc)⁺ *)
+    related by ex.(sb U rf_sc)^+ *)
   exfalso.
-  destruct (classic ((((sb ex) <+> (res_mode Sc (rf ex))) ⁺) y x)) 
+  destruct (classic ((((sb ex) ⊔ (res_mode Sc (rf ex))) ^+) y x)) 
     as [Hres' | Hcontr'].
-  (* If y and x are related by ex.(sb U rf_sc)⁺ *)
+  (* If y and x are related by ex.(sb U rf_sc)^+ *)
   - destruct H11cons as [Hco _].
-    apply (sbrfsc_incl_hb ex Hval) in Hres'.
-    destruct (coherence_no_future_read Hco) with (x := x).
-    exists y; split; auto.
-  (* If y and x are not related by ex.(sb U rf_sc)⁺ *)
+    apply (sbrfsc_incl_hb  Hval) in Hres'.
+    destruct (coherence_no_future_read _ Hco) with (x := x).
+    exists y; auto.
+  (* If y and x are not related by ex.(sb U rf_sc)^+ *)
   - apply not_and_or in HNotSc. apply (Hnoconflict x y).
     repeat (try split).
     + auto.
     + intros Hcontr''.
-      assert ((((sb pre) <+> (res_mode Sc (rf pre))) ⁺) ⊆
-              (((sb ex) <+> (res_mode Sc (rf ex))) ⁺)) as Hincl.
+      assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
+              (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.
       { apply tc_incl. intros x' y' H'. destruct H' as [H'|H'].
         - left. apply (sb_prefix_incl Hpre). auto.
         - destruct (res_mode_simp H') as [Hsc [Hsc' Hrf]].
-          right. exists x'; split. { split; auto. }
-          exists y'; split. { apply (rf_prefix_incl Hpre). auto. }
-          split; auto. }
+          right. exists y'; [exists x'|];
+          try (apply M_get_mode_refl; auto).
+          apply (rf_prefix_incl Hpre). auto. }
       apply Hincl in Hcontr''. eauto.
     + intros Hcontr''.
-      assert ((((sb pre) <+> (res_mode Sc (rf pre))) ⁺) ⊆
-                       (((sb ex) <+> (res_mode Sc (rf ex))) ⁺)) as Hincl.
+      assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
+                       (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.
       { apply tc_incl. intros x' y' H'. destruct H' as [H'|H'].
         - left. apply (sb_prefix_incl Hpre). auto.
         - destruct (res_mode_simp H') as [Hsc [Hsc' Hrf]].
-          right. exists x'; split. { split; auto. }
-          exists y'; split. { apply (rf_prefix_incl Hpre). auto. }
-          split; auto. }
+          right. exists y'; [exists x'|];
+          try (apply M_get_mode_refl; auto).
+          apply (rf_prefix_incl Hpre). auto. }
       apply Hincl in Hcontr''. eauto.
 Qed.
 
@@ -186,60 +170,62 @@ of the union of the sequenced-before the reads-from restricted to SC events
 relations of this execution and of the modification order restricted to SC events
 of this execution *)
 
-Lemma mo_prefix_in_sbrfscmo_ex: forall pre ex,
+Lemma mo_prefix_in_sbrfscmo_ex {pre ex: Execution}:
   valid_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
   not_conflicting pre ->
-  (mo pre) ⊆ ((((sb ex) <+> ((res_mode Sc (rf ex))))⁺) <+> 
+  (mo pre) ≦ ((((sb ex) ⊔ ((res_mode Sc (rf ex))))^+) ⊔ 
                                (res_mode Sc (mo ex))).
 Proof.
-  intros pre ex Hval H11cons Hpre Hnoconflict x y H.
-  (* We suppose that x and y are related by ex.mo *)
+  intros Hval H11cons Hpre Hnoconflict x y H.
+  (* We suppose that x and y are related by ex.rf *)
   apply (mo_prefix_incl Hpre) in H.
   destruct (classic ((get_mode x) = Sc /\ (get_mode y) = Sc)) 
     as [[Hxsc Hysc] | HNotSc].
   (* If x and y are Sc, then they are related by (ex.rf)_sc *)
   { right. 
-    exists x; split. { split; auto. }
-    exists y; split. { auto. }
-    split; auto. }
-  destruct (classic ((((sb ex) <+> (res_mode Sc (rf ex))) ⁺) x y)) 
+    exists y. exists x.
+    - apply M_get_mode_refl; auto.
+    - auto.
+    - apply M_get_mode_refl; auto.
+  }
+  destruct (classic ((((sb ex) ⊔ (res_mode Sc (rf ex))) ^+) x y)) 
     as [Hres | Hcontr].
   { left. auto. }
   (* We suppose that x and y are not both sc events and that they are not
-    related by ex.(sb U rf_sc)⁺ *)
+    related by ex.(sb U rf_sc)^+ *)
   exfalso.
-  destruct (classic ((((sb ex) <+> (res_mode Sc (rf ex))) ⁺) y x)) 
+  destruct (classic ((((sb ex) ⊔ (res_mode Sc (rf ex))) ^+) y x)) 
     as [Hres' | Hcontr'].
-  (* If y and x are related by ex.(sb U rf_sc)⁺ *)
+  (* If y and x are related by ex.(sb U rf_sc)^+ *)
   - destruct H11cons as [Hco _].
-    apply (sbrfsc_incl_hb ex Hval) in Hres'.
-    destruct (coherence_coherence_ww Hco) with (x := x).
-    exists y; split; auto.
-  (* If y and x are not related by ex.(sb U rf_sc)⁺ *)
+    apply (sbrfsc_incl_hb  Hval) in Hres'.
+    destruct (coherence_coherence_ww _ Hco) with (x := x).
+    exists y; auto.
+  (* If y and x are not related by ex.(sb U rf_sc)^+ *)
   - apply not_and_or in HNotSc. apply (Hnoconflict x y).
     repeat (try split).
     + auto.
     + intros Hcontr''.
-      assert ((((sb pre) <+> (res_mode Sc (rf pre))) ⁺) ⊆
-              (((sb ex) <+> (res_mode Sc (rf ex))) ⁺)) as Hincl.
+      assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
+              (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.
       { apply tc_incl. intros x' y' H'. destruct H' as [H'|H'].
         - left. apply (sb_prefix_incl Hpre). auto.
         - destruct (res_mode_simp H') as [Hsc [Hsc' Hrf]].
-          right. exists x'; split. { split; auto. }
-          exists y'; split. { apply (rf_prefix_incl Hpre). auto. }
-          split; auto. }
+          right. exists y'; [exists x'|];
+          try (apply M_get_mode_refl; auto).
+          apply (rf_prefix_incl Hpre). auto. }
       apply Hincl in Hcontr''. eauto.
     + intros Hcontr''.
-      assert ((((sb pre) <+> (res_mode Sc (rf pre))) ⁺) ⊆
-              (((sb ex) <+> (res_mode Sc (rf ex))) ⁺)) as Hincl.
+      assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
+                       (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.
       { apply tc_incl. intros x' y' H'. destruct H' as [H'|H'].
         - left. apply (sb_prefix_incl Hpre). auto.
         - destruct (res_mode_simp H') as [Hsc [Hsc' Hrf]].
-          right. exists x'; split. { split; auto. }
-          exists y'; split. { apply (rf_prefix_incl Hpre). auto. }
-          split; auto. }
+          right. exists y'; [exists x'|];
+          try (apply M_get_mode_refl; auto).
+          apply (rf_prefix_incl Hpre). auto. }
       apply Hincl in Hcontr''. eauto.
 Qed.
 
@@ -249,63 +235,63 @@ closure of the union of the sequenced-before the reads-from restricted to SC
 events relations of this execution and of the modification order restricted to 
 SC events of this execution *)
 
-Lemma rb_prefix_in_sbrfscrb_ex: forall pre ex,
+Lemma rb_prefix_in_sbrfscrb_ex {pre ex: Execution}:
   valid_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
   not_conflicting pre ->
-  (rb pre) ⊆ ((((sb ex) <+> ((res_mode Sc (rf ex))))⁺) <+>
+  (rb pre) ≦ ((((sb ex) ⊔ ((res_mode Sc (rf ex))))^+) ⊔
                                (res_mode Sc (rb ex))).
 Proof.
-  intros pre ex Hval H11cons Hpre Hnoconflict x y H.
-  (* We suppose that x and y are related by ex.mo *)
+  intros Hval H11cons Hpre Hnoconflict x y H.
+  (* We suppose that x and y are related by ex.rf *)
   apply (rb_prefix_incl Hpre) in H.
   destruct (classic ((get_mode x) = Sc /\ (get_mode y) = Sc)) 
     as [[Hxsc Hysc] | HNotSc].
   (* If x and y are Sc, then they are related by (ex.rf)_sc *)
   { right. 
-    exists x; split. { split; auto. }
-    exists y; split. { auto. }
-    split; auto. }
-  destruct (classic ((((sb ex) <+> (res_mode Sc (rf ex))) ⁺) x y)) 
+    exists y. exists x.
+    - apply M_get_mode_refl; auto.
+    - auto.
+    - apply M_get_mode_refl; auto.
+  }
+  destruct (classic ((((sb ex) ⊔ (res_mode Sc (rf ex))) ^+) x y)) 
     as [Hres | Hcontr].
   { left. auto. }
   (* We suppose that x and y are not both sc events and that they are not
-    related by ex.(sb U rf_sc)⁺ *)
+    related by ex.(sb U rf_sc)^+ *)
   exfalso.
-  destruct (classic ((((sb ex) <+> (res_mode Sc (rf ex))) ⁺) y x)) 
+  destruct (classic ((((sb ex) ⊔ (res_mode Sc (rf ex))) ^+) y x)) 
     as [Hres' | Hcontr'].
-  (* If y and x are related by ex.(sb U rf_sc)⁺ *)
+  (* If y and x are related by ex.(sb U rf_sc)^+ *)
   - destruct H11cons as [Hco _].
-    apply (sbrfsc_incl_hb ex Hval) in Hres'.
-    destruct H as [z [H1 H2]].
-    destruct (coherence_coherence_wr Hco) with (x := z).
-    exists y; split.
-    + auto.
-    + exists x; split; auto.
-  (* If y and x are not related by ex.(sb U rf_sc)⁺ *)
+    apply (sbrfsc_incl_hb  Hval) in Hres'.
+    destruct H as [z Hrfinv Hmo].    
+    destruct (coherence_coherence_wr _ Hco) with (x := z).
+    exists x. exists y; auto. auto.
+  (* If y and x are not related by ex.(sb U rf_sc)^+ *)
   - apply not_and_or in HNotSc. apply (Hnoconflict x y).
     repeat (try split).
     + auto.
     + intros Hcontr''.
-      assert ((((sb pre) <+> (res_mode Sc (rf pre))) ⁺) ⊆
-              (((sb ex) <+> (res_mode Sc (rf ex))) ⁺)) as Hincl.
+      assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
+              (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.
       { apply tc_incl. intros x' y' H'. destruct H' as [H'|H'].
         - left. apply (sb_prefix_incl Hpre). auto.
         - destruct (res_mode_simp H') as [Hsc [Hsc' Hrf]].
-          right. exists x'; split. { split; auto. }
-          exists y'; split. { apply (rf_prefix_incl Hpre). auto. }
-          split; auto. }
+          right. exists y'; [exists x'|];
+          try (apply M_get_mode_refl; auto).
+          apply (rf_prefix_incl Hpre). auto. }
       apply Hincl in Hcontr''. eauto.
     + intros Hcontr''.
-      assert ((((sb pre) <+> (res_mode Sc (rf pre))) ⁺) ⊆
-              (((sb ex) <+> (res_mode Sc (rf ex))) ⁺)) as Hincl.
+      assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
+                       (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.
       { apply tc_incl. intros x' y' H'. destruct H' as [H'|H'].
         - left. apply (sb_prefix_incl Hpre). auto.
         - destruct (res_mode_simp H') as [Hsc [Hsc' Hrf]].
-          right. exists x'; split. { split; auto. }
-          exists y'; split. { apply (rf_prefix_incl Hpre). auto. }
-          split; auto. }
+          right. exists y'; [exists x'|];
+          try (apply M_get_mode_refl; auto).
+          apply (rf_prefix_incl Hpre). auto. }
       apply Hincl in Hcontr''. eauto.
 Qed.
 
@@ -313,49 +299,40 @@ Qed.
 and of the extended communication relation restricted to pairs of SC events is
 acyclic *)
 
-Lemma sb_sc_eco_sc_incl_psc : forall ex,
+Lemma sb_sc_eco_sc_incl_psc {ex: Execution}:
   valid_exec ex ->
-  ((res_mode Sc (sb ex)) <+> (res_mode Sc (rf ex)) <+> (res_mode Sc (mo ex)) <+>
-  (res_mode Sc (rb ex))) ⊆ (psc ex).
+  ((res_mode Sc (sb ex)) ⊔ (res_mode Sc (rf ex)) ⊔ (res_mode Sc (mo ex)) ⊔
+  (res_mode Sc (rb ex))) ≦ (psc ex).
 Proof.
-  intros ex Hval x y H.
-  destruct H as [Hsb | [Hrf | [Hmo | Hrb]]]; left.
-  - exists x; split.
-    { left. split; auto. apply (res_mode_fst_mode Hsb). }
-    exists y; split.
-    { left. apply (res_mode_rel Hsb). }
-    { left. split; auto. apply (res_mode_snd_mode Hsb). }
-  - exists x; split.
-    { left. split; auto. apply (res_mode_fst_mode Hrf). }
-    exists y; split.
-    { right; right; left. split.
-      - apply tc_incl_itself. apply (nt_rfsc_incl_hb ex Hval). auto.
-      - apply res_mode_rel in Hrf. apply (rf_same_loc x y Hval Hrf).
-    }
-    left. split; auto. apply (res_mode_snd_mode Hrf).
-  - exists x; split.
-    { left. split; auto. apply (res_mode_fst_mode Hmo). }
-    exists y; split.
-    { right; right; right; left.
-      apply (res_mode_rel Hmo). }
-    { left. split; auto. apply (res_mode_snd_mode Hmo). }
-  - exists x; split.
-    { left. split; auto. apply (res_mode_fst_mode Hrb). }
-    exists y; split.
-    { right; right; right; right.
-      apply (res_mode_rel Hrb). }
-    { left. split; auto. apply (res_mode_snd_mode Hrb). }
+  intros Hval.
+  apply union_incl; [apply union_incl; [apply union_incl|]|];
+  unfold psc; apply incl_union_left; unfold psc_base;
+  rewrite <- union_seq_left; rewrite <- seq_union_left;
+  unfold scb.
+  - apply incl_dot; [apply incl_dot|]; auto. kat.
+  - apply incl_dot_test_right. auto.
+    rewrite <- !dotA. apply incl_dot_test_left. auto.
+    rewrite -> !dotA.
+    apply incl_union_left. apply incl_union_left. apply incl_union_right.
+    apply (rf_incl_same_loc (evts ex) _ ).
+    + destruct_val_exec Hval. apply rf_valid_test_right, rf_valid_test_left.
+      auto.
+    + unfold hb.
+      rewrite tc_incl_itself. apply tc_incl.
+      apply incl_union_right. apply (nt_rfsc_incl_hb Hval).
+  - apply incl_dot; [apply incl_dot|]; auto. kat.
+  - apply incl_dot; [apply incl_dot|]; auto. kat.
 Qed.
 
 Lemma sb_sc_eco_sc_ac_impl_sb_eco_sc_ac ex:
   valid_exec ex ->
-  acyclic ((res_mode Sc (sb ex)) <+> 
-           (res_mode Sc (rf ex)) <+> 
-           (res_mode Sc (mo ex)) <+>
+  acyclic ((res_mode Sc (sb ex)) ⊔ 
+           (res_mode Sc (rf ex)) ⊔ 
+           (res_mode Sc (mo ex)) ⊔
            (res_mode Sc (rb ex))) ->
-  acyclic ((sb ex) <+> 
-           (res_mode Sc (rf ex)) <+> 
-           (res_mode Sc (mo ex)) <+>
+  acyclic ((sb ex) ⊔ 
+           (res_mode Sc (rf ex)) ⊔ 
+           (res_mode Sc (mo ex)) ⊔
            (res_mode Sc (rb ex))).
 Proof.
   intros Hval H.
@@ -370,9 +347,9 @@ Proof.
     - apply res_neq_incl. }
   apply not_acyclic_is_cyclic in Hcontr.
   destruct Hcontr as [w Hcontr].
-  apply (ac_union w) with (r1 := (res_mode Sc (rf ex) <+> res_mode Sc (mo ex) <+> res_mode Sc (rb ex)) <+> res_mode Sc (sb ex)) in Hprob.
+  apply (ac_union w) with (r1 := (res_mode Sc (rf ex) ⊔ res_mode Sc (mo ex) ⊔ res_mode Sc (rb ex)) ⊔ res_mode Sc (sb ex)) in Hprob.
   - admit.
-  - rewrite union_comm. auto.
+  - admit.
   - rewrite <- union_assoc. rewrite union_comm in Hcontr.
     rewrite <- union_assoc in Hcontr. rewrite union_comm in Hcontr.
     rewrite (union_comm (res_mode Sc (sb ex)) _). 
@@ -384,9 +361,9 @@ Admitted.
 Lemma sb_eco_sc_acyclic ex:
   valid_exec ex ->
   rc11_consistent ex ->
-  acyclic ((sb ex) <+> 
-           (res_mode Sc (rf ex)) <+> 
-           (res_mode Sc (mo ex)) <+>
+  acyclic ((sb ex) ⊔ 
+           (res_mode Sc (rf ex)) ⊔ 
+           (res_mode Sc (mo ex)) ⊔
            (res_mode Sc (rb ex))).
 Proof.
   intros Hval Hrc11.
@@ -394,7 +371,7 @@ Proof.
   - apply Hval.
   - destruct Hrc11 as [_ [_ [Hsc _]]].
     apply (ac_incl _ _ Hsc).
-    apply (sb_sc_eco_sc_incl_psc _ Hval).
+    apply (sb_sc_eco_sc_incl_psc Hval).
 Qed.
 
 (** If the prefix of an RC11-concistent execution doesn't contain any pair of 
@@ -412,7 +389,7 @@ Proof.
   - destruct (prefix_rc11_consistent Hrc11 Hpre) as [_ [Hat _]].
     auto.
   - apply (ac_incl _ _ (tc_ac_is_ac _ (sb_eco_sc_acyclic _ Hval Hrc11))).
-    repeat (apply union_incl).
+    apply union_incl; [apply union_incl; [apply union_incl|]|].
     + apply (incl_trans2 _ _ _ (tc_incl_itself _)).
       incl_union_r; incl_union_r; incl_union_r.
       apply (sb_prefix_incl Hpre).
@@ -420,26 +397,27 @@ Proof.
       apply (incl_trans2 _ _ _ (incl_tc_union _ _)); incl_union_r.
       repeat (rewrite -> union_assoc);
       apply (incl_trans2 _ _ _ (incl_tc_union _ _)); incl_union_r.
-      apply (rf_prefix_in_sbrfsc_ex _ _ Hval Hrc11 Hpre Hconflict).
+      apply (rf_prefix_in_sbrfsc_ex Hval Hrc11 Hpre Hconflict).
     + repeat (rewrite -> union_assoc);
       apply (incl_trans2 _ _ _ (incl_tc_union _ _)); incl_union_r.
       rewrite -> union_assoc;
       apply (incl_trans2 _ _ _ (incl_tc_union _ _)).
       apply (incl_trans2 _ _ _ (incl_union_of_tc_right _ _)).
-      apply (mo_prefix_in_sbrfscmo_ex _ _ Hval Hrc11 Hpre Hconflict).
-    + rewrite (union_comm (res_mode _ (mo _)) _).
-      repeat (rewrite -> union_assoc);
+      apply (mo_prefix_in_sbrfscmo_ex Hval Hrc11 Hpre Hconflict).
+    + repeat (rewrite <- union_assoc).
+      rewrite (union_comm (res_mode _ (mo _)) _).
+      repeat (rewrite union_assoc).
       apply (incl_trans2 _ _ _ (incl_tc_union _ _)); incl_union_r.
       rewrite -> union_assoc;
       apply (incl_trans2 _ _ _ (incl_tc_union _ _)).
       apply (incl_trans2 _ _ _ (incl_union_of_tc_right _ _)).
-      apply (rb_prefix_in_sbrfscrb_ex _ _ Hval Hrc11 Hpre Hconflict).
+      apply (rb_prefix_in_sbrfscrb_ex Hval Hrc11 Hpre Hconflict).
 Qed.
 
 (** If an execution is not SC-consistent, it contains (a) pair(s) of conflicting
 event(s) *)
 
-Lemma exec_sc_no_conflict (ex: Execution) :
+Theorem exec_sc_no_conflict (ex: Execution) :
   valid_exec ex ->
   rc11_consistent ex ->
   ~(sc_consistent ex) ->
