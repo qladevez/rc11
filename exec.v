@@ -140,6 +140,8 @@ Inductive Event : Type :=
 | Write (m: Mode) (l: Loc) (v: Val)
 | Fence (m: Mode).
 
+Instance incl_event_trans : Transitive (Included Event).
+Proof. compute; auto. Qed.
 
 Definition is_read (e: Event) : Prop :=
   match e with
@@ -505,8 +507,8 @@ Definition valid_sb (evts: Ensemble Event) (sb : rlt Event) : Prop :=
   exists (e: Event),
     (get_loc e) = Some l /\
     (get_val e) = Some O /\
-    ~(In _ (dom sb) e) /\
-    forall e', In _ (dom sb) e' -> sb e e').
+    ~(In _ (ran sb) e) /\
+    forall e', In _ (ran sb) e' -> sb e e').
 
 (** ** Read-modify-write relation *)
 
@@ -533,8 +535,9 @@ Definition valid_rmw_pair (sb : rlt Event) (r: Event) (w: Event) : Prop :=
 
 (** A read-modify-write relation is a set of read-modify-write pairs *)
 
-Definition valid_rmw (sb : rlt Event) (rmw : rlt Event) : Prop :=
-  forall r w, rmw r w -> valid_rmw_pair sb r w.
+Definition valid_rmw (evts: Ensemble Event) (sb : rlt Event) (rmw : rlt Event) : Prop :=
+  (forall r w, rmw r w -> valid_rmw_pair sb r w) /\
+  (Included _ (udr rmw) evts).
 
 (** ** Reads-from relation *)
 
@@ -551,7 +554,8 @@ Definition valid_rf (evts : Ensemble Event) (rf : rlt Event) : Prop :=
      In _ evts r /\
      (get_loc w) = (get_loc r) /\
      (get_val w) = (get_val r))) /\
-  ([W]⋅rf⋅[R] ≡ rf) /\
+  (Included _ (udr rf) evts) /\
+  ([W]⋅rf⋅[R] = rf) /\
   (forall w1 w2 r,
     (rf w1 r) /\ (rf w2 r) -> w1 = w2).
 
@@ -564,7 +568,7 @@ Lemma rf_unique (evts: Ensemble Event) (rf: rlt Event):
 Proof.
   intros Hval x y [z Hrf Hrfconv].
   simp_cnv Hrfconv.
-  destruct Hval as [_ [_ H]].
+  destruct Hval as [_ [_ [_ H]]].
   generalize (H x y z). 
   intuition auto.
 Qed.
@@ -586,20 +590,21 @@ Lemma rf_valid_test_right (evts: Ensemble Event) (rf: rlt Event) (t: dset Event)
 Proof.
   intros Hval.
   unfold valid_rf in *.
-  destruct Hval as [Hv1 [Hv2 Hv3]].
-  split.
+  destruct Hval as [Hv1 [Hv4 [Hv2 Hv3]]].
+  split;[|split;[|split]].
   - intros w r.
     intros [z Hrf [Heq _]].
     rewrite Heq in Hrf.
     destruct (Hv1 w r Hrf) as [? [? [? ?]]].
     split; [|split;[|split]]; auto.
-  - split.
-    + rewrite <- Hv2 at 2. kat.
-    + intros w1 w2 r. intros [Hw1 Hw2].
-      apply (Hv3 w1 w2 r).
-      split.
-      * destruct Hw1 as [z H [Heq _]]. rewrite Heq in H. auto.
-      * destruct Hw2 as [z H [Heq _]]. rewrite Heq in H. auto.
+  - transitivity (udr rf); auto.
+    apply test_right_udr.
+  - rewrite <- Hv2 at 2. apply ext_rel. kat.
+  - intros w1 w2 r. intros [Hw1 Hw2].
+    apply (Hv3 w1 w2 r).
+    split.
+    + destruct Hw1 as [z H [Heq _]]. rewrite Heq in H. auto.
+    + destruct Hw2 as [z H [Heq _]]. rewrite Heq in H. auto.
 Qed.
 
 Lemma rf_valid_test_left (evts: Ensemble Event) (rf: rlt Event) (t: dset Event):
@@ -608,20 +613,21 @@ Lemma rf_valid_test_left (evts: Ensemble Event) (rf: rlt Event) (t: dset Event):
 Proof.
   intros Hval.
   unfold valid_rf in *.
-  destruct Hval as [Hv1 [Hv2 Hv3]].
-  split.
+  destruct Hval as [Hv1 [Hv4 [Hv2 Hv3]]].
+  split;[|split;[|split]].
   - intros w r.
     intros [z [Heq _] Hrf].
     rewrite <- Heq in Hrf.
     destruct (Hv1 w r Hrf) as [? [? [? ?]]].
     split; [|split;[|split]]; auto.
-  - split.
-    + rewrite <- Hv2 at 2. kat.
-    + intros w1 w2 r. intros [Hw1 Hw2].
-      apply (Hv3 w1 w2 r).
-      split.
-      * destruct Hw1 as [z [Heq _] H]. rewrite <- Heq in H. auto.
-      * destruct Hw2 as [z [Heq _] H]. rewrite <- Heq in H. auto.
+  - transitivity (udr rf); auto.
+    apply test_left_udr.
+  - rewrite <- Hv2 at 2. apply ext_rel. kat.
+  - intros w1 w2 r. intros [Hw1 Hw2].
+    apply (Hv3 w1 w2 r).
+    split.
+    + destruct Hw1 as [z [Heq _] H]. rewrite <- Heq in H. auto.
+    + destruct Hw2 as [z [Heq _] H]. rewrite <- Heq in H. auto.
 Qed.
 
 (** ** Modification order *)
@@ -640,7 +646,7 @@ Definition mo_for_loc (mo : rlt Event) (l : Loc) : rlt Event :=
     (get_loc w2) = (Some l).
 
 Definition valid_mo (evts: Ensemble Event) (mo : rlt Event) : Prop :=
-  ([W]⋅mo⋅[W] ≡ mo) /\
+  ([W]⋅mo⋅[W] = mo) /\
   (partial_order mo evts) /\
   (forall l, total_rel (mo_for_loc mo l) evts).
 
@@ -669,7 +675,7 @@ Definition valid_exec (e: Execution) : Prop :=
   (* sequenced-before is valid *)
   valid_sb e.(evts) e.(sb) /\
   (* read-modify-write is valid *)
-  valid_rmw e.(sb) e.(rmw) /\
+  valid_rmw e.(evts) e.(sb) e.(rmw) /\
   (* reads-from is valid *)
   valid_rf e.(evts) e.(rf) /\
   (* modification order is valid *)
@@ -677,6 +683,18 @@ Definition valid_exec (e: Execution) : Prop :=
  
 Ltac destruct_val_exec H :=
   destruct H as [Hevts_v [Hsb_v [Hrmw_v [Hrf_v Hmo_v]]]].
+
+Ltac destruct_sb_v H :=
+  destruct H as [Hsb_lso [Hsb_in_e Hsbinit]].
+
+Ltac destruct_rmw_v H :=
+  destruct H as [Hrmw_vpairs Hrmw_in_e].
+
+Ltac destruct_rf_v H :=
+  destruct H as [Hrfco [Hrf_in_e [Hrfwr Hrfun]]].
+
+Ltac destruct_mo_v H :=
+  destruct H as [Hmoww [Hmopo Hmotot]].
 
 (** *** Lemmas about valid executions *)
 
@@ -693,8 +711,8 @@ Lemma rf_orig_write x y:
 Proof.
   intros Hrf.
   destruct_val_exec val_exec.
-  destruct Hrf_v as [_ [Hrf_v _]].
-  apply Hrf_v in Hrf.
+  destruct Hrf_v as [_ [_ [Hrf_v _]]].
+  rewrite <- Hrf_v in Hrf.
   destruct Hrf as [z [z' Hw Hrf] Hr].
   destruct Hw as [Heq Hw].
   destruct x. simpl in Hw.
@@ -711,8 +729,8 @@ Lemma rf_dest_read x y:
 Proof.
   intros Hrf.
   destruct_val_exec val_exec.
-  destruct Hrf_v as [_ [Hrf_v _]].
-  apply Hrf_v in Hrf.
+  destruct Hrf_v as [_ [_ [Hrf_v _]]].
+  rewrite <- Hrf_v in Hrf.
   destruct Hrf as [z [z' Hw Hrf] Hr].
   destruct Hr as [Heq Hr].
   rewrite Heq in Hr.

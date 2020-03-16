@@ -35,6 +35,8 @@ Ltac destruct_disjunction H :=
   destruct H as [H|H];
   try (destruct_disjunction H).
 
+Ltac splitall := (split;(try splitall)).
+
 (** ** Sets *)
 
 (** Axiom of extensionality for relations. If two relations relate the same 
@@ -49,6 +51,24 @@ Lemma intersection_included_itself {A:Type} (s1 s2 : Ensemble A):
   Included _ (Intersection _ s1 s2) s1.
 Proof.
   intros x [H1 H2]; auto.
+Qed.
+
+Lemma tautology_makes_fullset {A:Type} (P: A -> Prop):
+  (forall x, P x) ->
+  P = (Full_set _).
+Proof.
+  intros Hp. apply ext_set; intros y; split; intros H.
+  + apply Full_intro.
+  + apply Hp.
+Qed.
+
+Lemma inter_fullset {A:Type} (e: Ensemble A):
+  Intersection _ e (Full_set _) = e.
+Proof.
+  apply ext_set. intros x; split; intros H.
+  - inversion H. auto.
+  - apply Intersection_intro. auto.
+    apply Full_intro.
 Qed.
 
 (** ** Notations *)
@@ -245,7 +265,7 @@ Definition cyclic {A:Type} (r: rlt A) : Prop :=
 (** [res_eset e r] restricts a relation [r] to the subset of [r] relating
 events of [e] *)
 
-Definition res_eset {A:Type} (e: Ensemble A) (r: rlt A) :=
+Definition res_eset {A:Type} (e: Ensemble A) (r: rlt A) : rlt A :=
   fun x => fun y => (In _ e x) /\
                     (In _ e y) /\
                     r x y.
@@ -623,11 +643,16 @@ Lemma rtc_trans {A:Type} (r: rlt A):
   r^*⋅r^* ≦ r^*.
 Proof. kat. Qed.
 
+
 (** The transitive closure of a relation is equal to the sequence of the 
 reflexive transitive closure and of the relation *)
 
 Lemma tc_inv_dcmp {A:Type} (r1: rlt A):
   r1^+ = r1^* ⋅ r1.
+Proof. apply ext_rel; kat. Qed.
+
+Lemma tc_inv_dcmp2 {A:Type} (r1: rlt A):
+  r1^+ = r1 ⋅ r1^*.
 Proof. apply ext_rel; kat. Qed.
 
 (** The transitive closure of the reflexive closure of a relation is the
@@ -647,12 +672,87 @@ Proof. apply ext_rel. kat. Qed.
 
 (** The restriction of a relation is included in the relation *)
 
-Lemma res_eset_incl {A} (e : Ensemble A) (r : rlt A):
+Lemma res_eset_incl {A:Type} (e : Ensemble A) (r : rlt A):
   (res_eset e r) ≦ r.
 Proof.
   intros x y [_ [_ H]]. auto.
 Qed.
 
+Lemma res_eset_prop_incl {A:Type} (e: Ensemble A) (r r': rlt A):
+  r ≦ r' ->
+  res_eset e r ≦ res_eset e r'.
+Proof.
+  intros H x y [Hin1 [Hin2 Hr]].
+  split;[|split]; auto. apply H. auto.
+Qed.
+
+(** If the union of the domain and of the range of a relation are included in a
+set, restricting the relation to this set is equal to the relation *)
+
+Lemma res_eset_udr {A:Type} (e: Ensemble A) (r: rlt A):
+  Included _ (udr r) e -> r = res_eset e r.
+Proof.
+  intros Hudr. apply ext_rel, antisym; intros x y H.
+  - split;[|split].
+    + apply Hudr. left. exists y. auto.
+    + apply Hudr. right. exists x. auto.
+    + auto.
+  - destruct H as [_ [_ H]]. auto.
+Qed.
+
+(** The converse of the restriction of a relation is the restriction of the
+converse *)
+
+Lemma res_eset_cnv {A:Type} (e: Ensemble A) (r: rlt A):
+  (res_eset e r)° = res_eset e r°.
+Proof.
+  apply ext_rel, antisym; intros x y H;
+  (destruct H as [? [? ?]]; split;[|split]; auto).
+Qed.
+
+(** If we restrict a relation to a set, the union of its domain and range is
+included in the set *)
+
+Lemma res_eset_udr_incl {A:Type} (e: Ensemble A) (r: rlt A):
+  Included _ (udr (res_eset e r)) e.
+Proof.
+  intros ? [? [? [? [? ?]]] | ? [? [? [? ?]]]]; auto.
+Qed.
+
+(** If elements are related by a relation restricted to a set, they belong to
+the set *)
+
+Lemma res_eset_elt_left {A:Type} (e: Ensemble A) (r: rlt A) (x y: A):
+  (res_eset e r) x y ->
+  In _ e x.
+Proof.
+  intros [? [? ?]]. auto.
+Qed.
+
+Lemma res_eset_elt_right {A:Type} (e: Ensemble A) (r: rlt A) (x y: A):
+  (res_eset e r) x y ->
+  In _ e y.
+Proof.
+  intros [? [? ?]]. auto.
+Qed.
+
+Lemma res_eset_dot {A:Type} (e: Ensemble A) (r r': rlt A):
+  (res_eset e r) ⋅ (res_eset e r') ≦ res_eset e (r ⋅ r').
+Proof.
+  intros x y [z [Hin1 [Hin2 Hr]] [Hin3 [Hin4 Hr']]].
+  splitall; auto.
+  exists z; auto.
+Qed.
+
+Lemma incl_irr {A:Type} (r r': rlt A):
+  (forall x, ~r x x) ->
+  r' ≦ r ->
+  forall x, ~r' x x.
+Proof.
+  intros Hirr Hinc x H. eapply Hirr, Hinc. eauto.
+Qed.
+
+   
 (** If a first relation is included in a second relation, the transitive closure
 of the first relation is included in the transitive closure of the second
 relation *)
@@ -994,6 +1094,52 @@ Proof. kat. Qed.
 Lemma test_in_one: [t] ≦ 1. 
 Proof. kat. Qed.
 
+(** Adding a test on the domain of a relation can only restrict the union of its
+domain and range *)
+
+Lemma test_left_udr (r: rlt A) : Included _ (udr ([t] ⋅ r)) (udr r).
+Proof.
+  intros x [y H|y H]; [left|right].
+  - destruct H as [z [z' [Heq _] Hr]].
+    rewrite <- Heq in Hr. exists z. auto.
+  - destruct H as [z [z' _ Hr]].
+    exists z'. auto.
+Qed.
+
+(** Adding a test on the range of a relation can only restrict the union of its
+domain and range *)
+
+Lemma test_right_udr (r: rlt A) : Included _ (udr (r ⋅ [t])) (udr r).
+Proof.
+  intros x [y H|y H]; [left|right].
+  - destruct H as [z [z' Hr _]].
+    exists z'. auto.
+  - destruct H as [z [z' Hr [Heq _]]].
+    rewrite Heq in Hr. exists z. auto.
+Qed.
+
+(** Adding tests on both side of a relation restricted to a set is the same
+as restricting the relation with both test onj its sides to the set *)
+
+Lemma test_res_eset_swap (e: Ensemble A) (r: rlt A):
+  [t]⋅(res_eset e r)⋅[t'] = res_eset e ([t]⋅r⋅[t']).
+Proof.
+  apply ext_rel, antisym; intros x y.
+  - intros [z [w [Heq1 Ht1] [Hin1 [Hin2 Hr]]] [Heq2 Ht2]].
+    splitall.
+    + rewrite Heq1; auto.
+    + rewrite <- Heq2; auto.
+    + exists y. exists x.
+      * split; auto.
+      * rewrite Heq1, <- Heq2. auto.
+      * split. auto. rewrite <- Heq2. auto.
+  - intros [Hin1 [Hin2 [z [w [Heq1 Ht1] Hr] [Heq2 Ht2]]]].
+    exists y. exists x.
+    + split; auto.
+    + splitall; auto. rewrite Heq1, <- Heq2. auto.
+    + split; auto. rewrite <- Heq2. auto.
+Qed.
+
 End KatTests.
 
 (** If a test implies another test, and if a first relation whose domain is
@@ -1061,6 +1207,19 @@ Proof.
     * apply rtc_trans. exists y; auto.
 Qed.
 
+Lemma tc_clos_trans {A:Type} (r: rlt A):
+  r^+ = (clos_trans _ r).
+Proof.
+  apply ext_rel. split.
+  - intros H. rewrite tc_inv_dcmp in H.
+    destruct H as [z H1 H2]. apply clos_rt_t with z.
+    + rewrite rtc_clos_refl_trans in H1. auto.
+    + left. auto.
+  - intros H. induction H as [ | x y z H IH H' IH' ].
+    + exists y. auto. exists O. simpl. auto.
+    + apply tc_trans with y; auto.
+Qed.
+
 (** We can do an induction on the reflexive transitive closure as defined in
 RelationAlgebra the same way we would do on a reflexive transitive closure as
 defined in the standard library of coq *)
@@ -1075,4 +1234,15 @@ Proof.
   intros A R.
   rewrite rtc_clos_refl_trans.
   apply clos_refl_trans_ind.
+Qed.
+
+Lemma tc_ind:
+  forall (A : Type) (R : rlt A) (P : A -> A -> Prop),
+  (forall x y : A, R x y -> P x y) ->
+  (forall x y z : A, R^+ x y -> P x y -> R^+ y z -> P y z -> P x z) ->
+  forall x a : A, R^+ x a -> P x a.
+Proof.
+  intros A R.
+  rewrite tc_clos_trans.
+  apply clos_trans_ind.
 Qed.

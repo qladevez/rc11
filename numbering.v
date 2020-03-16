@@ -74,12 +74,13 @@ Module NumberingPrefix (Numbering: Numbering).
 Import Numbering.
 
 Definition bounded_exec (ex: Execution) (n: nat) : Execution :=
+  let new_evts := Intersection _ (evts ex) (fun x => n >= numbering ex x) in
   {|
-    evts := Intersection _ (evts ex) (fun x => numbering ex x <= n);
-    sb := (sb ex);
-    rmw := (rmw ex);
-    rf := (rf ex);
-    mo := (mo ex);
+    evts := new_evts;
+    sb := res_eset new_evts (sb ex);
+    rmw := res_eset new_evts (rmw ex);
+    rf := res_eset new_evts (rf ex);
+    mo := res_eset new_evts (mo ex);
   |}.
 
 
@@ -111,24 +112,31 @@ Proof.
     intros H. destruct H as [y Hevts Hbound]; split.
     + auto.
     + unfold In in *; lia.
-  - compute; auto.
+  - auto.
 Qed.
 
 (** There is a bound high enough so that the bounding of the execution 
 corresponds to the execution *)
 
 Lemma bounded_execution_itself_exists (ex: Execution):
-  exists k, (bounded_exec ex k) = ex.
+  valid_exec ex ->
+  exists k, ex = (bounded_exec ex k).
 Proof.
   destruct (numbering_bounded ex) as [k Hsup].
   exists (numbering ex k). destruct ex.
-  unfold bounded_exec. f_equal. simpl.
-  apply ext_set. intros x. split; intros H.
-  - apply intersection_included_itself in H.
-    apply H.
-  - split.
-    + apply H.
-    + unfold In. apply (Hsup x).
+  unfold bounded_exec. f_equal; simpl;
+  destruct_val_exec H;
+  rewrite (tautology_makes_fullset _ Hsup), inter_fullset.
+  - auto.
+  - destruct_sb_v Hsb_v. simpl in *.
+    auto using res_eset_udr.
+  - destruct_rmw_v Hrmw_v. simpl in *.
+    auto using res_eset_udr.
+  - destruct_rf_v Hrf_v. simpl in *.
+    auto using res_eset_udr.
+  - destruct_mo_v Hmo_v. simpl in *.
+    destruct Hmopo as [? _].
+    auto using res_eset_udr.
 Qed.
 
 (** ** Smallest conflicting prefix *)
@@ -139,7 +147,7 @@ bounds producing a conflicting prefix are bigger *)
 Definition smallest_conflicting_bounding (ex: Execution) (bound: nat) :=
   conflicting (bounded_exec ex bound) /\
   (forall n, conflicting (bounded_exec ex n) ->
-             n > bound).
+             n >= bound).
 
 Axiom smallest_conflicting_bounding_exists:
   forall ex, conflicting ex ->
@@ -176,6 +184,7 @@ Proof.
   exists bound.
   destruct Hsmallest as [[j [k Hpreconf]] Hsmallest].
   exists j, k. split; [split|]; auto.
+  exists j, k. auto.
 Qed.
 
 (** In a minimal conflicting pair, at least one of the two events is not SC *)
@@ -187,6 +196,7 @@ Proof.
   intros [_ [[H | H] _]]; [left|right]; auto.
 Qed.
 
+
 (** In a minimal conflicting pair, the events are not connected by (sb U rf)⁺ in
 any direction *)
 
@@ -195,12 +205,15 @@ Lemma mcp_sbrf (ex: Execution) (bound: nat) (j k: Event):
   (~(((sb ex) ⊔ (res_mode Sc (rf ex)))^+ j k) /\
    ~(((sb ex) ⊔ (res_mode Sc (rf ex)))^+ k j)).
 Proof.
-  intros [_ [_ H]]. auto.
+  intros [_ [_ [Hin1 [Hin2 [Hjk Hkj]]]]]. auto. split.
+  - clear Hkj. intros Hnot. apply Hjk. generalize Hnot.
+    generalize j k. apply rtc_ind.
 Qed.
 
+  
 (** In a minimal conflicting pair, the bound is the numbering of the second
 conflicting event *)
-(*
+
 Lemma mcp_num_snd_evt (ex: Execution) (bound: nat) (j k: Event):
   (minimal_conflicting_pair ex bound j k) ->
   (numbering ex k = bound).
@@ -212,7 +225,6 @@ Proof.
     by (exists j,k; auto).
     apply H in Hconf'. lia.
   - auto.
-  - Check c_events.
-*)
+  - Print smallest_conflicting_bounding.
 
 End NumberingPrefix.

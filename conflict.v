@@ -28,6 +28,8 @@ Definition c_events (e: Execution) : relation Event :=
   fun x => fun y =>
     ((get_mode x) <> Sc \/
      (get_mode y) <> Sc) /\
+     (In _ (evts e) x) /\
+     (In _ (evts e) y) /\
     ~ (((sb e) ⊔ (res_mode Sc (rf e)))^+) x y /\
     ~ (((sb e) ⊔ (res_mode Sc (rf e)))^+) y x.
 
@@ -45,7 +47,7 @@ Proof.
   - byabsurd. destruct H. intros x y H.
     apply Hcontr. exists x, y. auto.
   - intros Hcontr. destruct H as [x [y H]].
-    destruct (Hcontr _ _ H).
+    edestruct Hcontr. eauto.
 Qed.
 
 Lemma not_exists_conflict_is_no_conflict (ex: Execution):
@@ -54,7 +56,7 @@ Proof.
   split; intros H.
   - intros x y Hcontr. apply H. exists x,y; auto.
   - intros [x [y Hcontr]].
-    destruct (H _ _ Hcontr).
+    edestruct H. eauto.
 Qed.
 
 Ltac solve_test_ineq :=
@@ -113,9 +115,9 @@ Lemma rf_prefix_in_sbrfsc_ex {pre ex: Execution}:
   not_conflicting pre ->
   (rf pre) ≦ (((sb ex) ⊔ ((res_mode Sc (rf ex))))^+).
 Proof.
-  intros Hval H11cons Hpre Hnoconflict x y H.
+  intros Hval H11cons Hpre Hnoconflict x y Hrfpre.
   (* We suppose that x and y are related by ex.rf *)
-  apply (rf_prefix_incl Hpre) in H.
+  apply (rf_prefix_incl Hpre) in Hrfpre as H.
   destruct (classic ((get_mode x) = Sc /\ (get_mode y) = Sc)) 
     as [[Hxsc Hysc] | HNotSc].
   (* If x and y are Sc, then they are related by (ex.rf)_sc *)
@@ -142,6 +144,10 @@ Proof.
   - apply not_and_or in HNotSc. apply (Hnoconflict x y).
     repeat (try split).
     + auto.
+    + destruct_prefix Hpre. rewrite Hrf in Hrfpre.
+      destruct Hrfpre as [? [? _]]; auto.
+    + destruct_prefix Hpre. rewrite Hrf in Hrfpre.
+      destruct Hrfpre as [? [? _]]; auto.
     + intros Hcontr''.
       assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
               (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.
@@ -178,9 +184,9 @@ Lemma mo_prefix_in_sbrfscmo_ex {pre ex: Execution}:
   (mo pre) ≦ ((((sb ex) ⊔ ((res_mode Sc (rf ex))))^+) ⊔ 
                                (res_mode Sc (mo ex))).
 Proof.
-  intros Hval H11cons Hpre Hnoconflict x y H.
+  intros Hval H11cons Hpre Hnoconflict x y Hmopre.
   (* We suppose that x and y are related by ex.rf *)
-  apply (mo_prefix_incl Hpre) in H.
+  apply (mo_prefix_incl Hpre) in Hmopre as H.
   destruct (classic ((get_mode x) = Sc /\ (get_mode y) = Sc)) 
     as [[Hxsc Hysc] | HNotSc].
   (* If x and y are Sc, then they are related by (ex.rf)_sc *)
@@ -207,6 +213,10 @@ Proof.
   - apply not_and_or in HNotSc. apply (Hnoconflict x y).
     repeat (try split).
     + auto.
+    + destruct_prefix Hpre. rewrite Hmo in Hmopre.
+      destruct Hmopre as [? [? _]]; auto.
+    + destruct_prefix Hpre. rewrite Hmo in Hmopre.
+      destruct Hmopre as [? [? _]]; auto.
     + intros Hcontr''.
       assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
               (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.
@@ -243,9 +253,9 @@ Lemma rb_prefix_in_sbrfscrb_ex {pre ex: Execution}:
   (rb pre) ≦ ((((sb ex) ⊔ ((res_mode Sc (rf ex))))^+) ⊔
                                (res_mode Sc (rb ex))).
 Proof.
-  intros Hval H11cons Hpre Hnoconflict x y H.
+  intros Hval H11cons Hpre Hnoconflict x y Hrbpre.
   (* We suppose that x and y are related by ex.rf *)
-  apply (rb_prefix_incl Hpre) in H.
+  apply (rb_prefix_incl Hpre) in Hrbpre as H.
   destruct (classic ((get_mode x) = Sc /\ (get_mode y) = Sc)) 
     as [[Hxsc Hysc] | HNotSc].
   (* If x and y are Sc, then they are related by (ex.rf)_sc *)
@@ -273,6 +283,12 @@ Proof.
   - apply not_and_or in HNotSc. apply (Hnoconflict x y).
     repeat (try split).
     + auto.
+    + destruct_prefix Hpre. unfold rb in Hrbpre.
+      rewrite Hrf, Hmo, res_eset_cnv in Hrbpre.
+      apply res_eset_dot in Hrbpre. destruct Hrbpre as [? [? _]]. auto.
+    + destruct_prefix Hpre. unfold rb in Hrbpre.
+      rewrite Hrf, Hmo, res_eset_cnv in Hrbpre.
+      apply res_eset_dot in Hrbpre. destruct Hrbpre as [? [? _]]. auto.
     + intros Hcontr''.
       assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
               (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.

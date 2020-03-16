@@ -49,8 +49,8 @@ Lemma rf_wr:
   rf ≡ [W] ⋅ rf ⋅ [R].
 Proof.
   destruct_val_exec Hval.
-  destruct Hrf_v as [_ [Hwr _]].
-  rewrite Hwr. unfold rf; intuition.
+  destruct Hrf_v as [_ [_ [Hwr _]]].
+  fold rf in Hwr. rewrite Hwr. unfold rf; intuition.
 Qed.
 
 Lemma mo_ww:
@@ -58,7 +58,7 @@ Lemma mo_ww:
 Proof.
   destruct_val_exec Hval.
   destruct Hmo_v as [Hmo _].
-  rewrite Hmo. unfold mo; intuition.
+  fold mo in Hmo. rewrite Hmo. unfold mo; intuition.
 Qed.
 
 Open Scope rel_notations.
@@ -99,7 +99,8 @@ Proof.
   - apply itr_ind_l1.
     + kat.
     + assert (mo⋅mo ≦ mo) as Hmo_trans.
-      { destruct_val_exec Hval. destruct Hmo_v as [_ [[_ [Hmotrans _]] _]].
+      { destruct_val_exec Hval. destruct_mo_v Hmo_v.
+        destruct Hmopo as [_ [Hmotrans _]].
         unfold "⋅" in Hmotrans. rewrite Hmotrans. ra_normalise. auto. }
     ra_normalise. rewrite Hmo_trans. ra_normalise.
     repeat (try (apply leq_cupx)).
@@ -110,7 +111,8 @@ Proof.
     all: unfold rb.
     all: destruct_val_exec Hval.
     1, 3: mrewrite (rf_unique _ _ Hrf_v).
-    3, 4: destruct Hmo_v as [_ [[_ [Hmotrans _]] _]];
+    3, 4: destruct_mo_v Hmo_v;
+          destruct Hmopo as [_ [Hmotrans _]];
           mrewrite Hmotrans.
     all: kat.
 Qed.
@@ -136,8 +138,8 @@ Proof.
     rewrite refl_double.
     rewrite capone.
     mrewrite wr_0. ra.
-  - destruct_val_exec Hval.
-    destruct Hmo_v as [_ [[_ [_ Hmoirr]] _]].
+  - destruct_val_exec Hval. destruct_mo_v Hmo_v.
+    destruct Hmopo as [_ [_ Hmoirr]].
     rewrite irreflexive_is_irreflexive in Hmoirr.
     auto.
   - unfold rb.
@@ -145,7 +147,7 @@ Proof.
     destruct_val_exec Hval.
     mrewrite (rf_unique _ _ Hrf_v).
     ra_normalise.
-    destruct Hmo_v as [_ [[_ [_ Hmoirr]] _]].
+    destruct_mo_v Hmo_v. destruct Hmopo as [_ [_ Hmoirr]].
     rewrite irreflexive_is_irreflexive in Hmoirr.
     auto.
   - rewrite rf_wr, mo_ww.
@@ -244,9 +246,9 @@ Lemma coherence_no_future_read:
   coherence -> (forall x, ~ (rf ⋅ hb) x x).
 Proof.
   intros H x Hnot.
-  destruct Hnot as [z Hnot].
-  apply (H z). exists x.
-  - auto.
+  destruct Hnot.
+  eapply H. exists x.
+  - eauto.
   - left. apply tc_incl_itself. left. left. auto.
 Qed.
 
