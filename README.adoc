@@ -16,3 +16,5 @@ If you want to use https://coq.inria.fr/refman/practical-tools/utilities.html#do
 - `exec.v` : definition of a complete program execution
 - `rc11.v` : definition of the validity of an execution on the RC11 memory model and on the classical SC model
 - `prefix.v` : definition of the prefix of an execution and lemmas about them
+- `conflict.v` : definition of conflicting events and lemmas about them
+- `numbering.v` : definition of a valid enumeration of the events of an execution, and its connection with validity and conflicts
