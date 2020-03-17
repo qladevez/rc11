@@ -59,6 +59,12 @@ Proof.
     edestruct H. eauto.
 Qed.
 
+(** For any execution, c_events is a symmetric relation *)
+
+Lemma c_events_sym (ex: Execution) (x y: Event):
+  (c_events ex) x y <-> (c_events ex) y x.
+Proof. compute. intuition. Qed.
+
 Ltac solve_test_ineq :=
   unfold inj; simpl;
   intros x y [Heq Hmode]; split; auto;
@@ -107,6 +113,11 @@ Proof.
   apply incl_cup; auto.
   apply (nt_rfsc_incl_hb Hval).
 Qed.
+
+(** When the prefix of an execution doesn't contain any conflicting events, the
+read-from relation of the prefix is included in the union of transitive closure 
+of the union of the sequenced-before the reads-from restricted to SC events 
+relations of this execution *)
 
 Lemma rf_prefix_in_sbrfsc_ex {pre ex: Execution}:
   valid_exec ex ->
@@ -390,10 +401,25 @@ Proof.
     apply (sb_sc_eco_sc_incl_psc Hval).
 Qed.
 
+(** If there is a conflict in the prefix of an execution, there is a
+conflict in the execution *)
+
+Lemma sbrfsc_pre_inc (ex pre: Execution):
+  prefix pre ex ->
+  ((sb pre) ⊔ (res_mode Sc (rf pre)))^+ ≦ ((sb ex) ⊔ (res_mode Sc (rf ex)))^+.
+Proof.
+  intros Hpre.
+  apply tc_incl.
+  apply incl_cup.
+  apply (sb_prefix_incl Hpre).
+  apply res_mode_incl.
+  apply (rf_prefix_incl Hpre).
+Qed.
+
 (** If the prefix of an RC11-concistent execution doesn't contain any pair of 
 conflicting events, it is SC-consistent *)
 
-Lemma no_conflict_prefix_sc : forall pre ex,
+Theorem no_conflict_prefix_sc : forall pre ex,
   valid_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->

@@ -488,6 +488,16 @@ Proof.
   kat.
 Qed.
 
+Lemma res_mode_incl (m:Mode) (r1 r2: rlt Event):
+  r1 ≦ r2 -> (res_mode m r1) ≦ (res_mode m r2).
+Proof.
+  intros Hincl.
+  unfold res_mode.
+  apply incl_dot.
+  apply incl_dot.
+  all: auto.
+Qed.
+
 Lemma res_neq_incl (m:Mode) (r1: rlt Event):
   (res_neq_mode m r1) ≦ r1.
 Proof.

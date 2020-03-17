@@ -11,6 +11,7 @@ Author: Quentin Ladeveze, Inria Paris, France
 Require Import Ensembles.
 Require Import Classical_Prop.
 Require Import Relations.
+Require Import Lia.
 From RelationAlgebra Require Import rel prop monoid kat relalg kat_tac.
 From AAC_tactics Require Import AAC.
 
@@ -36,6 +37,20 @@ Ltac destruct_disjunction H :=
   try (destruct_disjunction H).
 
 Ltac splitall := (split;(try splitall)).
+
+(** ** Natural numbers *)
+
+Lemma max_rewrite (k1 k2: nat):
+  k1 < k2 -> max k2 k1 = k2.
+Proof.
+  lia.
+Qed.
+
+Lemma max_rewrite' (k1 k2: nat):
+  k1 < k2 -> max k1 k2 = k2.
+Proof.
+  lia.
+Qed.
 
 (** ** Sets *)
 
@@ -69,6 +84,13 @@ Proof.
   - inversion H. auto.
   - apply Intersection_intro. auto.
     apply Full_intro.
+Qed.
+
+Lemma inter_incl {A:Type} (s1 s2 s3: Ensemble A):
+  Included _ s3 s2 -> Included _ (Intersection _ s1 s3) (Intersection _ s1 s2).
+Proof.
+  intros Hincl x [Hin1 Hin2].
+  split; auto.
 Qed.
 
 (** ** Notations *)
@@ -742,6 +764,30 @@ Proof.
   intros x y [z [Hin1 [Hin2 Hr]] [Hin3 [Hin4 Hr']]].
   splitall; auto.
   exists z; auto.
+Qed.
+
+Lemma res_eset_double {A:Type} (e e': Ensemble A) (r: rlt A):
+  Included _ e' e ->
+  res_eset e (res_eset e' r) = res_eset e' r.
+Proof.
+  intros Hincl.
+  apply ext_rel. split.
+  - intros [Hin1 [Hin2 [Hin3 [Hin4 Hr]]]].
+    repeat (apply conj); auto.
+  - intros [Hin1 [Hin2 Hr]].
+    repeat (apply conj); auto.
+Qed.
+
+Lemma res_eset_double' {A:Type} (e e': Ensemble A) (r: rlt A):
+  Included _ e' e ->
+  res_eset e' (res_eset e r) = res_eset e' r.
+Proof.
+  intros Hincl.
+  apply ext_rel. split.
+  - intros [Hin1 [Hin2 [Hin3 [Hin4 Hr]]]].
+    repeat (apply conj); auto.
+  - intros [Hin1 [Hin2 Hr]].
+    repeat (apply conj); auto.
 Qed.
 
 Lemma incl_irr {A:Type} (r r': rlt A):
