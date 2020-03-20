@@ -24,15 +24,52 @@ events *)
 
 (** ** Conflicting events *)
 
-Definition c_events (e: Execution) : relation Event :=
+(** Two events are conflicting if:
+
+- One of them at least is a write
+- They are different
+- They affect the same location *)
+
+Definition conflicting ex: rlt Event :=
+  fun x y =>
+    (In _ (evts ex) x) /\
+    (In _ (evts ex) y) /\
+    (is_write x \/ is_write y) /\
+    x <> y /\
+    (get_loc x) = (get_loc y).
+
+(** Two events form a race if they are conflicting and if they are not related
+by [hb] in any direction *)
+
+Definition race (ex: Execution): rlt Event :=
+  (conflicting ex) ⊓ (!(bidir (hb ex))).
+
+(** Two events are pi-conflicting if they are conflicting, one of them at least
+is not SC and they are not related by [(sb ⊔ rf_sc)⁺] in any direction *)
+
+Definition at_least_one_sc: rlt Event :=
+  fun x y => get_mode x <> Sc \/ get_mode y <> Sc.
+
+Definition pi (ex: Execution) : rlt Event :=
+  (conflicting ex) ⊓
+  at_least_one_sc ⊓
+  (!(bidir (((sb ex) ⊔ (res_mode Sc (rf ex)))^+))).
+
+(** An execution is pi-conflicting if it contains two pi-conflicting events *)
+
+Definition expi (ex: Execution) :=
+  exists x y, (pi ex) x y.
+
+
+(*
+Definition c_events (e: Execution) : rlt Event :=
   fun x => fun y =>
-    ((get_mode x) <> Sc \/
-     (get_mode y) <> Sc) /\
-     (In _ (evts e) x) /\
-     (In _ (evts e) y) /\
+    x <> y /\
+    ((get_mode x) <> Sc \/ (get_mode y) <> Sc) /\
+    (In _ (evts e) x) /\
+    (In _ (evts e) y) /\
     ~ (((sb e) ⊔ (res_mode Sc (rf e)))^+) x y /\
     ~ (((sb e) ⊔ (res_mode Sc (rf e)))^+) y x.
-
 
 Definition not_conflicting (ex: Execution) : Prop :=
   forall x y, ~(c_events ex) x y.
@@ -58,11 +95,12 @@ Proof.
   - intros [x [y Hcontr]].
     edestruct H. eauto.
 Qed.
+*)
 
-(** For any execution, c_events is a symmetric relation *)
+(** For any execution, pi is a symmetric relation *)
 
-Lemma c_events_sym (ex: Execution) (x y: Event):
-  (c_events ex) x y <-> (c_events ex) y x.
+Lemma pi_sym (ex: Execution) (x y: Event):
+  (pi ex) x y <-> (pi ex) y x.
 Proof. compute. intuition. Qed.
 
 Ltac solve_test_ineq :=
@@ -80,7 +118,9 @@ Lemma nt_rfsc_incl_hb {ex: Execution}:
 Proof.
   intros Hval.
   unfold sw.
-  rewrite <- !one_incl_refl, !dotx1.
+  rewrite <- (one_incl_refl ([F]⋅sb ex)).
+  rewrite <- (one_incl_refl (sb ex⋅[F])).
+  rewrite !dot_one.
   apply incl_dot_test_right.
   solve_test_ineq.
   apply incl_dot_test_right.
@@ -88,15 +128,17 @@ Proof.
   rewrite <- !dotA.
   apply incl_dot_test_left.
   solve_test_ineq.
-  rewrite !dotA.
+  rewrite 2dotA.
   unfold rs.
-  rewrite <- one_incl_refl, <- one_incl_rtc, !dotx1, dtest.
+  rewrite <- (one_incl_refl (sb ex)).
+  rewrite <- (one_incl_rtc (rf ex⋅rmw ex)).
+  rewrite !dot_one, dtest.
   rewrite (rf_wr _ Hval) at 1.
   mrewrite (test_dot_comm _ R).
   apply incl_dot_test_right. auto.
   rewrite (test_in_one _ (M Sc)) at 2.
   rewrite (test_in_one _ R).
-  rewrite !dotx1.
+  rewrite !dot_one.
   apply incl_dot; auto.
   rewrite test_dot_comm.
   apply incl_dot; auto.
@@ -114,6 +156,23 @@ Proof.
   apply (nt_rfsc_incl_hb Hval).
 Qed.
 
+Lemma sbrfsc_incl_pre (pre ex: Execution):
+  valid_exec ex ->
+  prefix pre ex ->
+  (sb pre ⊔ ([M Sc] ⋅ (rf pre) ⋅ [M Sc]))^+ ≦
+  (sb ex ⊔ ([M Sc] ⋅ (rf ex) ⋅ [M Sc]))^+.
+Proof.
+  intros Hval Hpre.
+  apply tc_incl.
+  apply incl_cup.
+  apply sb_prefix_incl; auto.
+  apply incl_dot.
+  apply incl_dot.
+  solve_test_ineq.
+  apply rf_prefix_incl; auto.
+  solve_test_ineq.
+Qed.
+
 (** When the prefix of an execution doesn't contain any conflicting events, the
 read-from relation of the prefix is included in the union of transitive closure 
 of the union of the sequenced-before the reads-from restricted to SC events 
@@ -123,7 +182,7 @@ Lemma rf_prefix_in_sbrfsc_ex {pre ex: Execution}:
   valid_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
-  not_conflicting pre ->
+  ~(expi pre) ->
   (rf pre) ≦ (((sb ex) ⊔ ((res_mode Sc (rf ex))))^+).
 Proof.
   intros Hval H11cons Hpre Hnoconflict x y Hrfpre.
@@ -132,15 +191,10 @@ Proof.
   destruct (classic ((get_mode x) = Sc /\ (get_mode y) = Sc)) 
     as [[Hxsc Hysc] | HNotSc].
   (* If x and y are Sc, then they are related by (ex.rf)_sc *)
-  { apply tc_incl_itself. right. 
-    exists y. exists x.
-    - apply M_get_mode_refl; auto.
-    - auto.
-    - apply M_get_mode_refl; auto.
-  }
+  { apply tc_incl_itself. right.
+    exists y; try (exists x); try (apply M_get_mode_refl); auto. }
   destruct (classic ((((sb ex) ⊔ (res_mode Sc (rf ex))) ^+) x y)) 
-    as [Hres | Hcontr].
-  { auto. }
+    as [Hres | Hcontr]. { auto. }
   (* We suppose that x and y are not both sc events and that they are not
     related by ex.(sb U rf_sc)^+ *)
   exfalso.
@@ -148,37 +202,24 @@ Proof.
     as [Hres' | Hcontr'].
   (* If y and x are related by ex.(sb U rf_sc)^+ *)
   - destruct H11cons as [Hco _].
-    apply (sbrfsc_incl_hb  Hval) in Hres'.
+    apply (sbrfsc_incl_hb Hval) in Hres'.
     destruct (coherence_no_future_read _ Hco) with (x := x).
-    exists y; auto.
+    eexists; eauto.
   (* If y and x are not related by ex.(sb U rf_sc)^+ *)
-  - apply not_and_or in HNotSc. apply (Hnoconflict x y).
-    repeat (try split).
-    + auto.
-    + destruct_prefix Hpre. rewrite Hrf in Hrfpre.
-      destruct Hrfpre as [? [? _]]; auto.
-    + destruct_prefix Hpre. rewrite Hrf in Hrfpre.
-      destruct Hrfpre as [? [? _]]; auto.
-    + intros Hcontr''.
-      assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
-              (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.
-      { apply tc_incl. intros x' y' H'. destruct H' as [H'|H'].
-        - left. apply (sb_prefix_incl Hpre). auto.
-        - destruct (res_mode_simp H') as [Hsc [Hsc' Hrf]].
-          right. exists y'; [exists x'|];
-          try (apply M_get_mode_refl; auto).
-          apply (rf_prefix_incl Hpre). auto. }
-      apply Hincl in Hcontr''. eauto.
-    + intros Hcontr''.
-      assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
-                       (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.
-      { apply tc_incl. intros x' y' H'. destruct H' as [H'|H'].
-        - left. apply (sb_prefix_incl Hpre). auto.
-        - destruct (res_mode_simp H') as [Hsc [Hsc' Hrf]].
-          right. exists y'; [exists x'|];
-          try (apply M_get_mode_refl; auto).
-          apply (rf_prefix_incl Hpre). auto. }
-      apply Hincl in Hcontr''. eauto.
+  - apply Hnoconflict. exists x,y.
+    repeat (apply conj).
+    + eapply rf_orig_evts; eauto.
+      eauto using prefix_valid.
+    + eapply rf_dest_evts; eauto.
+      eauto using prefix_valid.
+    + left. eauto using rf_orig_write.
+    + intros Hnot. eapply (rf_irr _ Hval).
+      split; eauto.
+    + eapply rf_same_loc; eauto.
+    + apply not_and_or in HNotSc. auto.
+    + intros [Hn1 | Hn2].
+      * eapply (sbrfsc_incl_pre _ ex) in Hn1; auto.
+      * eapply (sbrfsc_incl_pre _ ex) in Hn2; auto.
 Qed.
 
 (** When the prefix of an execution doesn't contain any conflicting events, the
@@ -191,7 +232,7 @@ Lemma mo_prefix_in_sbrfscmo_ex {pre ex: Execution}:
   valid_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
-  not_conflicting pre ->
+  ~(expi pre) ->
   (mo pre) ≦ ((((sb ex) ⊔ ((res_mode Sc (rf ex))))^+) ⊔ 
                                (res_mode Sc (mo ex))).
 Proof.
@@ -201,15 +242,10 @@ Proof.
   destruct (classic ((get_mode x) = Sc /\ (get_mode y) = Sc)) 
     as [[Hxsc Hysc] | HNotSc].
   (* If x and y are Sc, then they are related by (ex.rf)_sc *)
-  { right. 
-    exists y. exists x.
-    - apply M_get_mode_refl; auto.
-    - auto.
-    - apply M_get_mode_refl; auto.
-  }
+  { right.
+    exists y; try (exists x); try (apply M_get_mode_refl); auto. }
   destruct (classic ((((sb ex) ⊔ (res_mode Sc (rf ex))) ^+) x y)) 
-    as [Hres | Hcontr].
-  { left. auto. }
+    as [Hres | Hcontr]. { left. auto. }
   (* We suppose that x and y are not both sc events and that they are not
     related by ex.(sb U rf_sc)^+ *)
   exfalso.
@@ -217,37 +253,24 @@ Proof.
     as [Hres' | Hcontr'].
   (* If y and x are related by ex.(sb U rf_sc)^+ *)
   - destruct H11cons as [Hco _].
-    apply (sbrfsc_incl_hb  Hval) in Hres'.
+    apply (sbrfsc_incl_hb Hval) in Hres'.
     destruct (coherence_coherence_ww _ Hco) with (x := x).
-    exists y; auto.
+    eexists; eauto.
   (* If y and x are not related by ex.(sb U rf_sc)^+ *)
-  - apply not_and_or in HNotSc. apply (Hnoconflict x y).
-    repeat (try split).
-    + auto.
-    + destruct_prefix Hpre. rewrite Hmo in Hmopre.
-      destruct Hmopre as [? [? _]]; auto.
-    + destruct_prefix Hpre. rewrite Hmo in Hmopre.
-      destruct Hmopre as [? [? _]]; auto.
-    + intros Hcontr''.
-      assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
-              (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.
-      { apply tc_incl. intros x' y' H'. destruct H' as [H'|H'].
-        - left. apply (sb_prefix_incl Hpre). auto.
-        - destruct (res_mode_simp H') as [Hsc [Hsc' Hrf]].
-          right. exists y'; [exists x'|];
-          try (apply M_get_mode_refl; auto).
-          apply (rf_prefix_incl Hpre). auto. }
-      apply Hincl in Hcontr''. eauto.
-    + intros Hcontr''.
-      assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
-                       (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.
-      { apply tc_incl. intros x' y' H'. destruct H' as [H'|H'].
-        - left. apply (sb_prefix_incl Hpre). auto.
-        - destruct (res_mode_simp H') as [Hsc [Hsc' Hrf]].
-          right. exists y'; [exists x'|];
-          try (apply M_get_mode_refl; auto).
-          apply (rf_prefix_incl Hpre). auto. }
-      apply Hincl in Hcontr''. eauto.
+  - apply Hnoconflict. exists x,y.
+    repeat (apply conj).
+    + eapply mo_orig_evts; eauto.
+      eauto using prefix_valid.
+    + eapply mo_dest_evts; eauto.
+      eauto using prefix_valid.
+    + left. eauto using mo_orig_write.
+    + intros Hnot. eapply (mo_irr _ Hval).
+      split; eauto.
+    + eapply mo_same_loc; eauto.
+    + apply not_and_or in HNotSc. auto.
+    + intros [Hn1 | Hn2].
+      * eapply (sbrfsc_incl_pre _ ex) in Hn1; auto.
+      * eapply (sbrfsc_incl_pre _ ex) in Hn2; auto.
 Qed.
 
 (** When the prefix of an execution doesn't contain any conflicting events, the
@@ -260,7 +283,7 @@ Lemma rb_prefix_in_sbrfscrb_ex {pre ex: Execution}:
   valid_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
-  not_conflicting pre ->
+  ~(expi pre) ->
   (rb pre) ≦ ((((sb ex) ⊔ ((res_mode Sc (rf ex))))^+) ⊔
                                (res_mode Sc (rb ex))).
 Proof.
@@ -270,15 +293,10 @@ Proof.
   destruct (classic ((get_mode x) = Sc /\ (get_mode y) = Sc)) 
     as [[Hxsc Hysc] | HNotSc].
   (* If x and y are Sc, then they are related by (ex.rf)_sc *)
-  { right. 
-    exists y. exists x.
-    - apply M_get_mode_refl; auto.
-    - auto.
-    - apply M_get_mode_refl; auto.
-  }
+  { right.
+    exists y; try (exists x); try (apply M_get_mode_refl); auto. }
   destruct (classic ((((sb ex) ⊔ (res_mode Sc (rf ex))) ^+) x y)) 
-    as [Hres | Hcontr].
-  { left. auto. }
+    as [Hres | Hcontr]. { left. auto. }
   (* We suppose that x and y are not both sc events and that they are not
     related by ex.(sb U rf_sc)^+ *)
   exfalso.
@@ -289,37 +307,22 @@ Proof.
     apply (sbrfsc_incl_hb  Hval) in Hres'.
     destruct H as [z Hrfinv Hmo].    
     destruct (coherence_coherence_wr _ Hco) with (x := z).
-    exists x. exists y; auto. auto.
+    eexists; try eexists; eauto.
   (* If y and x are not related by ex.(sb U rf_sc)^+ *)
-  - apply not_and_or in HNotSc. apply (Hnoconflict x y).
-    repeat (try split).
-    + auto.
-    + destruct_prefix Hpre. unfold rb in Hrbpre.
-      rewrite Hrf, Hmo, res_eset_cnv in Hrbpre.
-      apply res_eset_dot in Hrbpre. destruct Hrbpre as [? [? _]]. auto.
-    + destruct_prefix Hpre. unfold rb in Hrbpre.
-      rewrite Hrf, Hmo, res_eset_cnv in Hrbpre.
-      apply res_eset_dot in Hrbpre. destruct Hrbpre as [? [? _]]. auto.
-    + intros Hcontr''.
-      assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
-              (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.
-      { apply tc_incl. intros x' y' H'. destruct H' as [H'|H'].
-        - left. apply (sb_prefix_incl Hpre). auto.
-        - destruct (res_mode_simp H') as [Hsc [Hsc' Hrf]].
-          right. exists y'; [exists x'|];
-          try (apply M_get_mode_refl; auto).
-          apply (rf_prefix_incl Hpre). auto. }
-      apply Hincl in Hcontr''. eauto.
-    + intros Hcontr''.
-      assert ((((sb pre) ⊔ (res_mode Sc (rf pre))) ^+) ≦
-                       (((sb ex) ⊔ (res_mode Sc (rf ex))) ^+)) as Hincl.
-      { apply tc_incl. intros x' y' H'. destruct H' as [H'|H'].
-        - left. apply (sb_prefix_incl Hpre). auto.
-        - destruct (res_mode_simp H') as [Hsc [Hsc' Hrf]].
-          right. exists y'; [exists x'|];
-          try (apply M_get_mode_refl; auto).
-          apply (rf_prefix_incl Hpre). auto. }
-      apply Hincl in Hcontr''. eauto.
+  - apply Hnoconflict. exists x,y.
+    repeat (apply conj).
+    + eapply rb_orig_evts; eauto.
+      eauto using prefix_valid.
+    + eapply rb_dest_evts; eauto.
+      eauto using prefix_valid.
+    + right. eauto using rb_dest_write.
+    + intros Hnot. eapply (rb_irr _ Hval).
+      split; eauto.
+    + eapply rb_same_loc; eauto.
+    + apply not_and_or in HNotSc. auto.
+    + intros [Hn1 | Hn2].
+      * eapply (sbrfsc_incl_pre _ ex) in Hn1; auto.
+      * eapply (sbrfsc_incl_pre _ ex) in Hn2; auto.
 Qed.
 
 (** In a rc11-consistent execution, the union of the sequenced-before relation
@@ -423,7 +426,7 @@ Theorem no_conflict_prefix_sc : forall pre ex,
   valid_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
-  not_conflicting pre ->
+  ~(expi pre) ->
   sc_consistent pre.
 Proof.
   intros pre ex Hval Hrc11 Hpre Hconflict.
@@ -463,10 +466,10 @@ Theorem exec_sc_no_conflict (ex: Execution) :
   valid_exec ex ->
   rc11_consistent ex ->
   ~(sc_consistent ex) ->
-  conflicting ex.
+  expi ex.
 Proof.
-  intros Hval Hrc11 Hsc. apply not_no_conflict_is_exist_conflict. 
-  intros Hconf. apply Hsc.
+  intros Hval Hrc11 Hsc. byabsurd.
+  exfalso. apply Hsc.
   apply (no_conflict_prefix_sc ex ex); auto.
   apply prefix_itself. apply Hval.
 Qed.

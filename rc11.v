@@ -10,6 +10,7 @@ From RelationAlgebra Require Import
   lattice prop monoid rel kat_tac normalisation kleene kat rewriting.
 From RC11 Require Import util.
 From RC11 Require Import exec.
+Require Import Ensembles.
 
 Open Scope rel_notations.
 
@@ -36,6 +37,60 @@ from-read relation in some other works on axiomatic memory models. *)
 
 Definition rb :=
   rf ° ⋅ mo.
+
+(** In a valid_execution, two events related by read-before belong to the set of
+events of the execution *)
+
+Lemma rb_orig_evts (x y : Event):
+  rb x y ->
+  In _ evts x.
+Proof.
+  intros Hrb.
+  destruct Hrb as [z Hrf Hmo].
+  simp_cnv Hrf.
+  eapply rf_dest_evts; eauto.
+Qed.
+
+Lemma rb_dest_evts (x y : Event):
+  rb x y ->
+  In _ evts y.
+Proof.
+  intros Hrb.
+  destruct Hrb as [z Hrf Hmo].
+  eapply mo_dest_evts; eauto.
+Qed.
+
+Lemma rb_orig_read (x y : Event):
+  rb x y ->
+  is_read x.
+Proof.
+  intros Hrb.
+  destruct Hrb as [z Hrf Hmo].
+  simp_cnv Hrf.
+  eapply rf_dest_read; eauto.
+Qed.
+
+Lemma rb_dest_write (x y : Event):
+  rb x y ->
+  is_write y.
+Proof.
+  intros Hrb.
+  destruct Hrb as [z Hrf Hmo].
+  eapply mo_dest_write; eauto.
+Qed.
+
+Lemma rb_same_loc (x y : Event):
+  rb x y ->
+  (get_loc x) = (get_loc y).
+Proof.
+  intros Hrb.
+  destruct Hrb as [z Hrf Hmo].
+  simp_cnv Hrf.
+  apply rf_same_loc in Hrf.
+  apply mo_same_loc in Hmo.
+  congruence.
+  eauto. eauto.
+Qed.
 
 (** ** Extended coherence order *)
 
@@ -117,6 +172,39 @@ Proof.
     all: kat.
 Qed.
 
+(** In a valid execution, the read-from relation is irreflexive *)
+
+Lemma rf_irr:
+  irreflexive rf.
+Proof.
+  unfold irreflexive.
+  rewrite rf_wr, refl_double, capone.
+  mrewrite rw_0. ra.
+Qed.
+
+(** In a valid execution, the modification order is irreflexive *)
+
+Lemma mo_irr:
+  irreflexive mo.
+Proof.
+  apply irreflexive_is_irreflexive.
+  intros x Hnot.
+  destruct_val_exec Hval.
+  destruct_mo_v Hmo_v.
+  destruct Hmopo as [_ [_ ?]].
+  apply (H x). auto.
+Qed.
+
+(** In a valid execution, the reads-before relation is irreflexive *)
+
+Lemma rb_irr:
+  irreflexive rb.
+Proof.
+  unfold irreflexive.
+  rewrite rb_rw, refl_double, capone.
+  mrewrite wr_0. ra.
+Qed.
+
 (** We can deduce from this that [eco] is acyclic *)
 
 Lemma eco_acyclic:
@@ -130,10 +218,7 @@ Proof.
   ra_normalise.
   repeat (rewrite union_inter).
   repeat (apply leq_cupx).
-  - rewrite rf_wr.
-    rewrite refl_double.
-    rewrite capone.
-    mrewrite rw_0. ra.
+  - apply rf_irr.
   - rewrite rb_rw.
     rewrite refl_double.
     rewrite capone.

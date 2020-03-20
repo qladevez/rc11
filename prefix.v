@@ -488,8 +488,10 @@ Lemma prefix_mo_valid {pre ex: Execution}:
 Proof.
   intros Hmo_v Hpre.
   inverse_prefix Hpre. destruct_mo_v Hmo_v.
-  split;[|split].
+  split;[|split; [|split]].
   - rewrite Hmo, test_res_eset_swap, Hmoww. auto.
+  - intros x y Hmopre. rewrite Hmo in Hmopre.
+    destruct Hmopre as [_ [_ Hmopre]]. apply Hmosameloc; auto.
   - split;[|split]; destruct Hmopo as [_ [Hmotrans Hmoirr]].
     + rewrite Hmo. apply res_eset_udr_incl.
     + rewrite Hmo, res_eset_dot. auto using res_eset_prop_incl.

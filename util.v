@@ -336,7 +336,7 @@ Proof.
     split; simpl; auto.
 Qed.
 
-Definition not_oriented {A:Type} (r: rlt A) :=
+Definition bidir {A:Type} (r: rlt A) :=
   r ⊔ r°.
 
 (** *** Linear extension *)
@@ -379,6 +379,14 @@ Proof. compute. firstorder. Qed.
 
 
 (** ** Basic Lemmas *)
+
+(** Sequencing with [1] has no effect *)
+
+Lemma dot_one {A:Type} (r: rlt A):
+  r⋅1 = r.
+Proof.
+  apply ext_rel. rewrite dotx1. auto.
+Qed.
 
 (** Relation intersection is distributive over relation union *)
 

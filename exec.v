@@ -657,6 +657,8 @@ Definition mo_for_loc (mo : rlt Event) (l : Loc) : rlt Event :=
 
 Definition valid_mo (evts: Ensemble Event) (mo : rlt Event) : Prop :=
   ([W]⋅mo⋅[W] = mo) /\
+  (forall x y, mo x y ->
+               (get_loc x) = (get_loc y)) /\
   (partial_order mo evts) /\
   (forall l, total_rel (mo_for_loc mo l) evts).
 
@@ -704,7 +706,7 @@ Ltac destruct_rf_v H :=
   destruct H as [Hrfco [Hrf_in_e [Hrfwr Hrfun]]].
 
 Ltac destruct_mo_v H :=
-  destruct H as [Hmoww [Hmopo Hmotot]].
+  destruct H as [Hmoww [Hmosameloc [Hmopo Hmotot]]].
 
 (** *** Lemmas about valid executions *)
 
@@ -788,6 +790,83 @@ Proof.
   apply Hrf_v in Hrf as [_ [Hfin _]].
   auto.
 Qed.
+
+(** In a valid execution, events related by modification order belong to the set
+of events of the execution *)
+
+Lemma mo_orig_evts (x y : Event):
+  (mo ex) x y ->
+  In _ (evts ex) x.
+Proof.
+  intros Hmo.
+  destruct_val_exec val_exec.
+  destruct_mo_v Hmo_v.
+  destruct Hmopo as [Hmo_v _].
+  apply Hmo_v. left. exists y. auto.
+Qed.
+
+Lemma mo_dest_evts (x y : Event):
+  (mo ex) x y ->
+  In _ (evts ex) y.
+Proof.
+  intros Hmo.
+  destruct_val_exec val_exec.
+  destruct_mo_v Hmo_v.
+  destruct Hmopo as [Hmo_v _].
+  apply Hmo_v. right. exists x. auto.
+Qed.
+
+(** In a valid execution, the origin of a modification-order is a write *)
+
+Lemma mo_orig_write (x y : Event):
+  (mo ex) x y ->
+  is_write x.
+Proof.
+  intros Hmo.
+  destruct_val_exec val_exec.
+  destruct_mo_v Hmo_v.
+  rewrite <- Hmoww in Hmo.
+  destruct Hmo as [? [? Hxw]].
+  destruct Hxw as [_ Hxw].
+  unfold W in Hxw. destruct x.
+  - inversion Hxw.
+  - cbv; auto.
+  - inversion Hxw.
+Qed.
+
+(** In a valid execution, the destination of a modification-order is a write *)
+
+Lemma mo_dest_write (x y : Event):
+  (mo ex) x y ->
+  is_write y.
+Proof.
+  intros Hmo.
+  destruct_val_exec val_exec.
+  destruct_mo_v Hmo_v.
+  rewrite <- Hmoww in Hmo.
+  destruct Hmo as [z ? Hyw].
+  destruct Hyw as [Heq Hyw].
+  rewrite Heq in Hyw.
+  destruct y; simpl in Hyw.
+  - inversion Hyw.
+  - cbv; auto.
+  - inversion Hyw.
+Qed.
+
+(** In a valid execution, two events related by modification order affect the 
+same location *)
+
+Lemma mo_same_loc (x y : Event):
+  (mo ex) x y ->
+  (get_loc x) = (get_loc y).
+Proof.
+  intros Hmo.
+  destruct_val_exec val_exec.
+  destruct_mo_v Hmo_v.
+  auto.
+Qed.
+
+
 
 (** In a valid execution, events related by sequenced-before belong to the set
 of events of the execution *)

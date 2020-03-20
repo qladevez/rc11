@@ -14,6 +14,7 @@ Require Import Classical_Prop.
 From RC11 Require Import util.
 From RC11 Require Import exec.
 From RC11 Require Import prefix.
+From RC11 Require Import rc11.
 From RC11 Require Import conflict.
 
 (** This file defines the notion of numbering on the events of an execution. *)
@@ -94,11 +95,11 @@ Import Numbering.
 Definition bounded_exec (ex: Execution) (n: nat) : Execution :=
   let new_evts := Intersection _ (evts ex) (fun x => n >= numbering ex x) in
   {|
-    evts := new_evts;
-    sb := res_eset new_evts (sb ex);
-    rmw := res_eset new_evts (rmw ex);
-    rf := res_eset new_evts (rf ex);
-    mo := res_eset new_evts (mo ex);
+    exec.evts := new_evts;
+    exec.sb := res_eset new_evts (sb ex);
+    exec.rmw := res_eset new_evts (rmw ex);
+    exec.rf := res_eset new_evts (rf ex);
+    exec.mo := res_eset new_evts (mo ex);
   |}.
 
 
@@ -203,12 +204,12 @@ Qed.
 bounds producing a conflicting prefix are bigger *)
 
 Definition smallest_conflicting_bounding (ex: Execution) (bound: nat) :=
-  conflicting (bounded_exec ex bound) /\
-  (forall n, conflicting (bounded_exec ex n) ->
+  expi (bounded_exec ex bound) /\
+  (forall n, expi (bounded_exec ex n) ->
              n >= bound).
 
 Axiom smallest_conflicting_bounding_exists:
-  forall ex, conflicting ex ->
+  forall ex, expi ex ->
              (exists bound, smallest_conflicting_bounding ex bound).
 
 (** The bounding smaller than the smallest conflicting bounding are not 
@@ -217,11 +218,24 @@ conflicting *)
 Lemma smaller_than_smallest_not_conflicting (ex: Execution) (bound: nat):
   (smallest_conflicting_bounding ex bound) ->
   forall smaller, smaller < bound -> 
-                  ~(conflicting (bounded_exec ex smaller)).
+                  ~(expi (bounded_exec ex smaller)).
 Proof.
   intros [_ Hsmallest] smaller Hsmaller Hnot.
   apply Hsmallest in Hnot.
   lia.
+Qed.
+
+Theorem smaller_than_smallest_sc (ex: Execution) (bound: nat):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  (smallest_conflicting_bounding ex bound) ->
+  forall smaller, smaller < bound ->
+                  sc_consistent (bounded_exec ex smaller).
+Proof.
+  intros Hval Hrc11 Hscb smaller Hsmaller. 
+  eapply no_conflict_prefix_sc; eauto.
+  - eauto using bounded_exec_is_prefix.
+  - eapply smaller_than_smallest_not_conflicting; eauto.
 Qed.
 
 (** ** Minimal conflicting pair *)
@@ -231,10 +245,10 @@ are in conflict and belong to the smallest conflicting prefix of the execution *
 
 Definition minimal_conflicting_pair (ex: Execution) (bound: nat) (j k: Event) :=
   (smallest_conflicting_bounding ex bound) /\
-  (c_events (bounded_exec ex bound) j k).
+  (pi (bounded_exec ex bound) j k).
 
 Lemma mcp_exists (ex: Execution):
-  conflicting ex ->
+  expi ex ->
   (exists bound j k, minimal_conflicting_pair ex bound j k).
 Proof.
   intros Hconf.
@@ -251,7 +265,8 @@ Lemma mcp_not_sc (ex: Execution) (bound: nat) (j k: Event):
   (minimal_conflicting_pair ex bound j k) ->
   ((get_mode j) <> Sc \/ (get_mode k) <> Sc).
 Proof.
-  intros [_ [[H | H] _]]; [left|right]; auto.
+  intros [_ [[_ H] _]].
+  auto.
 Qed.
 
 (** Bounding an execution already bounded by a smaller bound has no effect *)
@@ -420,30 +435,35 @@ Lemma bound_to_c_events (ex: Execution) (b:nat) (j k: Event):
   valid_exec ex ->
   numbering ex j <= numbering ex k ->
   numbering ex k < b ->
-  c_events (bounded_exec ex b) j k ->
-  c_events (bounded_exec ex (numbering ex k)) j k.
+  pi (bounded_exec ex b) j k ->
+  pi (bounded_exec ex (numbering ex k)) j k.
 Proof.
-  intros Hval Hord Hord' [Hmode [Hinj [Hink [Hjk Hkj]]]].
+  intros Hval Hord Hord' [[[Hinj [Hink [Hw [Hdiff Hloc]]]] Hsc] Hbidir].
   repeat (apply conj).
-  - auto.
   - destruct ex. simpl. destruct Hinj as [z Hjevts Hinj]. split.
     + simpl in Hjevts. auto.
     + unfold In. lia.
   - destruct ex. simpl. destruct Hink as [z Hkevts Hink]. split.
     + simpl in Hkevts. auto.
     + unfold In. lia.
-  - intros Hnot. apply Hjk. 
-    eapply sbrfsc_pre_inc. eapply bounded_exec_is_prefix.
-    + eapply prefix_valid.
-      * eapply prefix_valid. eauto. eapply bounded_exec_is_prefix. eauto.
-      * eapply two_ord_bounds_pre. eauto.
-    + erewrite double_bounding_rew'; eauto.
-  - intros Hnot. apply Hkj. 
-    eapply sbrfsc_pre_inc. eapply bounded_exec_is_prefix.
-    + eapply prefix_valid.
-      * eapply prefix_valid. eauto. eapply bounded_exec_is_prefix. eauto.
-      * eapply two_ord_bounds_pre. eauto.
-    + erewrite double_bounding_rew'; eauto.
+  - auto.
+  - auto.
+  - auto.
+  - auto.
+  - destruct (not_or_and _ _ Hbidir) as [Hjk Hkj].
+    apply and_not_or. split.
+    + intros Hnot. apply Hjk. 
+      eapply sbrfsc_pre_inc. eapply bounded_exec_is_prefix.
+      * eapply prefix_valid.
+        -- eapply prefix_valid. eauto. eapply bounded_exec_is_prefix. eauto.
+        -- eapply two_ord_bounds_pre. eauto.
+      * erewrite double_bounding_rew'; eauto.
+    + intros Hnot. apply Hkj. 
+      eapply sbrfsc_pre_inc. eapply bounded_exec_is_prefix.
+      * eapply prefix_valid.
+        -- eapply prefix_valid. eauto. eapply bounded_exec_is_prefix. eauto.
+        -- eapply two_ord_bounds_pre. eauto.
+      * erewrite double_bounding_rew'; simp_cnv Hnot; simpl; eauto.
 Qed.
 
 (** If two events are conflicting and if their numbering is strictly inferior to
@@ -454,7 +474,7 @@ Lemma smallest_conflicting_bounding_conflict (ex: Execution) (j k: Event) (b: na
   numbering ex k < b ->
   numbering ex j < b ->
   smallest_conflicting_bounding ex b ->
-  c_events (bounded_exec ex b) j k ->
+  pi (bounded_exec ex b) j k ->
   False.
 Proof.
   intros Hval Hord1 Hord2 Hscb Hconf.
@@ -472,7 +492,7 @@ Proof.
   - destruct Hscb as [_ Hsmallest].
     assert (numbering ex j >= b).
     * apply Hsmallest. exists j, k.
-      rewrite c_events_sym. rewrite c_events_sym in Hconf.
+      rewrite pi_sym. rewrite pi_sym in Hconf.
       apply bound_to_c_events with b; auto. lia.
     * lia.
 Qed.
@@ -487,12 +507,12 @@ Theorem mcp_num_snd_evt (ex: Execution) (bound: nat) (j k: Event):
 Proof.
   intros Hval [Hscb Hconf].
   destruct (Compare_dec.lt_eq_lt_dec bound (numbering ex k)) as [[Hklt|Hkeq]|Hkgt].
-  - destruct Hconf as [_ [_ [? _]]]. destruct ex. simpl in H.
+  - destruct Hconf as [[[_ [? _]] _] _]. destruct ex. simpl in H.
     destruct H as [? ?]. unfold In in *. lia.
   - destruct (Compare_dec.lt_eq_lt_dec (numbering ex j) (numbering ex k)) as [[Hjlt|Hjeq]|Hjgt].
     + rewrite (max_rewrite _ _ Hjlt). auto.
     + rewrite Hjeq, PeanoNat.Nat.max_id. auto.
-    + destruct Hconf as [_ [H _]].
+    + destruct Hconf as [[[? _] _] _].
       destruct ex. simpl in H. destruct H as [? ?]. unfold In in *. lia.
   - destruct (Compare_dec.lt_eq_lt_dec (numbering ex j) (numbering ex k)) as [[Hjlt|Hjeq]|Hjgt].
     + exfalso. 
@@ -506,9 +526,8 @@ Proof.
       * exfalso.
         apply (smallest_conflicting_bounding_conflict ex j k bound); auto.
       * auto.
-      * destruct Hconf as [_ [? _]]. destruct ex. simpl in H.
+      * destruct Hconf as [[[? _] _] _]. destruct ex. simpl in H.
         destruct H as [? ?]. unfold In in *. lia.
-Qed. 
+Qed.
 
-  
 End NumberingPrefix.
