@@ -8,7 +8,7 @@ Author: Quentin Ladeveze, Inria Paris, France
 
 From RelationAlgebra Require Import 
   lattice prop monoid rel kat_tac normalisation kleene kat rewriting.
-From RC11 Require Import util.
+From RC11 Require Import util proprel_classic.
 From RC11 Require Import exec.
 Require Import Ensembles.
 
@@ -21,12 +21,6 @@ Section RC11.
 Variable ex: Execution.
 Variable Hval: valid_exec ex.
 
-Definition rf := (rf ex).
-Definition mo := (mo ex).
-Definition sb := (sb ex).
-Definition rmw := (rmw ex).
-Definition evts := (evts ex).
-
 (** * Derived relations *)
 
 (** ** Reads-before *)
@@ -35,15 +29,16 @@ Definition evts := (evts ex).
 event sequenced before [w] by the modification order. It corresponds to the
 from-read relation in some other works on axiomatic memory models. *)
 
+
 Definition rb :=
-  rf ° ⋅ mo.
+  (rf ex) ° ⋅ (mo ex).
 
 (** In a valid_execution, two events related by read-before belong to the set of
 events of the execution *)
 
 Lemma rb_orig_evts (x y : Event):
   rb x y ->
-  In _ evts x.
+  In _ (evts ex) x.
 Proof.
   intros Hrb.
   destruct Hrb as [z Hrf Hmo].
@@ -53,7 +48,7 @@ Qed.
 
 Lemma rb_dest_evts (x y : Event):
   rb x y ->
-  In _ evts y.
+  In _ (evts ex) y.
 Proof.
   intros Hrb.
   destruct Hrb as [z Hrf Hmo].
@@ -98,10 +93,10 @@ Qed.
 reads-from, modification order and reads-before. It corresponds to the 
 communication relation in some other works on axiomatic memory models *)
 
-Definition eco := (rf ⊔ mo ⊔ rb)^+.
+Definition eco := ((rf ex) ⊔ (mo ex) ⊔ rb)^+.
 
 Lemma rf_wr:
-  rf ≡ [W] ⋅ rf ⋅ [R].
+  (rf ex) ≡ [W] ⋅ (rf ex) ⋅ [R].
 Proof.
   destruct_val_exec Hval.
   destruct Hrf_v as [_ [_ [Hwr _]]].
@@ -109,7 +104,7 @@ Proof.
 Qed.
 
 Lemma mo_ww:
-  mo ≡ [W] ⋅ mo ⋅ [W].
+  (mo ex) ≡ [W] ⋅ (mo ex) ⋅ [W].
 Proof.
   destruct_val_exec Hval.
   destruct Hmo_v as [Hmo _].
@@ -146,14 +141,14 @@ Ltac elim_conflicting_wr :=
 reflexive transitive closure *)
 
 Lemma eco_rfmorb_seq_rfref:
-  eco = rf ⊔ ((mo ⊔ rb) ⋅ rf?).
+  eco = (rf ex) ⊔ (((mo ex) ⊔ rb) ⋅ (rf ex)?).
 Proof.
   unfold eco.
   apply ext_rel. apply eq_as_inclusion. split.
   - kat.
   - apply itr_ind_l1.
     + kat.
-    + assert (mo⋅mo ≦ mo) as Hmo_trans.
+    + assert ((mo ex)⋅(mo ex) ≦ (mo ex)) as Hmo_trans.
       { destruct_val_exec Hval. destruct_mo_v Hmo_v.
         destruct Hmopo as [_ [Hmotrans _]].
         unfold "⋅" in Hmotrans. rewrite Hmotrans. ra_normalise. auto. }
@@ -175,7 +170,7 @@ Qed.
 (** In a valid execution, the read-from relation is irreflexive *)
 
 Lemma rf_irr:
-  irreflexive rf.
+  irreflexive (rf ex).
 Proof.
   unfold irreflexive.
   rewrite rf_wr, refl_double, capone.
@@ -185,7 +180,7 @@ Qed.
 (** In a valid execution, the modification order is irreflexive *)
 
 Lemma mo_irr:
-  irreflexive mo.
+  irreflexive (mo ex).
 Proof.
   apply irreflexive_is_irreflexive.
   intros x Hnot.
@@ -248,7 +243,7 @@ atomic) and all later atomic writes to the same location in the same thread, as
 well as all read-modify-write that recursively read from such writes. *)
 
 Definition rs  :=
-  [W] ⋅ sb ? ⋅ [W] ⋅ [Mse Rlx] ⋅ (rf ⋅ rmw) ^*.
+  [W] ⋅ (sb ex) ? ⋅ [W] ⋅ [Mse Rlx] ⋅ ((rf ex) ⋅ (rmw ex)) ^*.
 
 (** ** Synchronises with *)
 
@@ -257,7 +252,7 @@ in case [b] is a fence, a [sb]-prior read) reads from the release sequence of
 [a] *)
 
 Definition sw :=
-  [Mse Rel] ⋅ ([F] ⋅ sb) ? ⋅ rs ⋅ rf ⋅ [R] ⋅ [Mse Rlx] ⋅ (sb ⋅ [F]) ? ⋅ [Mse Acq].
+  [Mse Rel] ⋅ ([F] ⋅ (sb ex)) ? ⋅ rs ⋅ (rf ex) ⋅ [R] ⋅ [Mse Rlx] ⋅ ((sb ex) ⋅ [F]) ? ⋅ [Mse Acq].
 
 (** ** Happens-before *)
 
@@ -267,12 +262,12 @@ We say that an event happens-before another one if there is a path between the
 two events consisting of [sb] and [sw] edges *)
 
 Definition hb  :=
-  (sb ⊔ sw)^+.
+  ((sb ex) ⊔ sw)^+.
   
 (** ** SC-before *)
 
 Definition scb :=
- sb ⊔  ((res_neq_loc sb) ⋅ hb ⋅ (res_neq_loc sb)) ⊔ (res_eq_loc hb) ⊔ mo ⊔  rb.
+ (sb ex) ⊔  ((res_neq_loc (sb ex)) ⋅ hb ⋅ (res_neq_loc (sb ex))) ⊔ (res_eq_loc hb) ⊔ (mo ex) ⊔  rb.
 
 (** ** Partial-SC base *)
 
@@ -328,7 +323,7 @@ Qed.
 should not read a value written by a write event occuring in the future. *)
 
 Lemma coherence_no_future_read:
-  coherence -> (forall x, ~ (rf ⋅ hb) x x).
+  coherence -> (forall x, ~ ((rf ex) ⋅ hb) x x).
 Proof.
   intros H x Hnot.
   destruct Hnot.
@@ -354,7 +349,7 @@ following pattern in executions:
 *)
 
 Lemma coherence_coherence_rw:
-  coherence -> (forall x, ~ (mo ⋅ rf ⋅ hb) x x).
+  coherence -> (forall x, ~ ((mo ex) ⋅ (rf ex) ⋅ hb) x x).
 Proof.
   intros H x Hnot.
   destruct Hnot as [z [z' Hmo Hrf] Hhb].
@@ -369,7 +364,7 @@ Qed.
 can not modify the memory before a write that precedes it in sequenced-before *)
 
 Lemma coherence_coherence_ww:
-  coherence -> (forall x, ~ (mo ⋅ hb) x x).
+  coherence -> (forall x, ~ ((mo ex) ⋅ hb) x x).
 Proof.
   intros H x Hnot.
   destruct Hnot as [z Hmo Hhb].
@@ -395,7 +390,7 @@ following pattern in executions:
 *)
 
 Lemma coherence_coherence_wr:
-  coherence -> (forall x, ~ (mo ⋅ hb ⋅ rf°) x x).
+  coherence -> (forall x, ~ ((mo ex) ⋅ hb ⋅ (rf ex)°) x x).
 Proof.
   intros H x Hnot.
   destruct Hnot as [z [y Hmo Hhb] Hinvrf].
@@ -423,7 +418,7 @@ modification order. We forbid the following pattern in executions:
 *)
 
 Lemma coherence_coherence_rr:
-  coherence -> (forall x, ~ (mo ⋅ rf ⋅ hb ⋅ rf°) x x).
+  coherence -> (forall x, ~ ((mo ex) ⋅ (rf ex) ⋅ hb ⋅ (rf ex)°) x x).
 Proof.
   intros H x Hnot.
   destruct Hnot as [w [y' [z Hmo Hrf] Hhb] Hinvr].
@@ -438,7 +433,7 @@ Qed.
 memory models *)
 
 Theorem coherence_is_uniproc:
-  coherence -> irreflexive (sb ⋅ eco).
+  coherence -> irreflexive ((sb ex) ⋅ eco).
 Proof.
   intros Hco.
   apply seq_refl_incl_left with (r3 := hb).
@@ -473,7 +468,7 @@ Qed.
 adjacent in [eco]: there is no write event in between *)
 
 Definition atomicity :=
-  forall x y, ~ (rmw ⊓ (rb ⋅ mo)) x y.
+  forall x y, ~ ((rmw ex) ⊓ (rb ⋅ (mo ex))) x y.
 
 (** ** SC *)
 
@@ -490,7 +485,7 @@ the value written by a write event depends on the value read by a read event,
 which reads from this same write event. *)
 
 Definition no_thin_air :=
-  acyclic (sb ⊔ rf).
+  acyclic ((sb ex) ⊔ (rf ex)).
 
 (** ** RC11-consistent executions *)
 
@@ -509,6 +504,6 @@ Definition rc11_consistent :=
 *)
 
 Definition sc_consistent :=
-  atomicity /\ acyclic (sb ⊔ rf ⊔ mo ⊔ rb).
+  atomicity /\ acyclic ((sb ex) ⊔ (rf ex) ⊔ (mo ex) ⊔ rb).
 
 End RC11.

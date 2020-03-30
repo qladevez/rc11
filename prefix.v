@@ -6,10 +6,11 @@ C/C++11; Lahav, Vafeiadis, Kang et al., PLDI 2017)
 Author: Quentin Ladeveze, Inria Paris, France
 *)
 
-From RelationAlgebra Require Import 
-  lattice prop monoid rel kat_tac normalisation kleene kat rewriting.
+From RelationAlgebra Require Import
+  lattice monoid rel kat_tac normalisation kleene kat rewriting.
 Require Import Ensembles.
 Require Import Relations.
+From RC11 Require Import proprel_classic.
 From RC11 Require Import util.
 From RC11 Require Import exec.
 From RC11 Require Import rc11.
@@ -35,10 +36,10 @@ Definition prefix (pre ex: Execution) : Prop :=
   (forall a b, (sb ex ⊔ rf ex) a b ->
                In _ (evts pre) b ->
                In _ (evts pre) a) /\
-  (sb pre = res_eset (evts pre) (sb ex)) /\
-  (rf pre = res_eset (evts pre) (rf ex)) /\
-  (mo pre = res_eset (evts pre) (mo ex)) /\
-  (rmw pre = res_eset (evts pre) (rmw ex)).
+  (sb pre = [I (evts pre)] ⋅ (sb ex) ⋅ [I (evts pre)]) /\
+  (rf pre = [I (evts pre)] ⋅ (rf ex) ⋅ [I (evts pre)]) /\
+  (mo pre = [I (evts pre)] ⋅ (mo ex) ⋅ [I (evts pre)]) /\
+  (rmw pre = [I (evts pre)] ⋅ (rmw ex) ⋅ [I (evts pre)]).
 
 Ltac destruct_prefix H :=
   destruct H as [Hevts [Hclosed [Hsb [Hrf [Hmo Hrmw]]]]].
@@ -69,22 +70,18 @@ Proof. unfold prefix. intuition. Qed.
 Lemma prefix_itself (ex : Execution):
   valid_exec ex ->
   prefix ex ex.
-Proof.
+Proof with auto.
   intros Hval.
-  splitall.
+  repeat (apply conj); inverse_val_exec Hval.
   - compute; auto.
   - intros a b [Hsb|Hrf] Hin.
     + apply sb_orig_evts with (y:=b); auto.
     + apply rf_orig_evts with (y:=b); auto.
-  - destruct_val_exec Hval. destruct_sb_v Hsb_v.
-    auto using res_eset_udr.
-  - destruct_val_exec Hval. destruct_rf_v Hrf_v.
-    auto using res_eset_udr.
-  - destruct_val_exec Hval. destruct_mo_v Hmo_v.
-    destruct Hmopo as [? _].
-    auto using res_eset_udr.
-  - destruct_val_exec Hval. destruct_rmw_v Hrmw_v.
-    auto using res_eset_udr.
+  - destruct_sb_v Hsb_v...
+  - destruct_rf_v Hrf_v...
+  - destruct_mo_v Hmo_v.
+    destruct Hmopo as [? _]...
+  - destruct_rmw_v Hrmw_v...
 Qed.
 
 (** The sequenced-before relation of an execution prefix is included in the 
@@ -95,7 +92,7 @@ Lemma sb_prefix_incl {pre ex: Execution}:
   sb pre ≦ sb ex.
 Proof.
   intros Hpre. destruct_prefix Hpre.
-  rewrite Hsb. apply res_eset_incl.
+  rewrite Hsb. kat.
 Qed.
 
 (** The reads-from relation of an execution prefix is included in the reads-from
@@ -106,7 +103,7 @@ Lemma rf_prefix_incl {pre ex: Execution}:
   rf pre ≦ rf ex.
 Proof.
   intros Hpre. destruct_prefix Hpre.
-  rewrite Hrf. apply res_eset_incl.
+  rewrite Hrf. kat.
 Qed.
 
 (** The modification order of an execution prefix is included in the 
@@ -117,7 +114,7 @@ Lemma mo_prefix_incl {pre ex: Execution}:
   mo pre ≦ mo ex.
 Proof.
   intros Hpre. destruct_prefix Hpre.
-  rewrite Hmo. apply res_eset_incl.
+  rewrite Hmo. kat.
 Qed.
 
 (** The read-modify-write relation of an execution prefix is included in the 
@@ -128,7 +125,7 @@ Lemma rmw_prefix_incl {pre ex: Execution}:
   rmw pre ≦ rmw ex.
 Proof.
   intros Hpre. destruct_prefix Hpre.
-  rewrite Hrmw. apply res_eset_incl.
+  rewrite Hrmw. kat.
 Qed.
 
 (** The reads-before relation of an execution prefix is included in the 
@@ -141,8 +138,8 @@ Proof.
   intros Hpre.
   apply incl_dot;
   destruct_prefix Hpre;
-  [rewrite Hrf, res_eset_cnv | rewrite Hmo];
-  apply res_eset_incl.
+  [ rewrite Hrf, !cnvdot, injcnv | rewrite Hmo ];
+  kat.
 Qed.
 
 (** The extended communication relation of an execution prefix is included in
@@ -348,22 +345,17 @@ Lemma prefix_lso_valid {pre ex: Execution}:
 Proof.
   intros [[Hincl [Htrans Hirr]] Htot] Hpre.
   inverse_prefix Hpre.
-  splitall.
-  - intros x [y Hudr | y Hudr];
-    (rewrite Hsb in Hudr; destruct Hudr as [? [? [? ?]]]; auto).
-  - pose proof (sb_prefix_incl Hpre) as Hpreinc.
-    intros x y [z Hfst Hsnd]. rewrite Hsb. split;[|split].
-    + rewrite Hsb in Hfst. destruct Hfst. auto.
-    + rewrite Hsb in Hsnd. destruct Hsnd as [? [? ?]]. auto.
-    + apply Hpreinc in Hfst. apply Hpreinc in Hsnd.
-      apply Htrans. exists z; auto.
+  repeat (apply conj).
+  - rewrite Hsb. kat_eq.
+  - rewrite Hsb. rewrite <- Htrans at 3. kat.
   - intros x Href. apply (Hirr x).
     apply (sb_prefix_incl Hpre) in Href. auto.
   - intros x y Hdiff Hinx Hiny.
-    destruct Hpre as [Hinc _].
-    rewrite Hsb. apply Hinc in Hinx as Hinxpre. apply Hinc in Hiny as Hinypre.
+    rewrite Hsb.
+    apply Hevts in Hinx as Hinxpre.
+    apply Hevts in Hiny as Hinypre.
     pose proof (Htot _ _ Hdiff Hinxpre Hinypre) as [Hsbex|Hsbex];
-    [left|right]; splitall; auto.
+    [left|right]; simpl_trt; auto. 
 Qed.
 
 (** If the sequenced-before relation of an execution is valid, the
@@ -379,23 +371,21 @@ Proof.
   split.
   { eauto using prefix_lso_valid. }
   split.
-  { rewrite Hsb. apply res_eset_udr_incl. }
+  { rewrite Hsb. kat_eq. }
   - intros l. destruct (Hsbinit l) as [e [? [? [H H']]]]. exists e.
     splitall; auto.
     + intros Hnot. apply H.
       rewrite Hsb in Hnot.
-      destruct Hnot as [z [? [? ?]]].
-      exists z. auto.
+      eapply (elt_ran_incl _ _ _ _ Hnot).
+      Unshelve. kat.
     + intros e' Hinsbpre. rewrite Hsb.
       rewrite Hsb in Hinsbpre.
-      split;[|split].
-      * eapply Hclosed.
-        -- left. eapply H'. destruct Hinsbpre as [z [? [? ?]]].
-           exists z. eauto.
-        -- destruct Hinsbpre as [? [? [? ?]]]. auto.
-      * destruct Hinsbpre as [? [? [? ?]]]. auto.
-      * apply H'. destruct Hinsbpre as [? [? [? ?]]].
-        exists x. auto.
+      simpl_trt;
+      eapply ran_trt in Hinsbpre as [Hine' [y [Hine Hr]]].
+      * eapply (Hclosed _ e'); eauto.
+        left. eapply H'. exists y. eauto.
+      * eapply H'. exists y. eauto.
+      * auto.
 Qed.
 
 (** If the read-modify write relation of an execution is valid, the read-modify-
@@ -412,18 +402,19 @@ Proof.
   unfold imm in Himm.
   destruct Himm as [Hsbimm H]. split.
   - rewrite Hrmw in Hrmwpre. rewrite Hsb.
-    destruct Hrmwpre as [? [? _]].
-    splitall; auto.
-  - intros c Hsbpre.
-    rewrite Hsb in Hsbpre. destruct Hsbpre as [? [? Hsbex]].
+    apply simpl_trt_hyp in Hrmwpre as [? [? ?]]; 
+    simpl_trt; auto.
+  - intros c Hsbpre. rewrite Hsb in Hsbpre. rewrite Hrmw in Hrmwpre.
+    apply simpl_trt_hyp in Hsbpre as [? [Hsbex ?]].
+    apply simpl_trt_hyp in Hrmwpre as [? [Hrmwpre ?]].
     destruct (H c Hsbex) as [Href H']. split.
     + destruct Href.
-      * left. rewrite Hsb. splitall; auto.
-        rewrite Hrmw in Hrmwpre. destruct Hrmwpre as [? [? _]]; auto.
+      * left. rewrite Hsb. simpl_trt; auto.
       * right. auto.
-    + intros c' H''. rewrite Hsb in H''. destruct H'' as [_ [? H''']].
-      pose proof (H' c' H''') as [Hsbrc | Href'].
-      * left. rewrite Hsb. splitall; auto.
+    + intros c' Hsbpre. rewrite Hsb in Hsbpre.
+      apply simpl_trt_hyp in Hsbpre as [? [Hsbrc ?]].
+      pose proof (H' c' Hsbrc) as [Hsbwc' | Href'].
+      * left. rewrite Hsb. simpl_trt. auto.
       * right. auto.
 Qed.
 
@@ -451,9 +442,10 @@ Proof.
   split.
   - intros r w Hrmwpre.
     eapply prefix_rmw_pair_valid; eauto.
-    apply Hrmwv. rewrite Hrmw in Hrmwpre. destruct Hrmwpre as [_ [_ ?]]. auto.
-  - rewrite Hrmw.
-    apply res_eset_udr_incl.
+    apply Hrmwv. rewrite Hrmw in Hrmwpre.
+    apply simpl_trt_hyp in Hrmwpre.
+    intuition auto.
+  - rewrite Hrmw. kat_eq.
 Qed.
 
 (** If the read-from relation of an execution is valid, the read-from relation
@@ -466,19 +458,17 @@ Lemma prefix_rf_valid {pre ex: Execution}:
 Proof.
   intros Hrf_v Hpre.
   inverse_prefix Hpre. destruct_rf_v Hrf_v.
-  split.
-  - splitall; rewrite Hrf in *.
-    + eauto using res_eset_elt_left.
-    + eauto using res_eset_elt_right.
-    + eapply Hrfco, res_eset_incl. eauto.
-    + eapply Hrfco, res_eset_incl. eauto.
-  - split;[|split].
-    + rewrite Hrf. apply res_eset_udr_incl.
-    + rewrite Hrf, test_res_eset_swap, Hrfwr. auto.
-    + intros w1 w2 x [H1 H2]. rewrite Hrf in H1, H2.
-      apply res_eset_incl in H1.
-      apply res_eset_incl in H2.
-      intuition (eauto using Hrfun).
+  repeat (apply conj).
+  - intros w r Hrfpre.
+    rewrite Hrf in Hrfpre.
+    apply simpl_trt_hyp in Hrfpre as [_ [Hrfex _]].
+    eauto using Hrfco.
+  - rewrite Hrf. kat_eq.
+  - rewrite Hrf. rewrite <- Hrfwr. kat_eq.
+  - intros w1 w2 r [Hrfpre1 Hrfpre2].
+    eapply Hrfun. split.
+    + rewrite Hrf in Hrfpre1. apply simpl_trt_hyp in Hrfpre1. intuition eauto.
+    + rewrite Hrf in Hrfpre2. apply simpl_trt_hyp in Hrfpre2. intuition eauto.
 Qed.
 
 Lemma prefix_mo_valid {pre ex: Execution}:
@@ -489,17 +479,18 @@ Proof.
   intros Hmo_v Hpre.
   inverse_prefix Hpre. destruct_mo_v Hmo_v.
   split;[|split; [|split]].
-  - rewrite Hmo, test_res_eset_swap, Hmoww. auto.
+  - rewrite Hmo, <- Hmoww. kat_eq.
   - intros x y Hmopre. rewrite Hmo in Hmopre.
-    destruct Hmopre as [_ [_ Hmopre]]. apply Hmosameloc; auto.
+    apply simpl_trt_hyp in Hmopre. eapply Hmosameloc.
+    intuition eauto.
   - split;[|split]; destruct Hmopo as [_ [Hmotrans Hmoirr]].
-    + rewrite Hmo. apply res_eset_udr_incl.
-    + rewrite Hmo, res_eset_dot. auto using res_eset_prop_incl.
+    + rewrite Hmo. kat_eq.
+    + rewrite Hmo. rewrite <- Hmotrans at 3. kat.
     + eauto using incl_irr, mo_prefix_incl.
   - intros l x y Hdiff Hin1 Hin2. rewrite Hmo.
     apply Hevts in Hin1 as Hinpre1. apply Hevts in Hin2 as Hinpre2.
-    destruct (Hmotot l x y Hdiff Hinpre1 Hinpre2) as [[? [? ?]]|[? [? ?]]] ;[left|right];
-    (split;[split;[|split] |split]; auto).
+    destruct (Hmotot l x y Hdiff Hinpre1 Hinpre2) as [[? [? ?]]|[? [? ?]]]; [left|right];
+    (split; [simpl_trt|split]; auto).
 Qed.
   
 (** If an execution is valid, any of its prefixes is also a valid execution *)

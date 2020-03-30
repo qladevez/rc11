@@ -14,6 +14,7 @@ Require Import Relations.
 Require Import Lia.
 From RelationAlgebra Require Import rel prop monoid kat relalg kat_tac.
 From AAC_tactics Require Import AAC.
+From RC11 Require Import proprel_classic.
 
 (** * Utilities *)
 
@@ -54,6 +55,14 @@ Qed.
 
 (** ** Sets *)
 
+Create HintDb set_db.
+
+Hint Unfold In : set_db.
+
+Ltac unfold_in := autounfold with set_db in *.
+
+Definition I {A:Type} (s: Ensemble A) : prop_set A := In A s.
+
 (** Axiom of extensionality for relations. If two relations relate the same 
 elements, they are equal *)
 
@@ -66,6 +75,12 @@ Lemma intersection_included_itself {A:Type} (s1 s2 : Ensemble A):
   Included _ (Intersection _ s1 s2) s1.
 Proof.
   intros x [H1 H2]; auto.
+Qed.
+
+Lemma in_intersection {A:Type} (s1 s2 : Ensemble A) (e: A):
+  In _ (Intersection _ s1 s2) e -> In _ s1 e /\ In _ s2 e.
+Proof.
+  intros [H1 H2]. split; auto.
 Qed.
 
 Lemma tautology_makes_fullset {A:Type} (P: A -> Prop):
@@ -86,6 +101,16 @@ Proof.
     apply Full_intro.
 Qed.
 
+Lemma inter_fullset' {A:Type} (e: Ensemble A):
+  Intersection _ (Full_set _) e = e.
+Proof.
+  apply ext_set. intros x; split; intros H.
+  - inversion H. auto.
+  - apply Intersection_intro.
+    + apply Full_intro.
+    + auto.
+Qed.
+
 Lemma inter_incl {A:Type} (s1 s2 s3: Ensemble A):
   Included _ s3 s2 -> Included _ (Intersection _ s1 s3) (Intersection _ s1 s2).
 Proof.
@@ -93,9 +118,11 @@ Proof.
   split; auto.
 Qed.
 
+
+
 (** ** Notations *)
 
-Definition rlt T := hrel T T.
+Definition rlt T := prop_hrel T T.
 
 Definition id {T} : rlt T := (one T).
 Definition empty {T} : rlt T := bot.
@@ -203,38 +230,9 @@ Notation "R ?" := (R ⊔ 1) (at level 15) : rel_notations.
   Proof. firstorder. Qed.
 
   Program Instance lift_leq_weq T : AAC_lift (leq : rlt T -> rlt T -> Prop) weq.
-  
-Section lattice.
-Context `{lattice.laws}.
 
-Global Instance aac_cupA `{CUP ≪ l} : Associative weq cup := cupA.
-Global Instance aac_cupC `{CUP ≪ l} : Commutative weq cup := cupC.
-Global Instance aac_cupU `{BOT+CUP ≪ l} : Unit weq cup bot := Build_Unit _ _ _ cupbx cupxb.
-
-Global Instance aac_capA `{CAP ≪ l} : Associative weq cap := capA.
-Global Instance aac_capC `{CAP ≪ l} : Commutative weq cap := capC.
-Global Instance aac_capU `{TOP+CAP ≪ l} : Unit weq cap top := Build_Unit _ _ _ captx capxt.
-
-Global Instance aac_lift_leq_weq : AAC_lift leq weq. 
-Proof. constructor; eauto with typeclass_instances. Qed.
-
-End lattice.
-
-Section monoid.
-Context `{monoid.laws} {n: ob X}.
-Global Instance aac_dotA: Associative weq (dot n n n) := (@dotA _ _ _ n n n n).
-Global Instance aac_dotU: Unit weq (dot n n n) (one n).
-Proof. constructor; intro. apply dot1x. apply dotx1. Qed.
-End monoid.
-
-Ltac upgrade_cup_to_kat T := change cup with (@cup (@mor (@kar hrel_kat_ops) T T)).
-Ltac upgrade_dot_to_kat T :=
-  change (@dot hrel_monoid_ops T T T) with (@dot (@kar hrel_kat_ops) T T T).
-
-Ltac upgrade_to_kat T :=
-  upgrade_cup_to_kat T;
-  upgrade_dot_to_kat T.
 *)
+    
 Open Scope rel_notations.
 
 (** ** Definitions *)
@@ -281,6 +279,7 @@ Definition acyclic {A:Type} (r: rlt A) : Prop :=
   forall x, ~(r^+ x x).
 
 (** A relation is cyclic if its transitive closure is not irreflexive *)
+
 Definition cyclic {A:Type} (r: rlt A) : Prop :=
   exists x, r^+ x x.
 
@@ -299,7 +298,7 @@ Definition res_eset {A:Type} (e: Ensemble A) (r: rlt A) : rlt A :=
 - The relation is irreflexive *)
 
 Definition partial_order {A:Type} (r:rlt A) (xs: Ensemble A) : Prop :=
-  Included _ (udr r) xs /\
+  r = [I xs] ⋅ r ⋅ [I xs] /\
   (r ⋅ r ≦ r)/\ (* Transitivity *)
   (forall x, ~(r x x)).     (* Irreflexivity *)
 
@@ -338,6 +337,8 @@ Qed.
 
 Definition bidir {A:Type} (r: rlt A) :=
   r ⊔ r°.
+
+Ltac kat_eq := apply ext_rel; kat.
 
 (** *** Linear extension *)
 
@@ -379,6 +380,15 @@ Proof. compute. firstorder. Qed.
 
 
 (** ** Basic Lemmas *)
+
+Lemma fullset_one {A:Type}:
+  [Full_set A : prop_set A] = 1.
+Proof.
+  apply ext_rel, antisym.
+  - intros x y [Heq Hr]. auto.
+  - intros x y Heq. split.
+    auto. apply Full_intro.
+Qed.
 
 (** Sequencing with [1] has no effect *)
 
@@ -853,13 +863,34 @@ Qed.
 included in a second relation, the second relation also relates the two 
 elements *)
 
-Lemma incl_rel_thm {A:Type} {r r' : rlt A} {x y :A}:
+Lemma incl_rel_thm {A:Type} {r r' : rlt A} {x y: A}:
   r x y ->
   r ≦ r' ->
   r' x y.
 Proof.
   intros H1 H2.
   apply H2 in H1; auto.
+Qed.
+
+(** If an element is in the domain or in the range of a relation, it is in the
+domain or range of any relation in which the relation is included *)
+
+Lemma elt_dom_incl {A:Type} (r r': rlt A) (x: A):
+  r ≦ r' ->
+  In _ (dom r) x ->
+  In _ (dom r') x.
+Proof.
+  intros Hinc [y Hr].
+  exists y. apply Hinc. auto.
+Qed.
+
+Lemma elt_ran_incl {A:Type} (r r': rlt A) (x: A):
+  r ≦ r' ->
+  In _ (ran r) x ->
+  In _ (ran r') x.
+Proof.
+  intros Hinc [y Hr].
+  exists y. apply Hinc. auto.
 Qed.
 
 (** ** Acyclicity and Cyclicity Lemmas *)
@@ -1119,24 +1150,58 @@ Proof.
   auto.
 Qed.
 
-(** ** Facts about the tests of KATs *)
+(** ** Facts and tactics about the tests of KATs *)
+
+Ltac simpl_trt :=
+  match goal with
+  | |- ([?t1] ⋅ ?r ⋅ [?t2]) ?x ?y => exists y; try (exists x); 
+                                 [apply conj; auto | | apply conj; auto]
+  end.
+
+Lemma simpl_trt_hyp {A:Type} (t1 t2: prop_set A) (r: rlt A) (x y: A):
+  ([t1] ⋅ r ⋅ [t2]) x y ->
+  t1 x /\ r x y /\ t2 y.
+Proof.
+  intros [z [z' [Heqx Htx]] [Heqy Hty]].
+  rewrite <- Heqx, Heqy in *.
+  repeat (apply conj); auto.
+Qed.
+  
+Lemma dom_trt {A:Type} (t1 t2: prop_set A) (r: rlt A) (x: A):
+  In _ (dom ([t1] ⋅ r ⋅ [t2])) x ->
+  t1 x /\ (exists y, t2 y /\ r x y).
+Proof.
+  intros [z [y [z' [Heqz Htz] Hr] [Heqy Hty]]].
+  rewrite <- Heqz in Hr.
+  split; auto. exists y; intuition auto.
+Qed.
+
+Lemma ran_trt {A:Type} (t1 t2: prop_set A) (r: rlt A) (x: A):
+  In _ (ran ([t1] ⋅ r ⋅ [t2])) x ->
+  t2 x /\ (exists y, t1 y /\ r y x).
+Proof.
+  intros [z [z' [y [Heqy Hty] Hr] [Heqx Htx]]].
+  rewrite Heqy in Hty; rewrite Heqx in Htx; rewrite Heqx in Hr.
+  split; auto. exists y; intuition auto.
+Qed.
 
 Section KatTests.
 
 Variable A : Type.
-Variable t t' : dset A.
+Variable t t' : prop_set A.
 
 (** The converse of a test is equivalent to the test *)
 
-Lemma injcnv: [t]° ≡ [t].
+Lemma injcnv: [t]° = [t].
 Proof.
+  apply ext_rel.
   compute; firstorder; rewrite <- H; auto.
 Qed.
 
 (** The sequence of two identical tests is equivalent to the test *)
 
-Lemma dtest: [t] ⋅ [t] ≡ [t]. 
-Proof. kat. Qed.
+Lemma dtest: [t] ⋅ [t] = [t]. 
+Proof. apply ext_rel. kat. Qed.
 
 (** The sequence is commutative on tests *)
 
@@ -1202,7 +1267,7 @@ relation, then the first relation whose domain is restricted to the elements
 satisfying the first test is included in the second relation whose domain is
 restricted to the elements satisfying the second test. *)
 
-Lemma incl_dot_test_left {A:Type} (r1 r2: rlt A) (t1 t2: dset A):
+Lemma incl_dot_test_left {A:Type} (r1 r2: rlt A) (t1 t2: prop_set A):
   [t1] ≦ [t2] -> [t1] ⋅ r1 ≦ r2 -> [t1] ⋅ r1 ≦ [t2] ⋅ r2.
 Proof.
   intros Hincl1 Hincl2.
@@ -1218,7 +1283,7 @@ relation, then the first relation whose range is restricted to the elements
 satisfying the first test is included in the second relation whose range is
 restricted to the elements satisfying the second test. *)
 
-Lemma incl_dot_test_right {A:Type} (r1 r2: rlt A) (t1 t2: dset A):
+Lemma incl_dot_test_right {A:Type} (r1 r2: rlt A) (t1 t2: prop_set A):
   [t1] ≦ [t2] -> r1 ⋅ [t1] ≦ r2 -> r1 ⋅ [t1] ≦ r2 ⋅ [t2].
 Proof.
   intros Hincl1 Hincl2.
@@ -1299,4 +1364,20 @@ Proof.
   intros A R.
   rewrite tc_clos_trans.
   apply clos_trans_ind.
+Qed.
+
+Lemma trans_equiv_tc {A:Type} (r: rlt A):
+  r⋅r ≦ r <-> r = r^+.
+Proof.
+  split.
+  - intros Hinc.
+    apply ext_rel, antisym.
+    + kat.
+    + simpl.
+      apply tc_ind.
+      * auto.
+      * intros x y z H1 H2 H3 H4.
+        eapply (Hinc _ z).
+        exists y; auto.
+  - intros Heqtc. rewrite Heqtc. kat.
 Qed.

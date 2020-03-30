@@ -11,6 +11,7 @@ From RelationAlgebra Require Import
 Require Import Ensembles.
 Require Import Relations.
 Require Import Classical_Prop.
+From RC11 Require Import proprel_classic.
 From RC11 Require Import util.
 From RC11 Require Import exec.
 From RC11 Require Import rc11.
@@ -38,6 +39,31 @@ Definition conflicting ex: rlt Event :=
     x <> y /\
     (get_loc x) = (get_loc y).
 
+Lemma conflicting_in_evts_left (ex: Execution) (x y: Event):
+  conflicting ex x y ->
+  In _ (evts ex) x.
+Proof. compute; intuition auto. Qed.
+
+Lemma conflicting_in_evts_right (ex: Execution) (x y: Event):
+  conflicting ex x y ->
+  In _ (evts ex) y.
+Proof. compute; intuition auto. Qed.
+
+Lemma conflicting_one_is_write (ex: Execution) (x y: Event):
+  conflicting ex x y ->
+  is_write x \/ is_write y.
+Proof. compute; intuition auto. Qed.
+
+Lemma conflicting_diff (ex: Execution) (x y: Event):
+  conflicting ex x y ->
+  x <> y.
+Proof. compute; intuition auto. Qed.
+
+Lemma conflicting_same_loc (ex: Execution) (x y: Event):
+  conflicting ex x y ->
+  get_loc x = get_loc y.
+Proof. compute; intuition auto. Qed.
+
 (** Two events form a race if they are conflicting and if they are not related
 by [hb] in any direction *)
 
@@ -55,11 +81,58 @@ Definition pi (ex: Execution) : rlt Event :=
   at_least_one_sc ⊓
   (!(bidir (((sb ex) ⊔ (res_mode Sc (rf ex)))^+))).
 
+Lemma pi_is_conflicting (ex: Execution) (x y: Event):
+  (pi ex) x y -> (conflicting ex) x y.
+Proof. intros [[? _] _]. auto. Qed.
+
+Lemma pi_in_evts_left (ex: Execution) (x y: Event):
+  pi ex x y ->
+  In _ (evts ex) x.
+Proof. intros. eauto using conflicting_in_evts_left, pi_is_conflicting. Qed.
+
+Lemma pi_in_evts_right (ex: Execution) (x y: Event):
+  pi ex x y ->
+  In _ (evts ex) y.
+Proof. intros. eauto using conflicting_in_evts_right, pi_is_conflicting. Qed.
+
+Lemma pi_one_is_write (ex: Execution) (x y: Event):
+  pi ex x y ->
+  is_write x \/ is_write y.
+Proof. intros. eauto using conflicting_one_is_write, pi_is_conflicting. Qed.
+
+Lemma pi_diff (ex: Execution) (x y: Event):
+  pi ex x y ->
+  x <> y.
+Proof. intros. eauto using conflicting_diff, pi_is_conflicting. Qed.
+
+Lemma pi_same_loc (ex: Execution) (x y: Event):
+  pi ex x y ->
+  get_loc x = get_loc y.
+Proof. intros. eauto using conflicting_same_loc, pi_is_conflicting. Qed.
+
+Lemma pi_at_least_one_sc (ex: Execution) (x y: Event):
+  pi ex x y ->
+  at_least_one_sc x y.
+Proof. compute; intuition auto. Qed.
+
+Lemma pi_not_sbrfsc (ex: Execution) (x y: Event):
+  pi ex x y ->
+  ~((sb ex ⊔ (res_mode Sc (rf ex)))^+ x y).
+Proof.
+  compute; intuition auto.
+Qed.
+
+Lemma pi_not_cnv_sbrfsc (ex: Execution) (x y: Event):
+  pi ex x y ->
+  ~((sb ex ⊔ (res_mode Sc (rf ex)))^+ y x).
+Proof.
+  compute; intuition auto.
+Qed.
+
 (** An execution is pi-conflicting if it contains two pi-conflicting events *)
 
 Definition expi (ex: Execution) :=
   exists x y, (pi ex) x y.
-
 
 (*
 Definition c_events (e: Execution) : rlt Event :=
@@ -108,7 +181,7 @@ Ltac solve_test_ineq :=
   intros x y [Heq Hmode]; split; auto;
   unfold Mse; unfold M in Hmode;
   destruct (get_mode x); simpl in *;
-  intuition eauto.
+  intuition congruence.
   
 (** ** SC-consistent prefixes *)
 
@@ -187,15 +260,16 @@ Lemma rf_prefix_in_sbrfsc_ex {pre ex: Execution}:
 Proof.
   intros Hval H11cons Hpre Hnoconflict x y Hrfpre.
   (* We suppose that x and y are related by ex.rf *)
-  apply (rf_prefix_incl Hpre) in Hrfpre as H.
+  apply (rf_prefix_incl Hpre) in Hrfpre as Hrf.
   destruct (classic ((get_mode x) = Sc /\ (get_mode y) = Sc)) 
     as [[Hxsc Hysc] | HNotSc].
   (* If x and y are Sc, then they are related by (ex.rf)_sc *)
   { apply tc_incl_itself. right.
-    exists y; try (exists x); try (apply M_get_mode_refl); auto. }
+    exists y; try (exists x); try (apply M_get_mode_refl); auto;
+    split; auto. }
   destruct (classic ((((sb ex) ⊔ (res_mode Sc (rf ex))) ^+) x y)) 
     as [Hres | Hcontr]. { auto. }
-  (* We suppose that x and y are not both sc events and that they are not
+  (* We suppose that x and y are not two sc events and that they are not
     related by ex.(sb U rf_sc)^+ *)
   exfalso.
   destruct (classic ((((sb ex) ⊔ (res_mode Sc (rf ex))) ^+) y x)) 
@@ -243,7 +317,8 @@ Proof.
     as [[Hxsc Hysc] | HNotSc].
   (* If x and y are Sc, then they are related by (ex.rf)_sc *)
   { right.
-    exists y; try (exists x); try (apply M_get_mode_refl); auto. }
+    exists y; try (exists x); try (apply M_get_mode_refl); auto;
+    split; auto. }
   destruct (classic ((((sb ex) ⊔ (res_mode Sc (rf ex))) ^+) x y)) 
     as [Hres | Hcontr]. { left. auto. }
   (* We suppose that x and y are not both sc events and that they are not
@@ -294,7 +369,7 @@ Proof.
     as [[Hxsc Hysc] | HNotSc].
   (* If x and y are Sc, then they are related by (ex.rf)_sc *)
   { right.
-    exists y; try (exists x); try (apply M_get_mode_refl); auto. }
+    exists y; try (exists x); try (apply M_get_mode_refl); auto; split; auto. }
   destruct (classic ((((sb ex) ⊔ (res_mode Sc (rf ex))) ^+) x y)) 
     as [Hres | Hcontr]. { left. auto. }
   (* We suppose that x and y are not both sc events and that they are not

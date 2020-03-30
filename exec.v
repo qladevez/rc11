@@ -10,8 +10,9 @@ Require Import Ensembles.
 Require Import Classical_Prop.
 Require Import Nat.
 From RC11 Require Import util.
+From RC11 Require Import proprel_classic.
 From RelationAlgebra Require Import 
-  lattice prop monoid rel kat_tac normalisation kleene kat.
+  lattice prop monoid rel kat_tac normalisation kleene kat rewriting.
 
 Open Scope rel_notations.
 
@@ -65,6 +66,7 @@ Definition eq_mode (m1 m2 : Mode) : bool :=
 Lemma eq_mode_refl (m: Mode):
   eq_mode m m.
 Proof. destruct m; auto. Qed.
+
 
 (** There is a strict partial order on modes such that:
 
@@ -247,119 +249,35 @@ Import OEEvt.
 
 (** ** Identity relations *)
 
-Definition E : dset Event := top.
+Definition E : prop_set Event := top.
 
-Definition R : dset Event :=
+Definition R : prop_set Event :=
   fun e =>
     match e with
     | Read _ _ _ => top
     | _ => bot
     end.
 
-Definition W : dset Event :=
+Definition W : prop_set Event :=
   fun e =>
     match e with
     | Write _ _ _ => top
     | _ => bot
     end.
 
-Definition F : dset Event :=
+Definition F : prop_set Event :=
   fun e =>
     match e with
     | Fence _ => top
     | _ => bot
     end.
 
-Definition M (m:Mode) : dset Event :=
-  fun e =>
-    if (eq_mode (get_mode e) m) then top else bot.
+Definition M (m:Mode) : prop_set Event :=
+  fun e => (get_mode e) = m.
 
-Lemma M_get_mode_equiv (e: Event) (m: Mode):
-  (M m) e <-> (get_mode e) = m.
-Proof.
-  split;
-  unfold M; destruct (get_mode e); simpl;
-  destruct m; simpl;
-  intuition congruence.
-Qed.
-
-Lemma M_get_mode_refl (e: Event) (m: Mode):
-  [M m] e e <-> (get_mode e) = m.
-Proof.
-  split; intros H.
-  - unfold inj in H. simpl in H.
-    destruct H as [_ H].
-    apply M_get_mode_equiv. auto.
-  - split; auto.
-    apply M_get_mode_equiv. auto.
-Qed.
-
-Definition Mse (m: Mode) : dset Event :=
+Definition Mse (m: Mode) : prop_set Event :=
   fun e =>
     if (stronger_or_eq_mode (get_mode e) m) then top else bot.
-
-(*
-(** Every event is in relation [(E_eqmode m)] with itself if and only if it has 
-mode [m] *)
-
-Definition E_eqmode (m: Mode) : rlt Event :=
-  fun x => fun y => (x = y) /\
-                    (get_mode x) = m.
-
-Definition 
-
-(** Every write event is in relation [(W_eqmode m)] with itself if and only if it
-has mode [m] *)
-
-Definition W_eqmode (m: Mode) : rlt Event :=
-  [W] ⋅ (E_eqmode m).
-
-(** Every fence event is in relation [(F_eqmode m)] with itself if and only if it
-has mode [m] *)
-
-Definition F_eqmode (m: Mode) : rlt Event :=
-  [F] ⋅ (E_eqmode m).
-
-(** Every read event is in relation [(R_eqmode m)] with itself if and only if it
-has mode [m] *)
-
-Definition R_eqmode (m: Mode) : rlt Event :=
-  [R] ⋅ (E_eqmode m).
-
-(** Every event is in relation [(E_seqmode m)] with itself if and only if it has
-a mode strong or equal to [m] *)
-
-Definition E_seqmode (m: Mode) : rlt Event :=
-  fun x => fun y => (x = y) /\
-                    stronger_or_eq_mode (get_mode x) m.
-
-Lemma e_seqmode_refl : forall x m m',
-  (get_mode x) = m' ->
-  stronger_or_eq_mode m' m ->
-  (E_seqmode m) x x.
-Proof.
-  intros x m m' Hmode Hstr.
-  split; auto. rewrite Hmode. auto.
-Qed.
-
-(** Every write event is in relation [(W_seqmode m)] with itself if and only if 
-it has a mode strong or equal to [m] *)
-
-Definition W_seqmode (m: Mode) : rlt Event :=
-  [W] ⋅ (E_seqmode m).
-
-(** Every read event is in relation [(R_seqmode m)] with itself if and only if 
-it has a mode strong or equal to [m] *)
-
-Definition R_seqmode (m: Mode) : rlt Event :=
-  [R] ⋅ (E_seqmode m).
-
-(** Every fence event is in relation [(F_seqmode m)] with itself if and only if
-it has a mode stronger or equal to [m] *)
-
-Definition F_seqmode (m: Mode) : rlt Event :=
-  [F] ⋅ (E_seqmode m).
-*)
 
 (** No event can be both a write event an read event *)
 
@@ -433,8 +351,7 @@ Proof.
   intros m r x y [Hfst [Hsnd Hr]].
   exists y.
   - exists x; try split; auto.
-    apply M_get_mode_equiv. auto.
-  - split; [|apply M_get_mode_equiv]; auto.
+  - split; auto.
 Qed.
 
 Lemma res_mode_simp {m:Mode} {r: relation _} {x y: _}:
@@ -446,8 +363,8 @@ Proof.
   intros H.
   destruct H as [z [z' [H1 H2] H3] [H4 H5]]. 
   repeat (try split).
-  - apply M_get_mode_equiv. auto.
-  - apply M_get_mode_equiv. rewrite H4 in H5. auto.
+  - auto.
+  - rewrite H4 in H5. auto.
   - rewrite <- H1 in H3. rewrite H4 in H3. auto.
 Qed.
 
@@ -512,13 +429,17 @@ to 0, is sequenced before all the events of the program and after no events *)
 
 Definition valid_sb (evts: Ensemble Event) (sb : rlt Event) : Prop :=
   (linear_strict_order sb evts) /\
-  (Included _ (udr sb) (evts)) /\
+  (sb = [I evts] ⋅ sb ⋅ [I evts]) /\
   (forall (l : Loc),
   exists (e: Event),
     (get_loc e) = Some l /\
     (get_val e) = Some O /\
     ~(In _ (ran sb) e) /\
     forall e', In _ (ran sb) e' -> sb e e').
+
+Ltac destruct_sb_v H :=
+  destruct H as [Hsb_lso [Hsb_in_e Hsbinit]].
+
 
 (** ** Read-modify-write relation *)
 
@@ -547,7 +468,10 @@ Definition valid_rmw_pair (sb : rlt Event) (r: Event) (w: Event) : Prop :=
 
 Definition valid_rmw (evts: Ensemble Event) (sb : rlt Event) (rmw : rlt Event) : Prop :=
   (forall r w, rmw r w -> valid_rmw_pair sb r w) /\
-  (Included _ (udr rmw) evts).
+  (rmw = [I evts] ⋅ rmw ⋅ [I evts]).
+
+Ltac destruct_rmw_v H :=
+  destruct H as [Hrmw_vpairs Hrmw_in_e].
 
 (** ** Reads-from relation *)
 
@@ -560,14 +484,15 @@ exactly one write event that wrote the value it reads
 Definition valid_rf (evts : Ensemble Event) (rf : rlt Event) : Prop :=
   (forall w r, 
     rf w r ->
-    (In _ evts w /\
-     In _ evts r /\
-     (get_loc w) = (get_loc r) /\
+    ((get_loc w) = (get_loc r) /\
      (get_val w) = (get_val r))) /\
-  (Included _ (udr rf) evts) /\
+  (rf = [I evts] ⋅ rf ⋅ [I evts]) /\
   ([W]⋅rf⋅[R] = rf) /\
   (forall w1 w2 r,
     (rf w1 r) /\ (rf w2 r) -> w1 = w2).
+
+Ltac destruct_rf_v H :=
+  destruct H as [Hrfco [Hrf_in_e [Hrfwr Hrfun]]].
 
 (** The sequence of read-from and of the converse of read-from is a reflexive
 relation. This means that each read can read the value of only one write *)
@@ -578,8 +503,8 @@ Lemma rf_unique (evts: Ensemble Event) (rf: rlt Event):
 Proof.
   intros Hval x y [z Hrf Hrfconv].
   simp_cnv Hrfconv.
-  destruct Hval as [_ [_ [_ H]]].
-  generalize (H x y z). 
+  destruct_rf_v Hval.
+  generalize (Hrfun x y z). 
   intuition auto.
 Qed.
 
@@ -589,52 +514,46 @@ Lemma rf_incl_same_loc (evts: Ensemble Event) (rf r: rlt Event):
   rf ≦ res_eq_loc r.
 Proof.
   intros Hval Hincl x y Hrf.
-  destruct Hval as [Hval _].
-  destruct (Hval _ _ Hrf) as [_ [_ [Hsameloc _]]].
+  destruct_rf_v Hval.
+  destruct (Hrfco _ _ Hrf) as [Hsameloc _].
   split; auto. apply Hincl; auto.
 Qed.
 
-Lemma rf_valid_test_right (evts: Ensemble Event) (rf: rlt Event) (t: dset Event):
+Lemma rf_valid_test_right (evts: Ensemble Event) (rf: rlt Event) (t: prop_set Event):
   valid_rf evts rf ->
   valid_rf evts (rf ⋅ [t]).
 Proof.
   intros Hval.
-  unfold valid_rf in *.
-  destruct Hval as [Hv1 [Hv4 [Hv2 Hv3]]].
+  unfold valid_rf.
+  destruct_rf_v Hval.
   split;[|split;[|split]].
-  - intros w r.
-    intros [z Hrf [Heq _]].
-    rewrite Heq in Hrf.
-    destruct (Hv1 w r Hrf) as [? [? [? ?]]].
-    split; [|split;[|split]]; auto.
-  - transitivity (udr rf); auto.
-    apply test_right_udr.
-  - rewrite <- Hv2 at 2. apply ext_rel. kat.
+  - intros w1 w2 r. eapply Hrfco.
+    destruct r as [? Hr [Heq _]].
+    rewrite Heq in Hr; auto.
+  - rewrite Hrf_in_e at 1. apply ext_rel. kat.
+  - rewrite <- Hrfwr at 2. apply ext_rel. kat.
   - intros w1 w2 r. intros [Hw1 Hw2].
-    apply (Hv3 w1 w2 r).
+    apply (Hrfun w1 w2 r).
     split.
     + destruct Hw1 as [z H [Heq _]]. rewrite Heq in H. auto.
     + destruct Hw2 as [z H [Heq _]]. rewrite Heq in H. auto.
 Qed.
 
-Lemma rf_valid_test_left (evts: Ensemble Event) (rf: rlt Event) (t: dset Event):
+Lemma rf_valid_test_left (evts: Ensemble Event) (rf: rlt Event) (t: prop_set Event):
   valid_rf evts rf ->
   valid_rf evts ([t] ⋅ rf).
 Proof.
   intros Hval.
-  unfold valid_rf in *.
-  destruct Hval as [Hv1 [Hv4 [Hv2 Hv3]]].
+  unfold valid_rf.
+  destruct_rf_v Hval.
   split;[|split;[|split]].
-  - intros w r.
-    intros [z [Heq _] Hrf].
-    rewrite <- Heq in Hrf.
-    destruct (Hv1 w r Hrf) as [? [? [? ?]]].
-    split; [|split;[|split]]; auto.
-  - transitivity (udr rf); auto.
-    apply test_left_udr.
-  - rewrite <- Hv2 at 2. apply ext_rel. kat.
+  - intros w1 w2 r. eapply Hrfco.
+    destruct r as [? [Heq _] Hr].
+    rewrite <- Heq in Hr; auto.
+  - rewrite Hrf_in_e at 1. apply ext_rel. kat.
+  - rewrite <- Hrfwr at 2. apply ext_rel. kat.
   - intros w1 w2 r. intros [Hw1 Hw2].
-    apply (Hv3 w1 w2 r).
+    apply (Hrfun w1 w2 r).
     split.
     + destruct Hw1 as [z [Heq _] H]. rewrite <- Heq in H. auto.
     + destruct Hw2 as [z [Heq _] H]. rewrite <- Heq in H. auto.
@@ -661,6 +580,9 @@ Definition valid_mo (evts: Ensemble Event) (mo : rlt Event) : Prop :=
                (get_loc x) = (get_loc y)) /\
   (partial_order mo evts) /\
   (forall l, total_rel (mo_for_loc mo l) evts).
+
+Ltac destruct_mo_v H :=
+  destruct H as [Hmoww [Hmosameloc [Hmopo Hmotot]]].
 
 (** * Executions *)
 
@@ -696,17 +618,8 @@ Definition valid_exec (e: Execution) : Prop :=
 Ltac destruct_val_exec H :=
   destruct H as [Hevts_v [Hsb_v [Hrmw_v [Hrf_v Hmo_v]]]].
 
-Ltac destruct_sb_v H :=
-  destruct H as [Hsb_lso [Hsb_in_e Hsbinit]].
-
-Ltac destruct_rmw_v H :=
-  destruct H as [Hrmw_vpairs Hrmw_in_e].
-
-Ltac destruct_rf_v H :=
-  destruct H as [Hrfco [Hrf_in_e [Hrfwr Hrfun]]].
-
-Ltac destruct_mo_v H :=
-  destruct H as [Hmoww [Hmosameloc [Hmopo Hmotot]]].
+Ltac inverse_val_exec H :=
+  inversion H as [Hevts_v [Hsb_v [Hrmw_v [Hrf_v Hmo_v]]]].
 
 (** *** Lemmas about valid executions *)
 
@@ -714,6 +627,34 @@ Section ValidExecs.
 
 Variable ex : Execution.
 Variable val_exec : valid_exec ex.
+
+(** In a valid execution, events related by sequenced-before belong to the set
+of events of the execution *)
+
+Lemma sb_orig_evts (x y : Event):
+  (sb ex) x y ->
+  In _ (evts ex) x.
+Proof.
+  intros Hsb.
+  destruct_val_exec val_exec.
+  destruct Hsb_v as [_ [Hsb_v _]].
+  rewrite Hsb_v in Hsb.
+  destruct Hsb as [z [z' [_ Ht] _] _].
+  auto.
+Qed.
+
+Lemma sb_dest_evts (x y : Event):
+  (sb ex) x y ->
+  In _ (evts ex) y.
+Proof.
+  intros Hsb.
+  destruct_val_exec val_exec.
+  destruct Hsb_v as [_ [Hsb_v _]].
+  rewrite Hsb_v in Hsb.
+  destruct Hsb as [z _ [Heq Ht]].
+  rewrite Heq in Ht.
+  auto.
+Qed.
 
 (** In a valid execution, the origin of a reads-from is a write event *)
 
@@ -723,8 +664,8 @@ Lemma rf_orig_write x y:
 Proof.
   intros Hrf.
   destruct_val_exec val_exec.
-  destruct Hrf_v as [_ [_ [Hrf_v _]]].
-  rewrite <- Hrf_v in Hrf.
+  destruct_rf_v Hrf_v.
+  rewrite <- Hrfwr in Hrf.
   destruct Hrf as [z [z' Hw Hrf] Hr].
   destruct Hw as [Heq Hw].
   destruct x. simpl in Hw.
@@ -741,8 +682,8 @@ Lemma rf_dest_read x y:
 Proof.
   intros Hrf.
   destruct_val_exec val_exec.
-  destruct Hrf_v as [_ [_ [Hrf_v _]]].
-  rewrite <- Hrf_v in Hrf.
+  destruct_rf_v Hrf_v.
+  rewrite <- Hrfwr in Hrf.
   destruct Hrf as [z [z' Hw Hrf] Hr].
   destruct Hr as [Heq Hr].
   rewrite Heq in Hr.
@@ -761,8 +702,8 @@ Lemma rf_same_loc x y:
 Proof.
   intros Hrf.
   destruct_val_exec val_exec.
-  destruct Hrf_v as [Hrf_v _].
-  destruct (Hrf_v x y Hrf) as [_ [_ [Hloc _]]].
+  destruct_rf_v Hrf_v.
+  destruct (Hrfco x y Hrf) as [Hloc _].
   auto.
 Qed.
 
@@ -775,8 +716,9 @@ Lemma rf_orig_evts (x y: Event):
 Proof.
   intros Hrf.
   destruct_val_exec val_exec.
-  destruct Hrf_v as [Hrf_v _].
-  apply Hrf_v in Hrf as [Hfin _].
+  destruct_rf_v Hrf_v.
+  rewrite Hrf_in_e in Hrf.
+  destruct Hrf as [z [z' [_ Ht] _] _].
   auto.
 Qed.
 
@@ -786,8 +728,38 @@ Lemma rf_dest_evts (x y : Event):
 Proof.
   intros Hrf.
   destruct_val_exec val_exec.
-  destruct Hrf_v as [Hrf_v _].
-  apply Hrf_v in Hrf as [_ [Hfin _]].
+  destruct_rf_v Hrf_v.
+  rewrite Hrf_in_e in Hrf.
+  destruct Hrf as [z _ [Heq Ht]].
+  rewrite Heq in Ht.
+  auto.
+Qed.
+
+(** In a valid execution, events related by read-modify-write order belong to 
+the set of events of the execution *)
+
+Lemma rmw_orig_evts (x y : Event):
+  (rmw ex) x y ->
+  In _ (evts ex) x.
+Proof.
+  intros Hrmw.
+  destruct_val_exec val_exec.
+  destruct_rmw_v Hrmw_v.
+  rewrite Hrmw_in_e in Hrmw.
+  destruct Hrmw as [z [z' [_ Ht] _] _].
+  auto.
+Qed.
+
+Lemma rmw_dest_evts (x y : Event):
+  (rmw ex) x y ->
+  In _ (evts ex) y.
+Proof.
+  intros Hrmw.
+  destruct_val_exec val_exec.
+  destruct_rmw_v Hrmw_v.
+  rewrite Hrmw_in_e in Hrmw.
+  destruct Hrmw as [z _ [Heq Ht]].
+  rewrite Heq in Ht.
   auto.
 Qed.
 
@@ -802,7 +774,9 @@ Proof.
   destruct_val_exec val_exec.
   destruct_mo_v Hmo_v.
   destruct Hmopo as [Hmo_v _].
-  apply Hmo_v. left. exists y. auto.
+  rewrite Hmo_v in Hmo.
+  destruct Hmo as [z [z' [_ Ht] _] _].
+  auto.
 Qed.
 
 Lemma mo_dest_evts (x y : Event):
@@ -813,7 +787,10 @@ Proof.
   destruct_val_exec val_exec.
   destruct_mo_v Hmo_v.
   destruct Hmopo as [Hmo_v _].
-  apply Hmo_v. right. exists x. auto.
+  rewrite Hmo_v in Hmo.
+  destruct Hmo as [z _ [Heq Ht]].
+  rewrite Heq in Ht.
+  auto.
 Qed.
 
 (** In a valid execution, the origin of a modification-order is a write *)
@@ -866,30 +843,6 @@ Proof.
   auto.
 Qed.
 
-
-
-(** In a valid execution, events related by sequenced-before belong to the set
-of events of the execution *)
-
-Lemma sb_orig_evts (x y : Event):
-  (sb ex) x y ->
-  In _ (evts ex) x.
-Proof.
-  intros Hsb.
-  destruct_val_exec val_exec.
-  destruct Hsb_v as [_ [Hsb_v _]].
-  apply Hsb_v. left; exists y; auto.
-Qed.
-
-Lemma sb_dest_evts (x y : Event):
-  (sb ex) x y ->
-  In _ (evts ex) y.
-Proof.
-  intros Hsb.
-  destruct_val_exec val_exec.
-  destruct Hsb_v as [_ [Hsb_v _]].
-  apply Hsb_v. right; exists x; auto.
-Qed.
 
 End ValidExecs.
   

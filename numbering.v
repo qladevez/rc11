@@ -13,6 +13,7 @@ Require Import Lia.
 Require Import Classical_Prop.
 From RC11 Require Import util.
 From RC11 Require Import exec.
+From RC11 Require Import proprel_classic.
 From RC11 Require Import prefix.
 From RC11 Require Import rc11.
 From RC11 Require Import conflict.
@@ -71,6 +72,24 @@ Proof.
   lia.
 Qed.
 
+Lemma sb_num_ord (ex: Execution) (x y: Event):
+  sb ex x y ->
+  (numbering ex y) >= (numbering ex x).
+Proof.
+  intros Hsb.
+  apply numbering_coherent_rtc, rtc_incl_itself.
+  left; auto.
+Qed.
+
+Lemma rf_num_ord (ex: Execution) (x y: Event):
+  rf ex x y ->
+  (numbering ex y) >= (numbering ex x).
+Proof.
+  intros Hsb.
+  apply numbering_coherent_rtc, rtc_incl_itself.
+  right; auto.
+Qed.
+
 (** In every execution, there is a last event whose numbering is greater than
 the one of all the other events *)
 
@@ -79,6 +98,7 @@ Axiom numbering_bounded :
 
 Definition has_number (ex: Execution) (e: Event) (k:nat) : Prop :=
   numbering ex e = k.
+
 
 (** If an execution is a prefix of the other, the events that are in the prefix
 have the same numbering in the execution and in the prefix *)
@@ -92,16 +112,54 @@ Module NumberingPrefix (Numbering: Numbering).
 
 Import Numbering.
 
+(** Tests if the numbering of an event is Less or Equal to a bound *)
+
+Definition NLE (ex: Execution) (b: nat) : prop_set Event :=
+  fun e => b >= (numbering ex e).
+
+Lemma nle_double (ex: Execution) (k1 k2: nat):
+  k1 < k2 ->
+  [NLE ex k1]⋅[NLE ex k2] = [NLE ex k1].
+Proof.
+  intros Hord. apply ext_rel, antisym.
+  - intros x y [z [Heq1 Hr1] [Heq2 Hr2]].
+    rewrite Heq2 in Heq1, Hr2. split; auto.
+  - intros x y [Heq Hr].
+    exists x; split; auto.
+    unfold NLE in Hr. unfold NLE. lia.
+Qed.
+
 Definition bounded_exec (ex: Execution) (n: nat) : Execution :=
-  let new_evts := Intersection _ (evts ex) (fun x => n >= numbering ex x) in
   {|
-    exec.evts := new_evts;
-    exec.sb := res_eset new_evts (sb ex);
-    exec.rmw := res_eset new_evts (rmw ex);
-    exec.rf := res_eset new_evts (rf ex);
-    exec.mo := res_eset new_evts (mo ex);
+    exec.evts := Intersection _ (evts ex) (fun x => n >= numbering ex x);
+    exec.sb := [NLE ex n] ⋅ (sb ex) ⋅ [NLE ex n];
+    exec.rmw := [NLE ex n] ⋅ (rmw ex) ⋅ [NLE ex n];
+    exec.rf := [NLE ex n] ⋅ (rf ex) ⋅ [NLE ex n];
+    exec.mo := [NLE ex n] ⋅  (mo ex) ⋅ [NLE ex n];
   |}.
 
+Lemma simpl_sb_be (ex: Execution) (n:nat):
+  sb (bounded_exec ex n) = [NLE ex n] ⋅ (sb ex) ⋅ [NLE ex n].
+Proof. compute; auto. Qed.
+
+Lemma simpl_rmw_be (ex: Execution) (n:nat):
+  rmw (bounded_exec ex n) = [NLE ex n] ⋅ (rmw ex) ⋅ [NLE ex n].
+Proof. compute; auto. Qed.
+
+Lemma simpl_rf_be (ex: Execution) (n:nat):
+  rf (bounded_exec ex n) = [NLE ex n] ⋅ (rf ex) ⋅ [NLE ex n].
+Proof. compute; auto. Qed.
+
+Lemma simpl_mo_be (ex: Execution) (n:nat):
+  mo (bounded_exec ex n) = [NLE ex n] ⋅ (mo ex) ⋅ [NLE ex n].
+Proof. compute; auto. Qed.
+
+Create HintDb bounded_exec_db.
+
+Hint Rewrite simpl_sb_be simpl_rmw_be simpl_rf_be simpl_mo_be : bounded_exec_db.
+
+Tactic Notation "rew" "bounded" := autorewrite with bounded_exec_db.
+Tactic Notation "rew" "bounded" "in" hyp(H) := autorewrite with bounded_exec_db in H.
 
 (** In a valid execution, if two events are related by [sb ex ⊔ rf ex], they 
 belong to the events of [ex] *)
@@ -109,11 +167,21 @@ belong to the events of [ex] *)
 Lemma sbrf_in_events (ex: Execution) (x y : Event) :
   valid_exec ex ->
   ((sb ex) ⊔ (rf ex)) x y ->
-  In _ (evts ex) x /\
-  In _ (evts ex) y.
+  In _ (evts ex) x /\ In _ (evts ex) y.
 Proof.
   intros Hval [Hsb | Hrf]; split;
   eauto using sb_orig_evts, sb_dest_evts, rf_orig_evts, rf_dest_evts.
+Qed.
+
+Lemma I_evts_bounded_le_bnd (ex: Execution) (n: nat):
+  [I (evts (bounded_exec ex n))] = [NLE ex n] ⋅ [I (evts ex)].
+Proof.
+  apply ext_rel, antisym. 
+  - intros x y [Heq Hinter]. destruct Hinter.
+    exists x; split; auto.
+  - intros x y [z [Heq Hr] [Heq1 Hr1]].
+    rewrite <- Heq in Hr1. rewrite Heq1 in Heq.
+    split; [|split]; auto.
 Qed.
 
 (** Any bounding of a valid execution is a prefix of this execution *)
@@ -130,48 +198,57 @@ Proof.
     apply (numbering_coherent _ _ _) in Hnum.
     intros H. destruct H as [y Hevts Hbound]; split.
     + auto.
-    + unfold In in *; lia.
-  - auto.
+    + unfold_in; lia.
+  - rew bounded.
+    repeat (apply conj);
+    destruct_val_exec Hval.
+    + destruct_sb_v Hsb_v. rewrite Hsb_in_e, I_evts_bounded_le_bnd. kat_eq.
+    + destruct_rf_v Hrf_v. rewrite Hrf_in_e, I_evts_bounded_le_bnd. kat_eq.
+    + destruct_mo_v Hmo_v. destruct Hmopo as [Hmo_in_e _].
+      rewrite Hmo_in_e, I_evts_bounded_le_bnd. kat_eq.
+    + destruct_rmw_v Hrmw_v. rewrite Hrmw_in_e, I_evts_bounded_le_bnd. kat_eq.
 Qed.
 
 (** If we have to boundings of an execution, the smallest is a prefix of the
 biggest *)
 
 Lemma two_ord_bounds_pre (ex: Execution) (k1 k2: nat):
+  valid_exec ex ->
   k1 < k2 ->
   prefix (bounded_exec ex k1) (bounded_exec ex k2).
 Proof.
-  intros Hord.
-  repeat (apply conj); simpl.
+  intros Hval Hord.
+  inverse_val_exec Hval.
+  repeat (apply conj).
   - destruct ex. apply inter_incl. intros x.
     unfold In. intros H. lia.
-  - intros a b [Hsb|Hsb] Hin;
-    apply res_eset_incl in Hsb as Hrel;
-    apply res_eset_elt_left in Hsb as Hsb;
-    unfold In in *; apply Intersection_intro; unfold In in *.
-    1,3: destruct Hsb; auto.
-    + destruct Hin; unfold In in *;
-      assert (numbering ex x >= numbering ex a).
-      { apply numbering_coherent_rtc. apply rtc_incl_itself.
-        left; auto. }
-      lia.
-    + destruct Hin; unfold In in *.
-      assert (numbering ex x >= numbering ex a).
-      apply numbering_coherent_rtc. apply rtc_incl_itself.
-      right; auto.
-      lia.
-  - rewrite res_eset_double'; auto;
-    intros x [H1 H2]; split; auto;
-    unfold In in *; lia.
-  - rewrite res_eset_double'; auto;
-    intros x [H1 H2]; split; auto;
-    unfold In in *; lia.
-  - rewrite res_eset_double'; auto;
-    intros x [H1 H2]; split; auto;
-    unfold In in *; lia.
-  - rewrite res_eset_double'; auto;
-    intros x [H1 H2]; split; auto;
-    unfold In in *; lia.
+  - intros a b [Hsb|Hrf] Hin; 
+    apply in_intersection in Hin as [Hevts Hbord]; unfold_in.
+    + rew bounded in Hsb. apply simpl_trt_hyp in Hsb as [_ [Hr _]].
+      apply sb_num_ord in Hr as Habord. split.
+      * eapply sb_orig_evts; eauto.
+      * unfold_in; lia.
+    + rew bounded in Hrf. apply simpl_trt_hyp in Hrf as [_ [Hr _]].
+      apply rf_num_ord in Hr as Habord. split.
+      * eapply rf_orig_evts; eauto.
+      * unfold_in; lia.
+  - rew bounded. rewrite I_evts_bounded_le_bnd.
+    rewrite <- (nle_double ex _ _ Hord) at 1.
+    rewrite <- (nle_double ex _ _ Hord) at 2.
+    destruct_sb_v Hsb_v. rewrite Hsb_in_e. kat_eq.
+  - rew bounded. rewrite I_evts_bounded_le_bnd.
+    rewrite <- (nle_double ex _ _ Hord) at 1.
+    rewrite <- (nle_double ex _ _ Hord) at 2.
+    destruct_rf_v Hrf_v. rewrite Hrf_in_e. kat_eq.
+  - rew bounded. rewrite I_evts_bounded_le_bnd.
+    rewrite <- (nle_double ex _ _ Hord) at 1.
+    rewrite <- (nle_double ex _ _ Hord) at 2.
+    destruct_mo_v Hmo_v. destruct Hmopo as [Hmo_in_e _].
+    rewrite Hmo_in_e. kat_eq.
+  - rew bounded. rewrite I_evts_bounded_le_bnd.
+    rewrite <- (nle_double ex _ _ Hord) at 1.
+    rewrite <- (nle_double ex _ _ Hord) at 2.
+    destruct_rmw_v Hrmw_v. rewrite Hrmw_in_e. kat_eq.
 Qed.
 
 (** There is a bound high enough so that the bounding of the execution 
@@ -182,20 +259,16 @@ Lemma bounded_execution_itself_exists (ex: Execution):
   exists k, ex = (bounded_exec ex k).
 Proof.
   destruct (numbering_bounded ex) as [k Hsup].
-  exists (numbering ex k). destruct ex.
-  unfold bounded_exec. f_equal; simpl;
-  destruct_val_exec H;
-  rewrite (tautology_makes_fullset _ Hsup), inter_fullset.
-  - auto.
-  - destruct_sb_v Hsb_v. simpl in *.
-    auto using res_eset_udr.
-  - destruct_rmw_v Hrmw_v. simpl in *.
-    auto using res_eset_udr.
-  - destruct_rf_v Hrf_v. simpl in *.
-    auto using res_eset_udr.
-  - destruct_mo_v Hmo_v. simpl in *.
-    destruct Hmopo as [? _].
-    auto using res_eset_udr.
+  intros Hval.
+  exists (numbering ex k).
+  apply tautology_makes_fullset in Hsup. destruct ex.
+  unfold bounded_exec. rew bounded.
+  unfold NLE. rewrite Hsup. f_equal.
+  - simpl. erewrite inter_fullset. auto.
+  - unfold exec.sb. rewrite fullset_one. kat_eq.
+  - unfold exec.rmw. rewrite fullset_one. kat_eq.
+  - unfold exec.rf. rewrite fullset_one. kat_eq.
+  - unfold exec.mo. rewrite fullset_one. kat_eq.
 Qed.
 
 (** ** Smallest conflicting prefix *)
@@ -247,6 +320,69 @@ Definition minimal_conflicting_pair (ex: Execution) (bound: nat) (j k: Event) :=
   (smallest_conflicting_bounding ex bound) /\
   (pi (bounded_exec ex bound) j k).
 
+Lemma mcp_is_pi (ex: Execution) (bound:nat) (j k: Event):
+  minimal_conflicting_pair ex bound j k ->
+  pi (bounded_exec ex bound) j k.
+Proof. intros [_ ?]. auto. Qed.
+
+Lemma mcp_in_evts_left (ex: Execution) (x y: Event) (bound:nat):
+  minimal_conflicting_pair ex bound x y ->
+  In _ (evts (bounded_exec ex bound)) x.
+Proof. intros. eauto using pi_in_evts_left, mcp_is_pi. Qed.
+
+Lemma mcp_in_evts_right (ex: Execution) (x y: Event) (bound:nat):
+  minimal_conflicting_pair ex bound x y ->
+  In _ (evts (bounded_exec ex bound)) y.
+Proof. intros. eauto using pi_in_evts_right, mcp_is_pi. Qed.
+
+Lemma mcp_one_is_write (ex: Execution) (x y: Event) (bound:nat):
+  minimal_conflicting_pair ex bound x y ->
+  is_write x \/ is_write y.
+Proof. intros. eauto using pi_one_is_write, mcp_is_pi. Qed.
+
+Lemma mcp_diff (ex: Execution) (x y: Event) (bound:nat):
+  minimal_conflicting_pair ex bound x y ->
+  x <> y.
+Proof. intros. eauto using pi_diff, mcp_is_pi. Qed.
+
+Lemma mcp_same_loc (ex: Execution) (x y: Event) (bound:nat):
+  minimal_conflicting_pair ex bound x y ->
+  get_loc x = get_loc y.
+Proof. intros. eauto using pi_same_loc, mcp_is_pi. Qed.
+
+Lemma mcp_at_least_one_sc (ex: Execution) (x y: Event) (bound:nat):
+  minimal_conflicting_pair ex bound x y ->
+  at_least_one_sc x y.
+Proof. intros. eauto using pi_at_least_one_sc, mcp_is_pi. Qed.
+
+Lemma mcp_not_sbrfsc (ex: Execution) (x y: Event) (bound:nat):
+  minimal_conflicting_pair ex bound x y ->
+  ~((sb (bounded_exec ex bound) ⊔ (res_mode Sc (rf (bounded_exec ex bound))))^+ x y).
+Proof. intros. eauto using pi_not_sbrfsc, mcp_is_pi. Qed.
+
+Lemma mcp_not_cnv_sbrfsc (ex: Execution) (x y: Event) (bound:nat):
+  minimal_conflicting_pair ex bound x y ->
+  ~((sb (bounded_exec ex bound) ⊔ (res_mode Sc (rf (bounded_exec ex bound))))^+ y x).
+Proof. intros. eauto using pi_not_cnv_sbrfsc, mcp_is_pi. Qed.
+
+Lemma mcp_left_le_bound (ex: Execution) (x y: Event) (bound:nat):
+  minimal_conflicting_pair ex bound x y ->
+  (numbering ex x) <= bound.
+Proof. 
+  intros Hmcp. eapply mcp_in_evts_left in Hmcp.
+  destruct Hmcp as [? _ Hxord]. unfold In in Hxord.
+  auto.
+Qed.
+
+Lemma mcp_right_le_bound (ex: Execution) (x y: Event) (bound:nat):
+  minimal_conflicting_pair ex bound x y ->
+  (numbering ex y) <= bound.
+Proof. 
+  intros Hmcp. eapply mcp_in_evts_right in Hmcp.
+  destruct Hmcp as [? _ Hxord]. unfold In in Hxord.
+  auto.
+Qed.
+
 Lemma mcp_exists (ex: Execution):
   expi ex ->
   (exists bound j k, minimal_conflicting_pair ex bound j k).
@@ -269,6 +405,33 @@ Proof.
   auto.
 Qed.
 
+Lemma NLE_set_in_bound_ex_rew (ex: Execution) (b1 b2: nat):
+  valid_exec ex ->
+  (fun x => b2 >= (numbering (bounded_exec ex b1) x)) =
+  (fun x => b2 >= (numbering ex x)).
+Proof.
+  intros Hval.
+  pose proof (bounded_exec_is_prefix _ b1 Hval) as Hpre.
+  pose proof (numbering_pre_stable _ _ Hpre) as Hnumeq.
+  apply ext_set. split; intros H.
+  - rewrite Hnumeq in H. auto.
+  - rewrite Hnumeq. auto.
+Qed.
+
+Lemma NLE_in_bound_ex_rew (ex: Execution) (b1 b2: nat):
+  valid_exec ex ->
+  [NLE (bounded_exec ex b1) b2] = [NLE ex b2].
+Proof.
+  intros Hval.
+  pose proof (bounded_exec_is_prefix _ b1 Hval) as Hpre.
+  pose proof (numbering_pre_stable _ _ Hpre) as Hnumeq.
+  apply ext_rel, antisym; intros x y H;
+  destruct H as [Heq Hord];
+  split; auto; unfold NLE in *.
+  - rewrite Hnumeq in Hord; auto.
+  - rewrite Hnumeq; auto.
+Qed.
+
 (** Bounding an execution already bounded by a smaller bound has no effect *)
 
 Lemma double_bounding_rew (ex: Execution) (b1 b2: nat):
@@ -277,52 +440,30 @@ Lemma double_bounding_rew (ex: Execution) (b1 b2: nat):
   bounded_exec (bounded_exec ex b1) b2 = bounded_exec ex b1.
 Proof.
   intros Hval Hord.
-  pose proof (bounded_exec_is_prefix _ b1 Hval) as Hpre.
-  pose proof (numbering_pre_stable _ _ Hpre) as Hnumeq.
-  destruct ex. unfold bounded_exec. unfold bounded_exec in Hnumeq.
-  simpl exec.evts in Hnumeq. simpl exec.evts. f_equal.
-  - apply ext_set. split.
-    + intros [? ?]. auto.
-    + intros ?. split. 
-      * auto.
-      * cbv in Hnumeq. cbv. erewrite Hnumeq. destruct H as [? ?].
-        unfold In in H0. lia.
-  - apply ext_rel. split.
-    + intros [? [? ?]]. auto.
-    + intros [[? ?] [[? ?] ?]]. split;[|split].
-      * split;[split|]; auto. unfold In in *. cbv in Hnumeq. cbv.
-        erewrite Hnumeq. lia.
-      * split;[split|]; auto. unfold In in *. cbv in Hnumeq. cbv.
-        erewrite Hnumeq. lia.
-      * split;[split|split;[split|]]; auto;
-        (unfold In in *; cbv in Hnumeq; cbv; erewrite Hnumeq; lia).
-  - apply ext_rel. split.
-    + intros [? [? ?]]. auto.
-    + intros [[? ?] [[? ?] ?]]. split;[|split].
-      * split;[split|]; auto. unfold In in *. cbv in Hnumeq. cbv.
-        erewrite Hnumeq. lia.
-      * split;[split|]; auto. unfold In in *. cbv in Hnumeq. cbv.
-        erewrite Hnumeq. lia.
-      * split;[split|split;[split|]]; auto;
-        (unfold In in *; cbv in Hnumeq; cbv; erewrite Hnumeq; lia).
-  - apply ext_rel. split.
-    + intros [? [? ?]]. auto.
-    + intros [[? ?] [[? ?] ?]]. split;[|split].
-      * split;[split|]; auto. unfold In in *. cbv in Hnumeq. cbv.
-        erewrite Hnumeq. lia.
-      * split;[split|]; auto. unfold In in *. cbv in Hnumeq. cbv.
-        erewrite Hnumeq. lia.
-      * split;[split|split;[split|]]; auto;
-        (unfold In in *; cbv in Hnumeq; cbv; erewrite Hnumeq; lia).
-  - apply ext_rel. split.
-    + intros [? [? ?]]. auto.
-    + intros [[? ?] [[? ?] ?]]. split;[|split].
-      * split;[split|]; auto. unfold In in *. cbv in Hnumeq. cbv.
-        erewrite Hnumeq. lia.
-      * split;[split|]; auto. unfold In in *. cbv in Hnumeq. cbv.
-        erewrite Hnumeq. lia.
-      * split;[split|split;[split|]]; auto;
-        (unfold In in *; cbv in Hnumeq; cbv; erewrite Hnumeq; lia).
+  unfold bounded_exec at 1.
+  rewrite (NLE_in_bound_ex_rew _ b1 b2 Hval).
+  rewrite (NLE_set_in_bound_ex_rew _ b1 b2 Hval).
+  rew bounded. unfold bounded_exec at 2.
+  f_equal.
+  - apply ext_set. intros x; split; intros H.
+    + destruct H as [y Hevtsb1 Hordb2].
+      unfold bounded_exec in Hevtsb1.
+      simpl in Hevtsb1. unfold In in Hevtsb1. auto.
+    + split.
+      * unfold bounded_exec. simpl. unfold In. auto.
+      * destruct H as [y _ Hb1]. unfold_in. lia.
+  - rewrite <- (nle_double ex _ _ Hord) at 4.
+    rewrite <- (nle_double ex _ _ Hord) at 3.
+    kat_eq.
+  - rewrite <- (nle_double ex _ _ Hord) at 4.
+    rewrite <- (nle_double ex _ _ Hord) at 3.
+    kat_eq.
+  - rewrite <- (nle_double ex _ _ Hord) at 4.
+    rewrite <- (nle_double ex _ _ Hord) at 3.
+    kat_eq.
+  - rewrite <- (nle_double ex _ _ Hord) at 4.
+    rewrite <- (nle_double ex _ _ Hord) at 3.
+    kat_eq.
 Qed.
 
 (** Bounding an execution already bounded with a greater bound is the same as
@@ -334,97 +475,31 @@ Lemma double_bounding_rew' (ex: Execution) (b1 b2: nat):
   bounded_exec (bounded_exec ex b2) b1 = bounded_exec ex b1.
 Proof.
   intros Hval Hord.
-  pose proof (bounded_exec_is_prefix _ b2 Hval) as Hpre2.
-  pose proof (numbering_pre_stable _ _ Hpre2) as Hnumeq2.
-  destruct ex. unfold bounded_exec. unfold bounded_exec in Hnumeq2.
-  simpl. simpl in Hnumeq2. f_equal.
-  - apply ext_set. split.
-    + intros [? [? ?] ?]. split. auto.
-      unfold In in *. erewrite Hnumeq2 in H1. lia.
-    + intros [? ? ?]. split. 
-      * split. auto. unfold In in *. lia.
-      * cbv. cbv in Hnumeq2. erewrite Hnumeq2. unfold In in *.
-        lia.
-  - apply ext_rel. split.
-    + intros [Hin1 [Hin2 [Hin3 [Hin4 Hrel]]]].
-      split;[split|split;[split|]]. auto.
-      * destruct Hin3; auto.
-      * destruct Hin1 as [z Hin11 Hin12].
-        cbv in Hin12. cbv in Hnumeq2. erewrite Hnumeq2 in Hin12.
-        unfold In in *. lia.
-      * destruct Hin4; auto.
-      * destruct Hin2 as [z Hin21 Hin22].
-        cbv in Hin22. cbv in Hnumeq2. erewrite Hnumeq2 in Hin22.
-        unfold In in *. lia.
-      * auto.
-    + intros [[? ?] [[? ?] ?]].
-      splitall; auto.
-      * unfold In in *. lia.
-      * cbv. cbv in Hnumeq2. erewrite Hnumeq2. unfold In in *. lia.
-      * unfold In in *. lia.
-      * cbv. cbv in Hnumeq2. erewrite Hnumeq2. unfold In in *. lia.
-      * unfold In in *. lia.
-      * unfold In in *. lia.
-  - apply ext_rel. split.
-    + intros [Hin1 [Hin2 [Hin3 [Hin4 Hrel]]]].
-      split;[split|split;[split|]]. auto.
-      * destruct Hin3; auto.
-      * destruct Hin1 as [z Hin11 Hin12].
-        cbv in Hin12. cbv in Hnumeq2. erewrite Hnumeq2 in Hin12.
-        unfold In in *. lia.
-      * destruct Hin4; auto.
-      * destruct Hin2 as [z Hin21 Hin22].
-        cbv in Hin22. cbv in Hnumeq2. erewrite Hnumeq2 in Hin22.
-        unfold In in *. lia.
-      * auto.
-    + intros [[? ?] [[? ?] ?]].
-      splitall; auto.
-      * unfold In in *. lia.
-      * cbv. cbv in Hnumeq2. erewrite Hnumeq2. unfold In in *. lia.
-      * unfold In in *. lia.
-      * cbv. cbv in Hnumeq2. erewrite Hnumeq2. unfold In in *. lia.
-      * unfold In in *. lia.
-      * unfold In in *. lia.
-  - apply ext_rel. split.
-    + intros [Hin1 [Hin2 [Hin3 [Hin4 Hrel]]]].
-      split;[split|split;[split|]]. auto.
-      * destruct Hin3; auto.
-      * destruct Hin1 as [z Hin11 Hin12].
-        cbv in Hin12. cbv in Hnumeq2. erewrite Hnumeq2 in Hin12.
-        unfold In in *. lia.
-      * destruct Hin4; auto.
-      * destruct Hin2 as [z Hin21 Hin22].
-        cbv in Hin22. cbv in Hnumeq2. erewrite Hnumeq2 in Hin22.
-        unfold In in *. lia.
-      * auto.
-    + intros [[? ?] [[? ?] ?]].
-      splitall; auto.
-      * unfold In in *. lia.
-      * cbv. cbv in Hnumeq2. erewrite Hnumeq2. unfold In in *. lia.
-      * unfold In in *. lia.
-      * cbv. cbv in Hnumeq2. erewrite Hnumeq2. unfold In in *. lia.
-      * unfold In in *. lia.
-      * unfold In in *. lia.
-  - apply ext_rel. split.
-    + intros [Hin1 [Hin2 [Hin3 [Hin4 Hrel]]]].
-      split;[split|split;[split|]]. auto.
-      * destruct Hin3; auto.
-      * destruct Hin1 as [z Hin11 Hin12].
-        cbv in Hin12. cbv in Hnumeq2. erewrite Hnumeq2 in Hin12.
-        unfold In in *. lia.
-      * destruct Hin4; auto.
-      * destruct Hin2 as [z Hin21 Hin22].
-        cbv in Hin22. cbv in Hnumeq2. erewrite Hnumeq2 in Hin22.
-        unfold In in *. lia.
-      * auto.
-    + intros [[? ?] [[? ?] ?]].
-      splitall; auto.
-      * unfold In in *. lia.
-      * cbv. cbv in Hnumeq2. erewrite Hnumeq2. unfold In in *. lia.
-      * unfold In in *. lia.
-      * cbv. cbv in Hnumeq2. erewrite Hnumeq2. unfold In in *. lia.
-      * unfold In in *. lia.
-      * unfold In in *. lia.
+  unfold bounded_exec at 1.
+  rewrite (NLE_in_bound_ex_rew _ b2 b1 Hval).
+  rewrite (NLE_set_in_bound_ex_rew _ b2 b1 Hval).
+  rew bounded. unfold bounded_exec at 2.
+  f_equal.
+  - apply ext_set. intros x; split; intros H.
+    + destruct H as [y Hevtsb2 Hb1].
+      split; auto.
+      destruct Hevtsb2; auto.
+    + destruct H as [y Hevts Hb1].
+      split; auto.
+      split; auto.
+      unfold_in; lia.
+  - rewrite <- (nle_double ex _ _ Hord) at 4.
+    rewrite <- (nle_double ex _ _ Hord) at 3.
+    kat_eq.
+  - rewrite <- (nle_double ex _ _ Hord) at 4.
+    rewrite <- (nle_double ex _ _ Hord) at 3.
+    kat_eq.
+  - rewrite <- (nle_double ex _ _ Hord) at 4.
+    rewrite <- (nle_double ex _ _ Hord) at 3.
+    kat_eq.
+  - rewrite <- (nle_double ex _ _ Hord) at 4.
+    rewrite <- (nle_double ex _ _ Hord) at 3.
+    kat_eq.
 Qed.
 
 (** If two events are conflicting in a bounded execution, they are also 
@@ -452,18 +527,14 @@ Proof.
   - auto.
   - destruct (not_or_and _ _ Hbidir) as [Hjk Hkj].
     apply and_not_or. split.
-    + intros Hnot. apply Hjk. 
-      eapply sbrfsc_pre_inc. eapply bounded_exec_is_prefix.
-      * eapply prefix_valid.
-        -- eapply prefix_valid. eauto. eapply bounded_exec_is_prefix. eauto.
-        -- eapply two_ord_bounds_pre. eauto.
-      * erewrite double_bounding_rew'; eauto.
+    + intros Hnot. apply Hjk.
+      eapply sbrfsc_pre_inc.
+      * eapply two_ord_bounds_pre; eauto.
+      * auto.
     + intros Hnot. apply Hkj. 
-      eapply sbrfsc_pre_inc. eapply bounded_exec_is_prefix.
-      * eapply prefix_valid.
-        -- eapply prefix_valid. eauto. eapply bounded_exec_is_prefix. eauto.
-        -- eapply two_ord_bounds_pre. eauto.
-      * erewrite double_bounding_rew'; simp_cnv Hnot; simpl; eauto.
+      eapply sbrfsc_pre_inc.
+      * eapply two_ord_bounds_pre; eauto.
+      * auto.
 Qed.
 
 (** If two events are conflicting and if their numbering is strictly inferior to
