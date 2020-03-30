@@ -296,6 +296,20 @@ Proof.
       * eapply (sbrfsc_incl_pre _ ex) in Hn2; auto.
 Qed.
 
+Lemma sbrf_incl_sbrfsc (ex: Execution):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  ~(expi ex) ->
+  (sb ex ⊔ rf ex)^+ ≦ (sb ex ⊔ res_mode Sc (rf ex))^+.
+Proof.
+  intros Hval Hrc11 Hnotconf.
+  erewrite (rf_prefix_in_sbrfsc_ex Hval Hrc11 _ Hnotconf) at 1.
+  kat.
+  Unshelve.
+  apply prefix_itself.
+  auto.
+Qed.
+
 (** When the prefix of an execution doesn't contain any conflicting events, the
 modification order of the prefix is included in the union of transitive closure 
 of the union of the sequenced-before the reads-from restricted to SC events 
@@ -484,13 +498,24 @@ conflict in the execution *)
 
 Lemma sbrfsc_pre_inc (ex pre: Execution):
   prefix pre ex ->
-  ((sb pre) ⊔ (res_mode Sc (rf pre)))^+ ≦ ((sb ex) ⊔ (res_mode Sc (rf ex)))^+.
+  (sb pre ⊔ res_mode Sc (rf pre))^+ ≦ (sb ex ⊔ res_mode Sc (rf ex))^+.
 Proof.
   intros Hpre.
   apply tc_incl.
   apply incl_cup.
   apply (sb_prefix_incl Hpre).
   apply res_mode_incl.
+  apply (rf_prefix_incl Hpre).
+Qed.
+
+Lemma sbrf_pre_inc (ex pre: Execution):
+  prefix pre ex ->
+  (sb pre ⊔ rf pre)^+ ≦ (sb ex ⊔ rf ex)^+.
+Proof.
+  intros Hpre.
+  apply tc_incl.
+  apply incl_cup.
+  apply (sb_prefix_incl Hpre).
   apply (rf_prefix_incl Hpre).
 Qed.
 

@@ -41,6 +41,9 @@ Ltac splitall := (split;(try splitall)).
 
 (** ** Natural numbers *)
 
+Instance ge_trans : Transitive ge.
+Proof. compute; lia. Qed.
+
 Lemma max_rewrite (k1 k2: nat):
   k1 < k2 -> max k2 k1 = k2.
 Proof.
