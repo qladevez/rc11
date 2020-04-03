@@ -6,8 +6,6 @@ C/C++11; Lahav, Vafeiadis, Kang et al., PLDI 2017)
 Author: Quentin Ladeveze, Inria Paris, France
 *)
 
-
-(* Require Import Relations. *)
 Require Import Ensembles.
 Require Import Classical_Prop.
 Require Import Relations.
@@ -44,25 +42,29 @@ Ltac splitall := (split;(try splitall)).
 Instance ge_trans : Transitive ge.
 Proof. compute; lia. Qed.
 
+(** If we know the ordering between two numbers, we can rewrite the max of these
+numbers to the biggest number *)
+
 Lemma max_rewrite (k1 k2: nat):
   k1 < k2 -> max k2 k1 = k2.
-Proof.
-  lia.
-Qed.
+Proof. lia. Qed.
 
 Lemma max_rewrite' (k1 k2: nat):
   k1 < k2 -> max k1 k2 = k2.
-Proof.
-  lia.
-Qed.
+Proof. lia. Qed.
 
 (** ** Sets *)
+
+(** Tactic to unfold all occurences of [In] in the current goal and its
+hypotheses *)
 
 Create HintDb set_db.
 
 Hint Unfold In : set_db.
 
 Ltac unfold_in := autounfold with set_db in *.
+
+(** KAT test that checks if an element belongs to a set *)
 
 Definition I {A:Type} (s: Ensemble A) : prop_set A := In A s.
 
@@ -80,11 +82,15 @@ Proof.
   intros x [H1 H2]; auto.
 Qed.
 
+(** If a set belongs to the intersection of two sets, it belongs to both sets *)
+
 Lemma in_intersection {A:Type} (s1 s2 : Ensemble A) (e: A):
   In _ (Intersection _ s1 s2) e -> In _ s1 e /\ In _ s2 e.
 Proof.
   intros [H1 H2]. split; auto.
 Qed.
+
+(** If a predicate is always true, it is the full set *)
 
 Lemma tautology_makes_fullset {A:Type} (P: A -> Prop):
   (forall x, P x) ->
@@ -94,6 +100,8 @@ Proof.
   + apply Full_intro.
   + apply Hp.
 Qed.
+
+(** The intersection of a set with the full set is itself *)
 
 Lemma inter_fullset {A:Type} (e: Ensemble A):
   Intersection _ e (Full_set _) = e.
@@ -114,6 +122,9 @@ Proof.
     + auto.
 Qed.
 
+(** If set [A] is included in set [B], the intersection of [A] with a set is
+included in the intersection of [B] with the same set *)
+
 Lemma inter_incl {A:Type} (s1 s2 s3: Ensemble A):
   Included _ s3 s2 -> Included _ (Intersection _ s1 s3) (Intersection _ s1 s2).
 Proof.
@@ -121,121 +132,20 @@ Proof.
   split; auto.
 Qed.
 
-
-
 (** ** Notations *)
 
-Definition rlt T := prop_hrel T T.
+(** Alternative names for relations, identitity and empty relation *)
 
+Definition rlt T := prop_hrel T T.
 Definition id {T} : rlt T := (one T).
 Definition empty {T} : rlt T := bot.
 
 Declare Scope rel_notations.
 
-(* Definition btest A : dset A -> rlt A := fun X => [X]. *)
+(** The reflexive closure of a relation is its union with identity relation *)
 
 Notation "R ?" := (R ⊔ 1) (at level 15) : rel_notations.
 
-(* Notation " [ x ] " := (btest _ x) : rel_notations. *)
-
-(*
-(** Useful for rewriting *)
-  Section defs.
-    Variable T : Type. 
-    Variables R S: rlt T.
-
-    Locate "_ ≡ _".
-    Check @RelationAlgebra.lattice.weq.
-    Definition eq_rel : Prop := RelationAlgebra.lattice.weq R S.
-    (* Definition incl_rel : rlt T -> rlt T -> Prop := leq. *)
-    
-    Definition union : rlt T := R ⊔ S.
-    Definition inter : rlt T := R ⊓ S.
-
-    Definition compo : rlt T := R ⋅ S.
-    Definition negr : rlt T := !R.
-    Definition conv : rlt T := R°.
-    
-    Definition rtc : rlt T := R^*.
-    Definition tc : rlt T := R^+.
-
-    Definition bot : rlt T := bot.
-    Definition top : rlt T := top.
-
-  End defs.
-  
-  Infix "≡" := (eq_rel _) : rel_notations.
-  (*
-  Infix "≦" := (incl_rel _) : rel_notations.
-  *)
-  
-  Infix "⊔" := (union _) : rel_notations.
-  Infix "⊓" := (inter _) : rel_notations.
-  Infix "⋅" := (compo _) : rel_notations.
-  Notation "!R" := (negr _) : rel_notations.
-  Notation "R °" := (conv _ R) : rel_notations.
-  Notation "R ^*" := (rtc _ R) : rel_notations.
-  Notation "R ^+" := (tc _ R) : rel_notations.
-
-  Instance eq_weq T : Equivalence (weq : rlt T -> rlt T -> Prop).
-  Proof with auto.
-    split.
-    - unfold Reflexive; intros...
-    - unfold Symmetric; intros x y H; rewrite H...
-    - unfold Transitive; intros x y z H H'; rewrite H, H'...
-  Qed.
-
-  Instance pre_leq T : PreOrder (leq : rlt T -> rlt T -> Prop).
-  Proof. constructor; intuition; compute; firstorder. Qed.
-
-  (* Neutral elements *)
-  Instance weq_cup_zero T : Unit weq (union T) 0.
-  Proof. compute. firstorder. Qed.
-  
-  (*
-  Instance leq_cup_zero T : Unit leq (union T) 0.
-  Proof. compute. firstorder. Qed.
-  *)
-  
-  Instance weq_compo_one T : Unit weq (compo T) 1.
-  Proof. compute; firstorder; [rewrite H | rewrite <- H0]; auto. Qed.
-  
-  (*
-  Instance leq_compo_one T : Unit leq (compo T) 1.
-  Proof. compute; firstorder; [rewrite H | rewrite <- H0]; auto. Qed.
-  *)
-  
-  (* Composition associativity *)
-  Instance weq_compo_Proper T : Proper (weq ==> weq ==> weq) (compo T).
-  Proof with auto.
-    compute; intuition; destruct H1; exists x1.
-    - destruct (H a x1)...
-    - destruct (H0 x1 a0)...
-    - destruct (H a x1)...
-    - destruct (H0 x1 a0)...
-  Qed.
-
-  Instance weq_compo_Assoc T : Associative weq (compo T).
-  Proof. compute. firstorder. Qed.
-
-  (* Union commutativity and associatitivity *)
-  Instance weq_cup_Proper T : Proper (weq ==> weq ==> weq) (union T).
-  Proof. compute. firstorder. Qed.
-
-  Instance weq_cup_Commutative T : Commutative weq (union T).
-  Proof. compute. intuition auto. Qed.
-
-  Instance weq_cup_Associative T : Associative weq (union T).
-  Proof. compute. intuition auto. Qed.
-  
-  (* Conv is proper *)
-  Instance weq_conv_Proper T : Proper (weq ==> weq) (conv T).
-  Proof. firstorder. Qed.
-
-  Program Instance lift_leq_weq T : AAC_lift (leq : rlt T -> rlt T -> Prop) weq.
-
-*)
-    
 Open Scope rel_notations.
 
 (** ** Definitions *)
@@ -289,10 +199,12 @@ Definition cyclic {A:Type} (r: rlt A) : Prop :=
 (** [res_eset e r] restricts a relation [r] to the subset of [r] relating
 events of [e] *)
 
+(*
 Definition res_eset {A:Type} (e: Ensemble A) (r: rlt A) : rlt A :=
   fun x => fun y => (In _ e x) /\
                     (In _ e y) /\
                     r x y.
+*)
 
 (** A relation forms a partial order on a set of elements if:
 
@@ -324,24 +236,15 @@ Definition linear_strict_order {A:Type} (r:rlt A) (xs:Ensemble A) : Prop :=
   (partial_order r xs) /\
   (total_rel r xs).
 
+(** A relation is irreflexive if its intersection with the identity relation is
+empty *)
+
 Definition irreflexive {A:Type} (r: rlt A) := r ⊓ 1 ≦ 0.
 
-Lemma irreflexive_is_irreflexive {A:Type} (r: rlt A):
-  (forall x, ~(r x x)) <-> irreflexive r.
-Proof.
-  split; intros H.
-  - intros x y [Hr Href].
-    destruct Href.
-    destruct (H _ Hr).
-  - intros x Hnot.
-    destruct (H x x).
-    split; simpl; auto.
-Qed.
+(** The bidirectional of a relation is its union with its conserve *)
 
 Definition bidir {A:Type} (r: rlt A) :=
   r ⊔ r°.
-
-Ltac kat_eq := apply ext_rel; kat.
 
 (** *** Linear extension *)
 
@@ -370,19 +273,39 @@ End OrdExt.
 
 (** ** Tactics *)
 
+(** Solve an equality goal using [kat] *)
+
+Ltac kat_eq := apply ext_rel; kat.
+
+(** Change an hypothesis of form [r° x y] to [r y x] *)
+
 Ltac simp_cnv H := simpl in H; unfold hrel_cnv in H.
+
+(** ** Basic Lemmas *)
+
+(** A relation being included in another is equivalent to the union of the
+smaller and bigger relation being equal to the bigger relation *)
 
 Lemma inclusion_as_eq {A:Type} (R S : rlt A) : R ≦ S <-> R ⊔ S ≡ S.
 Proof.
   compute; intuition eauto. firstorder.
 Qed.
 
-Lemma eq_as_inclusion {A:Type} (R S :rlt A) :
-  (R ≦ S /\ S ≦ R) <-> S ≡ R.
-Proof. compute. firstorder. Qed.
+(** A relation is irreflexive if it doesn't relate any element to itself *)
 
+Lemma irreflexive_is_irreflexive {A:Type} (r: rlt A):
+  (forall x, ~(r x x)) <-> irreflexive r.
+Proof.
+  split; intros H.
+  - intros x y [Hr Href].
+    destruct Href.
+    destruct (H _ Hr).
+  - intros x Hnot.
+    destruct (H x x).
+    split; simpl; auto.
+Qed.
 
-(** ** Basic Lemmas *)
+(** The full-set considered as a KAT test is equal to the identity relation *)
 
 Lemma fullset_one {A:Type}:
   [Full_set A : prop_set A] = 1.
@@ -686,17 +609,33 @@ Lemma rtc_trans {A:Type} (r: rlt A):
   r^*⋅r^* ≦ r^*.
 Proof. kat. Qed.
 
+(** The transitive closure of a relation is equal to the sequence of the 
+reflexive transitive closure of the relation and of the relation *)
+
+Lemma tc_inv_dcmp {A:Type} (r: rlt A):
+  r^+ = r^* ⋅ r.
+Proof. apply ext_rel; kat. Qed.
 
 (** The transitive closure of a relation is equal to the sequence of the 
-reflexive transitive closure and of the relation *)
+relation and of the reflexive transitive closure of the relation *)
 
-Lemma tc_inv_dcmp {A:Type} (r1: rlt A):
-  r1^+ = r1^* ⋅ r1.
+Lemma tc_inv_dcmp2 {A:Type} (r: rlt A):
+  r^+ = r ⋅ r^*.
 Proof. apply ext_rel; kat. Qed.
 
-Lemma tc_inv_dcmp2 {A:Type} (r1: rlt A):
-  r1^+ = r1 ⋅ r1^*.
-Proof. apply ext_rel; kat. Qed.
+(** The transitive closure of a relation is either itself or the sequence of
+itself with its transitive closure *)
+
+Lemma tc_inv_dcmp3 {A:Type} (r: rlt A):
+  r^+ = r ⊔ (r ⋅ r^+).
+Proof. kat_eq. Qed.
+
+(** The transitive closure of a relation is either itself or the sequence of
+its transitive closure with itself *)
+
+Lemma tc_inv_dcmp4 {A:Type} (r: rlt A):
+  r^+ = r ⊔ (r^+ ⋅ r).
+Proof. kat_eq. Qed.
 
 (** The transitive closure of the reflexive closure of a relation is the
 transitive reflexive closure of this relation *)
@@ -712,104 +651,14 @@ Lemma refl_refl_trans {A:Type} (r1 : rlt A):
   r1 ? ^* = r1 ^*.
 Proof. apply ext_rel. kat. Qed.
 
+(** The reflexive transitive closure is the union of the reflexive closure and
+of the transitive closure *)
 
-(** The restriction of a relation is included in the relation *)
+Lemma refl_trans_refl_union_trans {A:Type} (r: rlt A):
+  r^* = 1 ⊔ r^+.
+Proof. kat_eq. Qed.
 
-Lemma res_eset_incl {A:Type} (e : Ensemble A) (r : rlt A):
-  (res_eset e r) ≦ r.
-Proof.
-  intros x y [_ [_ H]]. auto.
-Qed.
-
-Lemma res_eset_prop_incl {A:Type} (e: Ensemble A) (r r': rlt A):
-  r ≦ r' ->
-  res_eset e r ≦ res_eset e r'.
-Proof.
-  intros H x y [Hin1 [Hin2 Hr]].
-  split;[|split]; auto. apply H. auto.
-Qed.
-
-(** If the union of the domain and of the range of a relation are included in a
-set, restricting the relation to this set is equal to the relation *)
-
-Lemma res_eset_udr {A:Type} (e: Ensemble A) (r: rlt A):
-  Included _ (udr r) e -> r = res_eset e r.
-Proof.
-  intros Hudr. apply ext_rel, antisym; intros x y H.
-  - split;[|split].
-    + apply Hudr. left. exists y. auto.
-    + apply Hudr. right. exists x. auto.
-    + auto.
-  - destruct H as [_ [_ H]]. auto.
-Qed.
-
-(** The converse of the restriction of a relation is the restriction of the
-converse *)
-
-Lemma res_eset_cnv {A:Type} (e: Ensemble A) (r: rlt A):
-  (res_eset e r)° = res_eset e r°.
-Proof.
-  apply ext_rel, antisym; intros x y H;
-  (destruct H as [? [? ?]]; split;[|split]; auto).
-Qed.
-
-(** If we restrict a relation to a set, the union of its domain and range is
-included in the set *)
-
-Lemma res_eset_udr_incl {A:Type} (e: Ensemble A) (r: rlt A):
-  Included _ (udr (res_eset e r)) e.
-Proof.
-  intros ? [? [? [? [? ?]]] | ? [? [? [? ?]]]]; auto.
-Qed.
-
-(** If elements are related by a relation restricted to a set, they belong to
-the set *)
-
-Lemma res_eset_elt_left {A:Type} (e: Ensemble A) (r: rlt A) (x y: A):
-  (res_eset e r) x y ->
-  In _ e x.
-Proof.
-  intros [? [? ?]]. auto.
-Qed.
-
-Lemma res_eset_elt_right {A:Type} (e: Ensemble A) (r: rlt A) (x y: A):
-  (res_eset e r) x y ->
-  In _ e y.
-Proof.
-  intros [? [? ?]]. auto.
-Qed.
-
-Lemma res_eset_dot {A:Type} (e: Ensemble A) (r r': rlt A):
-  (res_eset e r) ⋅ (res_eset e r') ≦ res_eset e (r ⋅ r').
-Proof.
-  intros x y [z [Hin1 [Hin2 Hr]] [Hin3 [Hin4 Hr']]].
-  splitall; auto.
-  exists z; auto.
-Qed.
-
-Lemma res_eset_double {A:Type} (e e': Ensemble A) (r: rlt A):
-  Included _ e' e ->
-  res_eset e (res_eset e' r) = res_eset e' r.
-Proof.
-  intros Hincl.
-  apply ext_rel. split.
-  - intros [Hin1 [Hin2 [Hin3 [Hin4 Hr]]]].
-    repeat (apply conj); auto.
-  - intros [Hin1 [Hin2 Hr]].
-    repeat (apply conj); auto.
-Qed.
-
-Lemma res_eset_double' {A:Type} (e e': Ensemble A) (r: rlt A):
-  Included _ e' e ->
-  res_eset e' (res_eset e r) = res_eset e' r.
-Proof.
-  intros Hincl.
-  apply ext_rel. split.
-  - intros [Hin1 [Hin2 [Hin3 [Hin4 Hr]]]].
-    repeat (apply conj); auto.
-  - intros [Hin1 [Hin2 Hr]].
-    repeat (apply conj); auto.
-Qed.
+(** A relation included in an irreflexive relation is irreflexive *)
 
 Lemma incl_irr {A:Type} (r r': rlt A):
   (forall x, ~r x x) ->
@@ -819,7 +668,6 @@ Proof.
   intros Hirr Hinc x H. eapply Hirr, Hinc. eauto.
 Qed.
 
-   
 (** If a first relation is included in a second relation, the transitive closure
 of the first relation is included in the transitive closure of the second
 relation *)
@@ -1098,6 +946,16 @@ Proof.
     + apply (incl_rel_thm Hend). kat.
 Qed.
 
+(** If there a relation relates two elements with an immediate link, it relates
+them *)
+
+Lemma imm_rel_implies_rel {A:Type} (r:rlt A) (x y: A):
+  (imm r) x y ->
+  r x y.
+Proof.
+  intros [Hr _]. auto.
+Qed.
+
 
 (** The transitive closure of a strict linear order is itself *)
 
@@ -1105,9 +963,9 @@ Lemma lso_is_tc {A:Type} (so:rlt A) (s: Ensemble A):
   linear_strict_order so s -> so^+ = so.
 Proof.
   intros [[H1 [H2 H6]] H3]; apply ext_rel.
-  apply eq_as_inclusion. split.
-  - kat.
+  apply antisym.
   - apply itr_ind_l1; auto.
+  - kat.
 Qed.
 
 (** A strict linear order is acyclic *)
@@ -1116,32 +974,12 @@ Lemma lin_strict_ac {A:Type} (s:Ensemble A) (r : rlt A):
   linear_strict_order r s ->
   acyclic r.
 Proof.
-intros Hlin.
-generalize (lso_is_tc _ _ Hlin); intro Heq.
-unfold acyclic; rewrite Heq.
-destruct Hlin as [[Hdr [Htrans Hac]] Htot];
-apply Hac.
+  intros Hlin.
+  generalize (lso_is_tc _ _ Hlin); intro Heq.
+  unfold acyclic; rewrite Heq.
+  destruct Hlin as [[Hdr [Htrans Hac]] Htot];
+  apply Hac.
 Qed.
-
-(** The transitive closure of a transitive relation is itself *)
-
-(*
-Lemma transitive_tc {A:Type} (r: rlt A):
-  (forall x1 x2 x3, (r x1 x2) /\ (r x2 x3) -> (r x1 x3)) ->
-  r^+ = r.
-Proof.
-  intros Htrans.
-  apply ext_rel. apply eq_as_inclusion; split; intros x y H.
-  - exists y. auto. exists O. cbv. auto.
-  - apply itr_ind_l1 in H.
-  - destruct H as [z H H'].
-    induction H' as [w z H2 | w | v w z H1 IH1 H2 IH2].
-    + apply (Htrans x w z); split; auto.
-    + auto.
-    + apply IH2. apply IH1. auto.
-  - exists y; split; auto. apply rt_refl; auto.
-Qed.
-*)
 
 (** If a relation is acyclic, its transitive closure is acyclic *)
 
@@ -1154,6 +992,9 @@ Proof.
 Qed.
 
 (** ** Facts and tactics about the tests of KATs *)
+
+(** The following tactic and lemmas decompose goals or hypotheses consisting
+of the composition of relations and tests relating two elements *)
 
 Ltac simpl_trt :=
   match goal with
@@ -1169,6 +1010,12 @@ Proof.
   rewrite <- Heqx, Heqy in *.
   repeat (apply conj); auto.
 Qed.
+
+Lemma simpl_rt_hyp {A:Type} (t: prop_set A) (r: rlt A) (x y: A):
+  (r ⋅ [t]) x y ->
+  r x y /\ t y.
+Proof. intros [z Hr [Heq Ht]]. rewrite Heq in Ht, Hr. intuition. Qed.
+
   
 Lemma dom_trt {A:Type} (t1 t2: prop_set A) (r: rlt A) (x: A):
   In _ (dom ([t1] ⋅ r ⋅ [t2])) x ->
@@ -1186,6 +1033,15 @@ Proof.
   intros [z [z' [y [Heqy Hty] Hr] [Heqx Htx]]].
   rewrite Heqy in Hty; rewrite Heqx in Htx; rewrite Heqx in Hr.
   split; auto. exists y; intuition auto.
+Qed.
+
+Lemma add_test_right {A:Type} (t: prop_set A) (r: rlt A) (x y: A):
+  r x y ->
+  t y ->
+  (r ⋅ [t]) x y.
+Proof.
+  intros Hr Ht.
+  exists y. auto. split; auto.
 Qed.
 
 Section KatTests.
@@ -1240,28 +1096,6 @@ Proof.
     rewrite Heq in Hr. exists z. auto.
 Qed.
 
-(** Adding tests on both side of a relation restricted to a set is the same
-as restricting the relation with both test onj its sides to the set *)
-
-Lemma test_res_eset_swap (e: Ensemble A) (r: rlt A):
-  [t]⋅(res_eset e r)⋅[t'] = res_eset e ([t]⋅r⋅[t']).
-Proof.
-  apply ext_rel, antisym; intros x y.
-  - intros [z [w [Heq1 Ht1] [Hin1 [Hin2 Hr]]] [Heq2 Ht2]].
-    splitall.
-    + rewrite Heq1; auto.
-    + rewrite <- Heq2; auto.
-    + exists y. exists x.
-      * split; auto.
-      * rewrite Heq1, <- Heq2. auto.
-      * split. auto. rewrite <- Heq2. auto.
-  - intros [Hin1 [Hin2 [z [w [Heq1 Ht1] Hr] [Heq2 Ht2]]]].
-    exists y. exists x.
-    + split; auto.
-    + splitall; auto. rewrite Heq1, <- Heq2. auto.
-    + split; auto. rewrite <- Heq2. auto.
-Qed.
-
 End KatTests.
 
 (** If a test implies another test, and if a first relation whose domain is
@@ -1301,7 +1135,7 @@ Qed.
 sequence of a relation with itself is equivalent to its inductive definition,
 i.e. the reflexive transitive closure of a relation is either the relation 
 itself, the identity relation, or the sequence of the reflexive transitive
-closure of the relation with the transitive reflexive closure of the relation
+closure of the relation with the transitive reflexive closure of the relation.
 
 This means that the definitions of reflexive transitive closure of Relation
 Algebra and of the standard library of coq are equivalent *)
@@ -1328,6 +1162,15 @@ Proof.
     * exists O. intuition.
     * apply rtc_trans. exists y; auto.
 Qed.
+
+(** The transitive closure defined as a positive and non-null number of 
+sequence of a relation with itself is equivalent to its inductive definition,
+i.e. the transitive closure of a relation is either the relation itself, or the
+sequence of the transitive closure of the relation with the transitive closure 
+of the relation.
+
+This means that the definitions of transitive closure of Relation Algebra and of
+the standard library of coq are equivalent *)
 
 Lemma tc_clos_trans {A:Type} (r: rlt A):
   r^+ = (clos_trans _ r).
@@ -1358,6 +1201,10 @@ Proof.
   apply clos_refl_trans_ind.
 Qed.
 
+(** We can do an induction on the transitive closure as defined in
+RelationAlgebra the same way we would do on a transitive closure as
+defined in the standard library of coq *)
+
 Lemma tc_ind:
   forall (A : Type) (R : rlt A) (P : A -> A -> Prop),
   (forall x y : A, R x y -> P x y) ->
@@ -1367,20 +1214,4 @@ Proof.
   intros A R.
   rewrite tc_clos_trans.
   apply clos_trans_ind.
-Qed.
-
-Lemma trans_equiv_tc {A:Type} (r: rlt A):
-  r⋅r ≦ r <-> r = r^+.
-Proof.
-  split.
-  - intros Hinc.
-    apply ext_rel, antisym.
-    + kat.
-    + simpl.
-      apply tc_ind.
-      * auto.
-      * intros x y z H1 H2 H3 H4.
-        eapply (Hinc _ z).
-        exists y; auto.
-  - intros Heqtc. rewrite Heqtc. kat.
 Qed.

@@ -74,19 +74,19 @@ Qed.
 
 Lemma sb_num_ord (ex: Execution) (x y: Event):
   sb ex x y ->
-  (numbering ex y) >= (numbering ex x).
+  (numbering ex y) > (numbering ex x).
 Proof.
   intros Hsb.
-  apply numbering_coherent_rtc, rtc_incl_itself.
+  apply numbering_coherent_tc, tc_incl_itself.
   left; auto.
 Qed.
 
 Lemma rf_num_ord (ex: Execution) (x y: Event):
   rf ex x y ->
-  (numbering ex y) >= (numbering ex x).
+  (numbering ex y) > (numbering ex x).
 Proof.
   intros Hsb.
-  apply numbering_coherent_rtc, rtc_incl_itself.
+  apply numbering_coherent_tc, tc_incl_itself.
   right; auto.
 Qed.
 
@@ -161,6 +161,7 @@ Hint Rewrite simpl_sb_be simpl_rmw_be simpl_rf_be simpl_mo_be : bounded_exec_db.
 Tactic Notation "rew" "bounded" := autorewrite with bounded_exec_db.
 Tactic Notation "rew" "bounded" "in" hyp(H) := autorewrite with bounded_exec_db in H.
 
+
 (** In a valid execution, if two events are related by [sb ex ⊔ rf ex], they 
 belong to the events of [ex] *)
 
@@ -207,6 +208,29 @@ Proof.
     + destruct_mo_v Hmo_v. destruct Hmopo as [Hmo_in_e _].
       rewrite Hmo_in_e, I_evts_bounded_le_bnd. kat_eq.
     + destruct_rmw_v Hrmw_v. rewrite Hrmw_in_e, I_evts_bounded_le_bnd. kat_eq.
+Qed.
+
+Lemma bounded_is_valid (ex: Execution) (bound: nat):
+  valid_exec ex ->
+  valid_exec (bounded_exec ex bound).
+Proof.
+  intros Hval.
+  eapply prefix_valid.
+  eauto.
+  eapply bounded_exec_is_prefix.
+  eauto.
+Qed.
+
+Lemma bounded_is_rc11 (ex: Execution) (bound: nat):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  rc11_consistent (bounded_exec ex bound).
+Proof.
+  intros Hval Hrc11.
+  eapply prefix_rc11_consistent.
+  eauto.
+  eapply bounded_exec_is_prefix.
+  eauto.
 Qed.
 
 (** If we have to boundings of an execution, the smallest is a prefix of the
@@ -319,6 +343,11 @@ are in conflict and belong to the smallest conflicting prefix of the execution *
 Definition minimal_conflicting_pair (ex: Execution) (bound: nat) (j k: Event) :=
   (smallest_conflicting_bounding ex bound) /\
   (pi (bounded_exec ex bound) j k).
+
+Lemma mcp_is_sym (ex: Execution) (bound: nat) (j k: Event):
+  (minimal_conflicting_pair ex bound j k) <->
+  (minimal_conflicting_pair ex bound k j).
+Proof. compute; intuition eauto. Qed.
 
 Lemma mcp_is_pi (ex: Execution) (bound:nat) (j k: Event):
   minimal_conflicting_pair ex bound j k ->
@@ -502,6 +531,64 @@ Proof.
     kat_eq.
 Qed.
 
+(** Bouding an execution twice with the same bound is the same as bounding it
+once *)
+
+Lemma double_same_bounding_rew (ex: Execution) (b: nat):
+  valid_exec ex ->
+  bounded_exec (bounded_exec ex b) b = bounded_exec ex b.
+Proof.
+  intros Hval.
+  unfold bounded_exec at 3.
+  unfold bounded_exec at 1.
+  f_equal.
+  - unfold bounded_exec at 1.
+    unfold evts at 1.
+    apply ext_set. intros x; split.
+    + intros [y [H1 H2] H3]. split; unfold_in; auto.
+    + intros [y H1 H2]. split; [split|]; unfold_in; auto.
+      erewrite numbering_pre_stable. eauto.
+      apply bounded_exec_is_prefix. auto.
+  - erewrite NLE_in_bound_ex_rew.
+    rew bounded. kat_eq. auto.
+  - erewrite NLE_in_bound_ex_rew.
+    rew bounded. kat_eq. auto.
+  - erewrite NLE_in_bound_ex_rew.
+    rew bounded. kat_eq. auto.
+  - erewrite NLE_in_bound_ex_rew.
+    rew bounded. kat_eq. auto.
+Qed.
+
+(** If a bound is the smallest conflicting bounding of an execution, it is the
+smallest conflicting bounding of the execution bounded by the bound *)
+
+Lemma scp_bounded (ex: Execution) (bound: nat):
+  valid_exec ex ->
+  smallest_conflicting_bounding ex bound ->
+  smallest_conflicting_bounding (bounded_exec ex bound) bound.
+Proof.
+  intros Hval [Hexpi Hsmaller].
+  split.
+  - rewrite (double_same_bounding_rew ex bound Hval). auto.
+  - intros n Hexpidbound.
+    destruct (classic (n < bound)) as [Hord|Hord].
+    + apply Hsmaller. erewrite double_bounding_rew' in Hexpidbound; auto.
+    + apply Compare_dec.not_lt in Hord. auto.
+Qed.
+
+(** If two events and a bound are the minimal conflicting pair of an execution,
+they are the minimal conflicting pair of the execution bounded by the bound *)
+
+Lemma mcp_bounded (ex: Execution) (bound: nat) (x y: Event):
+  valid_exec ex ->
+  minimal_conflicting_pair ex bound x y ->
+  minimal_conflicting_pair (bounded_exec ex bound) bound x y.
+Proof.
+  intros Hval [Hscb Hpi]; split.
+  - apply scp_bounded; auto.
+  - rewrite (double_same_bounding_rew ex bound Hval). auto.
+Qed.
+
 (** If two events are conflicting in a bounded execution, they are also 
 conflicting in the execution bounded by the greatest of the numberings of the
 two events *)
@@ -514,17 +601,13 @@ Lemma bound_to_c_events (ex: Execution) (b:nat) (j k: Event):
   pi (bounded_exec ex (numbering ex k)) j k.
 Proof.
   intros Hval Hord Hord' [[[Hinj [Hink [Hw [Hdiff Hloc]]]] Hsc] Hbidir].
-  repeat (apply conj).
+  repeat (apply conj); auto.
   - destruct ex. simpl. destruct Hinj as [z Hjevts Hinj]. split.
     + simpl in Hjevts. auto.
     + unfold In. lia.
   - destruct ex. simpl. destruct Hink as [z Hkevts Hink]. split.
     + simpl in Hkevts. auto.
     + unfold In. lia.
-  - auto.
-  - auto.
-  - auto.
-  - auto.
   - destruct (not_or_and _ _ Hbidir) as [Hjk Hkj].
     apply and_not_or. split.
     + intros Hnot. apply Hjk.

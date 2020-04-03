@@ -144,8 +144,7 @@ Lemma eco_rfmorb_seq_rfref:
   eco = (rf ex) ⊔ (((mo ex) ⊔ rb) ⋅ (rf ex)?).
 Proof.
   unfold eco.
-  apply ext_rel. apply eq_as_inclusion. split.
-  - kat.
+  apply ext_rel. apply antisym.
   - apply itr_ind_l1.
     + kat.
     + assert ((mo ex)⋅(mo ex) ≦ (mo ex)) as Hmo_trans.
@@ -165,6 +164,7 @@ Proof.
           destruct Hmopo as [_ [Hmotrans _]];
           mrewrite Hmotrans.
     all: kat.
+  - kat.
 Qed.
 
 (** In a valid execution, the read-from relation is irreflexive *)
@@ -254,6 +254,12 @@ in case [b] is a fence, a [sb]-prior read) reads from the release sequence of
 Definition sw :=
   [Mse Rel] ⋅ ([F] ⋅ (sb ex)) ? ⋅ rs ⋅ (rf ex) ⋅ [R] ⋅ [Mse Rlx] ⋅ ((sb ex) ⋅ [F]) ? ⋅ [Mse Acq].
 
+Lemma sw_incl_sbrf:
+  sw ≦ ((sb ex) ⊔ (rf ex))^+.
+Proof.
+  unfold sw, rs. rewrite rmw_incl_sb. kat. auto.
+Qed.
+  
 (** ** Happens-before *)
 
 (** Intuitively, the happens-before relation records when an event is globally
@@ -263,6 +269,12 @@ two events consisting of [sb] and [sw] edges *)
 
 Definition hb  :=
   ((sb ex) ⊔ sw)^+.
+
+Lemma hb_incl_sbrf:
+  hb ≦ ((sb ex) ⊔ (rf ex))^+.
+Proof.
+  unfold hb. rewrite sw_incl_sbrf. kat.
+Qed.
   
 (** ** SC-before *)
 

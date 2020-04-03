@@ -64,6 +64,16 @@ Lemma conflicting_same_loc (ex: Execution) (x y: Event):
   get_loc x = get_loc y.
 Proof. compute; intuition auto. Qed.
 
+Lemma conflicting_pre (pre ex: Execution) (x y: Event):
+  prefix pre ex ->
+  conflicting pre x y ->
+  conflicting ex x y.
+Proof.
+  intros Hpre [Hinx [Hiny [Hiswrite [Hdiff Hloc]]]].
+  repeat (apply conj); auto;
+  apply (prefix_incl_evts _ _ Hpre); auto.
+Qed.
+
 (** Two events form a race if they are conflicting and if they are not related
 by [hb] in any direction *)
 
@@ -129,52 +139,16 @@ Proof.
   compute; intuition auto.
 Qed.
 
-(** An execution is pi-conflicting if it contains two pi-conflicting events *)
-
-Definition expi (ex: Execution) :=
-  exists x y, (pi ex) x y.
-
-(*
-Definition c_events (e: Execution) : rlt Event :=
-  fun x => fun y =>
-    x <> y /\
-    ((get_mode x) <> Sc \/ (get_mode y) <> Sc) /\
-    (In _ (evts e) x) /\
-    (In _ (evts e) y) /\
-    ~ (((sb e) ⊔ (res_mode Sc (rf e)))^+) x y /\
-    ~ (((sb e) ⊔ (res_mode Sc (rf e)))^+) y x.
-
-Definition not_conflicting (ex: Execution) : Prop :=
-  forall x y, ~(c_events ex) x y.
-
-Definition conflicting (ex: Execution) : Prop :=
-  exists x y, (c_events ex) x y.
-
-Lemma not_no_conflict_is_exist_conflict (ex: Execution):
-  ~(not_conflicting ex) <-> (conflicting ex).
-Proof.
-  split; intros H.
-  - byabsurd. destruct H. intros x y H.
-    apply Hcontr. exists x, y. auto.
-  - intros Hcontr. destruct H as [x [y H]].
-    edestruct Hcontr. eauto.
-Qed.
-
-Lemma not_exists_conflict_is_no_conflict (ex: Execution):
-  ~(conflicting ex) <-> (not_conflicting ex).
-Proof.
-  split; intros H.
-  - intros x y Hcontr. apply H. exists x,y; auto.
-  - intros [x [y Hcontr]].
-    edestruct H. eauto.
-Qed.
-*)
-
 (** For any execution, pi is a symmetric relation *)
 
 Lemma pi_sym (ex: Execution) (x y: Event):
   (pi ex) x y <-> (pi ex) y x.
 Proof. compute. intuition. Qed.
+
+(** An execution is pi-conflicting if it contains two pi-conflicting events *)
+
+Definition expi (ex: Execution) :=
+  exists x y, (pi ex) x y.
 
 Ltac solve_test_ineq :=
   unfold inj; simpl;

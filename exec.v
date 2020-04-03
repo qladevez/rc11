@@ -763,6 +763,18 @@ Proof.
   auto.
 Qed.
 
+Lemma rmw_incl_sb:
+  (rmw ex) ≦ (sb ex).
+Proof.
+  intros x y Hrmw.
+  destruct_val_exec val_exec.
+  destruct_rmw_v Hrmw_v.
+  apply Hrmw_vpairs in Hrmw as Hrmwp.
+  unfold valid_rmw_pair in Hrmwp.
+  destruct (get_mode x); destruct (get_mode y);
+  intuition (auto using (imm_rel_implies_rel (sb ex))).
+Qed.
+
 (** In a valid execution, events related by modification order belong to the set
 of events of the execution *)
 
