@@ -6,7 +6,7 @@ C/C++11; Lahav, Vafeiadis, Kang et al., PLDI 2017)
 Author: Quentin Ladeveze, Inria Paris, France
 *)
 
-From RelationAlgebra Require Import 
+From RelationAlgebra Require Import
   lattice prop monoid rel kat_tac normalisation kleene kat rewriting.
 Require Import Ensembles.
 Require Import Lia.
@@ -379,10 +379,10 @@ Lemma mcp_same_loc (ex: Execution) (x y: Event) (bound:nat):
   get_loc x = get_loc y.
 Proof. intros. eauto using pi_same_loc, mcp_is_pi. Qed.
 
-Lemma mcp_at_least_one_sc (ex: Execution) (x y: Event) (bound:nat):
+Lemma mcp_at_least_one_not_sc (ex: Execution) (x y: Event) (bound:nat):
   minimal_conflicting_pair ex bound x y ->
-  at_least_one_sc x y.
-Proof. intros. eauto using pi_at_least_one_sc, mcp_is_pi. Qed.
+  at_least_one_not_sc x y.
+Proof. intros. eauto using pi_at_least_one_not_sc, mcp_is_pi. Qed.
 
 Lemma mcp_not_sbrfsc (ex: Execution) (x y: Event) (bound:nat):
   minimal_conflicting_pair ex bound x y ->
@@ -428,7 +428,7 @@ Qed.
 
 Lemma mcp_not_sc (ex: Execution) (bound: nat) (j k: Event):
   (minimal_conflicting_pair ex bound j k) ->
-  ((get_mode j) <> Sc \/ (get_mode k) <> Sc).
+  ~((get_mode j) = Sc /\ (get_mode k) = Sc).
 Proof.
   intros [_ [[_ H] _]].
   auto.

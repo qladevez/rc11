@@ -83,12 +83,12 @@ Definition race (ex: Execution): rlt Event :=
 (** Two events are pi-conflicting if they are conflicting, one of them at least
 is not SC and they are not related by [(sb ⊔ rf_sc)⁺] in any direction *)
 
-Definition at_least_one_sc: rlt Event :=
-  fun x y => get_mode x <> Sc \/ get_mode y <> Sc.
+Definition at_least_one_not_sc: rlt Event :=
+  fun x y => ~(get_mode x = Sc /\ get_mode y = Sc).
 
 Definition pi (ex: Execution) : rlt Event :=
   (conflicting ex) ⊓
-  at_least_one_sc ⊓
+  at_least_one_not_sc ⊓
   (!(bidir (((sb ex) ⊔ (res_mode Sc (rf ex)))^+))).
 
 Lemma pi_is_conflicting (ex: Execution) (x y: Event):
@@ -120,9 +120,9 @@ Lemma pi_same_loc (ex: Execution) (x y: Event):
   get_loc x = get_loc y.
 Proof. intros. eauto using conflicting_same_loc, pi_is_conflicting. Qed.
 
-Lemma pi_at_least_one_sc (ex: Execution) (x y: Event):
+Lemma pi_at_least_one_not_sc (ex: Execution) (x y: Event):
   pi ex x y ->
-  at_least_one_sc x y.
+  at_least_one_not_sc x y.
 Proof. compute; intuition auto. Qed.
 
 Lemma pi_not_sbrfsc (ex: Execution) (x y: Event):
@@ -264,7 +264,7 @@ Proof.
     + intros Hnot. eapply (rf_irr _ Hval).
       split; eauto.
     + eapply rf_same_loc; eauto.
-    + apply not_and_or in HNotSc. auto.
+    + auto.
     + intros [Hn1 | Hn2].
       * eapply (sbrfsc_incl_pre _ ex) in Hn1; auto.
       * eapply (sbrfsc_incl_pre _ ex) in Hn2; auto.
@@ -330,7 +330,7 @@ Proof.
     + intros Hnot. eapply (mo_irr _ Hval).
       split; eauto.
     + eapply mo_same_loc; eauto.
-    + apply not_and_or in HNotSc. auto.
+    + auto.
     + intros [Hn1 | Hn2].
       * eapply (sbrfsc_incl_pre _ ex) in Hn1; auto.
       * eapply (sbrfsc_incl_pre _ ex) in Hn2; auto.
@@ -382,7 +382,7 @@ Proof.
     + intros Hnot. eapply (rb_irr _ Hval).
       split; eauto.
     + eapply rb_same_loc; eauto.
-    + apply not_and_or in HNotSc. auto.
+    + auto.
     + intros [Hn1 | Hn2].
       * eapply (sbrfsc_incl_pre _ ex) in Hn1; auto.
       * eapply (sbrfsc_incl_pre _ ex) in Hn2; auto.

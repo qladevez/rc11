@@ -321,6 +321,29 @@ Proof.
     + apply bounded_is_valid. auto.
 Qed.
 
+(** Under the hypothesis that every race in every SC-consistent execution of a 
+program is between two SC events, then the minimal conflicting execution where
+the conflicting event with the highest numbering is a write event is not
+SC-consistent *)
+
+Lemma mcp_write_not_sc (ex: Execution) (bound: nat) (x y: Event):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  minimal_conflicting_pair ex bound x y ->
+  (numbering ex x) > (numbering ex y) ->
+  is_write x ->
+  (forall pre, prefix pre ex ->
+               forall j k, race pre j k ->
+                           ((get_mode j) = Sc /\ (get_mode k) = Sc)) ->
+  ~(sc_consistent (bounded_exec ex bound)).
+Proof.
+  intros Hval Hrc11 Hmcp Hord Hwx Hrace_not_sc Hnot.
+  apply (mcp_at_least_one_not_sc ex x y bound Hmcp).
+  apply (Hrace_not_sc (bounded_exec ex bound)).
+  - eapply bounded_exec_is_prefix. eauto.
+  - apply mcp_write_race; auto.
+Qed.
+
 End DRF.
 
 
