@@ -775,6 +775,32 @@ Proof.
   intuition (auto using (imm_rel_implies_rel (sb ex))).
 Qed.
 
+Lemma rmw_orig_read (x y: Event):
+  (rmw ex) x y ->
+  is_read x.
+Proof.
+  intros Hrmw.
+  destruct_val_exec val_exec.
+  destruct_rmw_v Hrmw_v.
+  apply Hrmw_vpairs in Hrmw as Hrmwp.
+  unfold valid_rmw_pair in Hrmwp.
+  destruct (get_mode x); destruct (get_mode y);
+  intuition auto.
+Qed.
+
+Lemma rmw_dest_write (x y: Event):
+  (rmw ex) x y ->
+  is_write y.
+Proof.
+  intros Hrmw.
+  destruct_val_exec val_exec.
+  destruct_rmw_v Hrmw_v.
+  apply Hrmw_vpairs in Hrmw as Hrmwp.
+  unfold valid_rmw_pair in Hrmwp.
+  destruct (get_mode x); destruct (get_mode y);
+  intuition auto.
+Qed.
+
 (** In a valid execution, events related by modification order belong to the set
 of events of the execution *)
 
@@ -855,7 +881,6 @@ Proof.
   auto.
 Qed.
 
-
 End ValidExecs.
   
 (** ** Getters *)
@@ -865,6 +890,12 @@ Definition reads (ex: Execution) : Ensemble Event :=
 
 Definition writes (ex: Execution) : Ensemble Event :=
   fun e => (In _ ex.(evts) e) /\ is_write e.
+
+(** Atomic events are events that are either in the domain or in the range of
+[rmw] *)
+
+Definition At (ex: Execution) : Ensemble Event :=
+  Union _ (dom ex.(rmw)) (ran ex.(rmw)).
 
 (** ** Completeness *)
 

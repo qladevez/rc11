@@ -53,6 +53,13 @@ Lemma max_rewrite' (k1 k2: nat):
   k1 < k2 -> max k1 k2 = k2.
 Proof. lia. Qed.
 
+Lemma S_min_one (k: nat):
+  k > 0 -> S (k - 1) = k.
+Proof.
+  intros Hord.
+  destruct k; lia.
+Qed.
+
 (** ** Sets *)
 
 (** Tactic to unfold all occurences of [In] in the current goal and its
@@ -145,6 +152,7 @@ Declare Scope rel_notations.
 (** The reflexive closure of a relation is its union with identity relation *)
 
 Notation "R ?" := (R ⊔ 1) (at level 15) : rel_notations.
+Notation "R \ S" := (R ⊓ !S) (at level 30) : rel_notations.
 
 Open Scope rel_notations.
 
@@ -283,6 +291,16 @@ Ltac simp_cnv H := simpl in H; unfold hrel_cnv in H.
 
 (** ** Basic Lemmas *)
 
+Lemma not_all_not_rel_ex_rel {A:Type} (r: rlt A):
+  ~(forall x y, ~(r x y)) ->
+  exists x y, r x y.
+Proof.
+  intros Hnotforall.
+  byabsurd. exfalso.
+  apply Hnotforall. intros x y Hr.
+  apply Hcontr. exists x, y. auto.
+Qed.
+
 (** A relation being included in another is equivalent to the union of the
 smaller and bigger relation being equal to the bigger relation *)
 
@@ -305,6 +323,16 @@ Proof.
     split; simpl; auto.
 Qed.
 
+Lemma irreflexive_union {A:Type} (r1 r2: rlt A):
+  irreflexive r1 ->
+  irreflexive r2 ->
+  irreflexive (r1 ⊔ r2).
+Proof.
+  intros Hirr1 Hirr2.
+  unfold irreflexive in *.
+  rewrite capcup'. rewrite Hirr1, Hirr2. kat.
+Qed.
+
 (** The full-set considered as a KAT test is equal to the identity relation *)
 
 Lemma fullset_one {A:Type}:
@@ -322,6 +350,20 @@ Lemma dot_one {A:Type} (r: rlt A):
   r⋅1 = r.
 Proof.
   apply ext_rel. rewrite dotx1. auto.
+Qed.
+
+Lemma dot_cnv {A:Type} (r1 r2: rlt A):
+  (r1⋅r2)° = r2°⋅r1°.
+Proof.
+  apply ext_rel.
+  rewrite cnvdot.
+  auto.
+Qed.
+
+Lemma cnv_rev {A:Type} (r: rlt A) (x y: A):
+  r x y <-> r° y x.
+Proof.
+  simpl. unfold prop_hrel_cnv. intuition auto.
 Qed.
 
 (** Relation intersection is distributive over relation union *)
@@ -637,6 +679,38 @@ Lemma tc_inv_dcmp4 {A:Type} (r: rlt A):
   r^+ = r ⊔ (r^+ ⋅ r).
 Proof. kat_eq. Qed.
 
+Lemma rtc_inv_dcmp {A:Type} (r: rlt A):
+  r^* ⋅ r^* ≦ r^*.
+Proof. kat. Qed.
+
+Lemma rtc_inv_dcmp2 {A:Type} (r: rlt A):
+  r ⋅ r^* ≦ r^*.
+Proof. kat. Qed.
+
+Lemma rtc_inv_dcmp3 {A:Type} (r: rlt A):
+  r^* ⋅ r ≦ r^*.
+Proof. kat. Qed.
+
+Lemma rtc_inv_dcmp4 {A:Type} (r: rlt A):
+  r^* ⋅ r^+ ≦ r^*.
+Proof. kat. Qed.
+
+Lemma rtc_inv_dcmp5 {A:Type} (r: rlt A):
+  r^+ ⋅ r^* ≦ r^*.
+Proof. kat. Qed.
+
+Lemma tc_incl_rtc {A:Type} (r: rlt A):
+  r^+ ≦ r^*.
+Proof. kat. Qed.
+
+Lemma tc_union_left {A:Type} (r1 r2: rlt A):
+  r1^+ ≦ (r1 ⊔ r2)^+.
+Proof. kat. Qed.
+
+Lemma tc_union_right {A:Type} (r1 r2: rlt A):
+  r2^+ ≦ (r1 ⊔ r2)^+.
+Proof. kat. Qed.
+
 (** The transitive closure of the reflexive closure of a relation is the
 transitive reflexive closure of this relation *)
   
@@ -864,7 +938,7 @@ Lemma ac_union {A:Type} (x:A) (r1 r2 : rlt A) :
               (r1 ⋅ r2^+ ⋅ r1) y z /\
               (r1 ⊔ r2)^* z x.
 Proof.
-  intros Hac1 Hac2 Hcyc. unfold cyclic in Hcyc.
+  intros Hac1 Hac2 Hcyc.
   rewrite tc_union_decomposition in Hcyc.
   destruct_disjunction Hcyc.
   - destruct (Hac1 x Hcyc).
@@ -946,6 +1020,62 @@ Proof.
     + apply (incl_rel_thm Hend). kat.
 Qed.
 
+
+Lemma added_cycle_pass_through_addition1 {A:Type} (x:A) (r1 r2 : rlt A) :
+  acyclic r1 ->
+  (r1 ⊔ r2)^+ x x ->
+  exists y, ( r2^+ ⋅ (r1 ⊔ r2)^* ) y y.
+Proof.
+  intros Hac1 Hcyc.
+  rewrite tc_union_decomposition in Hcyc.
+  destruct_disjunction Hcyc.
+  - destruct (Hac1 x Hcyc).
+  - exists x, x. auto.
+    apply one_incl_rtc. split; auto.
+  - destruct Hcyc as [z1 [z2 [z3 [z4 ? ?] ?] ?] ?].
+    exists z3, z2. { auto. }
+    apply rtc_inv_dcmp2. exists z1. { left. auto. }
+    apply rtc_inv_dcmp. exists x. { auto. }
+    apply rtc_inv_dcmp3. exists z4. { auto. }
+    left. auto.
+  - destruct Hcyc as [z ? ?].
+    exists z, x. auto. apply rtc_incl_itself. left. auto.
+  - destruct Hcyc as [z1 [z2 ? ?] ?].
+    exists z1, x. { auto. }
+    apply rtc_inv_dcmp3. exists z2.
+    { apply tc_incl_rtc, tc_union_right. auto. }
+    left. auto.
+  - destruct Hcyc as [z ? ?].
+    exists x, z. auto. apply rtc_incl_itself. left. auto.
+  - destruct Hcyc as [z Hbeg Hend].
+    exists z, x. { auto. }
+    apply (incl_rel_thm Hbeg). kat.
+  - destruct Hcyc as [z Hbeg Hend].
+    exists z, x. { auto. }
+    apply (incl_rel_thm Hbeg). kat.
+  - rewrite 2seq_assoc in Hcyc.
+    destruct Hcyc as [z Hbeg Hend].
+    exists x, z. { auto. }
+    apply (incl_rel_thm Hend). kat.
+Qed.
+
+Lemma add_cycle_pass_through_addition2 {A:Type} (x:A) (r1 r2: rlt A):
+  r2^+ ⋅ (r1 ⊔ r2)^* ≦ (r1 ⊔ r2)^+.
+Proof. kat. Qed.
+
+Lemma add_cycle_pass_through_addition {A:Type} (x: A) (r1 r2: rlt A):
+  acyclic r1 ->
+  (r1 ⊔ r2)^+ x x ->
+  exists y, (In _ (udr r2) y) /\ (r1 ⊔ r2)^+ y y.
+Proof.
+  intros Hac Hcyc.
+  destruct (added_cycle_pass_through_addition1 _ _ _ Hac Hcyc) as [z H].
+  exists z; split.
+  - left. destruct H as [z' H _]. rewrite tc_inv_dcmp2 in H.
+    destruct H as [z'' H _]. exists z''. auto.
+  - apply add_cycle_pass_through_addition2; auto.
+Qed.
+
 (** If there a relation relates two elements with an immediate link, it relates
 them *)
 
@@ -1009,6 +1139,18 @@ Proof.
   intros [z [z' [Heqx Htx]] [Heqy Hty]].
   rewrite <- Heqx, Heqy in *.
   repeat (apply conj); auto.
+Qed.
+
+Lemma simpl_trt_rel {A:Type} (t1 t2: prop_set A) (r: rlt A) (x y: A):
+  ([t1] ⋅ r ⋅ [t2]) x y -> r x y.
+Proof.
+  intros H. apply simpl_trt_hyp in H as [_ [H _]]. auto.
+Qed.
+
+Lemma simpl_trt_tright {A:Type} (t1 t2: prop_set A) (r: rlt A) (x y: A):
+  ([t1] ⋅ r ⋅ [t2]) x y -> t2 y.
+Proof.
+  intros H. apply simpl_trt_hyp in H as [_ [_ H]]. auto.
 Qed.
 
 Lemma simpl_rt_hyp {A:Type} (t: prop_set A) (r: rlt A) (x y: A):
@@ -1097,6 +1239,20 @@ Proof.
 Qed.
 
 End KatTests.
+
+Lemma tc_test_restriction {A:Type} (t: prop_set A) (r: rlt A):
+  ([t]⋅r⋅[t])^+ ≦ [t]⋅r^+⋅[t].
+Proof. kat. Qed.
+
+Lemma ac_test_restriction {A:Type} (t: prop_set A) (r: rlt A):
+  (forall x, t x -> ~(r^+ x x)) ->
+  acyclic ([t]⋅r⋅[t]).
+Proof.
+  intros H x Hnot.
+  apply tc_test_restriction in Hnot.
+  apply simpl_trt_hyp in Hnot as [Ht [Hr _]].
+  eapply H; eauto.
+Qed.
 
 (** If a test implies another test, and if a first relation whose domain is
 restricted to the elements satisfying the first test is included in a second
@@ -1214,4 +1370,59 @@ Proof.
   intros A R.
   rewrite tc_clos_trans.
   apply clos_trans_ind.
+Qed.
+
+
+Lemma no_path_impl_no_step {A:Type} (r: rlt A) (x y: A):
+  ~(r^+ x y) ->
+  (forall z, ~(r^+ x z /\ r^+ z y)).
+Proof.
+  intros Hnot z [H1 H2].
+  apply Hnot.
+  apply tc_trans with z; auto.
+Qed.
+
+Lemma path_impl_pass_through_aux {A:Type} (r1 r2: rlt A):
+  forall x y,
+  (r1 ⊔ r2)^+ x y ->
+  (fun w1 w2 => ~(r1^+ w1 w2) ->
+                ((r1 ⊔ r2)^* ⋅ (r2 \ r1) ⋅ (r1 ⊔ r2)^* ) w1 w2 ) x y.
+Proof.
+  apply tc_ind.
+  - intros x y [Hr1 | Hr2] Hnot.
+    + destruct Hnot. apply tc_incl_itself. auto.
+    + destruct (classic (r1 x y)).
+      * destruct Hnot. apply tc_incl_itself. auto.
+      * exists y. exists x.
+        all: try (apply one_incl_rtc; intuition).
+        split; auto.
+  - intros x y z Hr1 IH1 Hr2 IH2 Hnot.
+    pose proof ((no_path_impl_no_step _ _ _ Hnot) y) as H.
+    apply not_and_or in H as [H|H].
+    + apply IH1 in H. destruct H as [z1 H1 H2].
+      exists z1. { auto. }
+      apply rtc_inv_dcmp4.
+      exists y; auto.
+    + apply IH2 in H. rewrite seq_assoc in H.
+      destruct H as [z1 H1 H2].
+      rewrite seq_assoc. exists z1; auto.
+      apply rtc_inv_dcmp5. exists y; auto.
+Qed.
+
+Lemma path_impl_pass_through {A:Type} (r1 r2: rlt A) (x y: A):
+  ~(r1^+ x y) ->
+  (r1 ⊔ r2)^+ x y ->
+  ((r1 ⊔ r2)^* ⋅ (r2 \ r1) ⋅ (r1 ⊔ r2)^*) x y.
+Proof.
+  intros Hnot Hpath.
+  apply path_impl_pass_through_aux; auto.
+Qed.
+
+Lemma added_cycle_pass_through_addition {A:Type} (r1 r2: rlt A) (x: A):
+  acyclic r1 ->
+  (r1 ⊔ r2)^+ x x ->
+  ((r1 ⊔ r2)^* ⋅ (r2 \ r1) ⋅ (r1 ⊔ r2)^*) x x.
+Proof.
+  intros Hac Hcyc.
+  apply (path_impl_pass_through _ _ _ _ (Hac x) Hcyc).
 Qed.

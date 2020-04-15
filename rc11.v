@@ -111,8 +111,6 @@ Proof.
   fold mo in Hmo. rewrite Hmo. unfold mo; intuition.
 Qed.
 
-Open Scope rel_notations.
-
 Lemma rb_rw:
   rb ≡ [R] ⋅ rb ⋅ [W].
 Proof.
@@ -167,6 +165,18 @@ Proof.
   - kat.
 Qed.
 
+(** In a valid execution, the sequenced-before relation is irreflexive *)
+
+Lemma sb_irr:
+  irreflexive (sb ex).
+Proof.
+  apply irreflexive_is_irreflexive.
+  destruct_val_exec Hval.
+  destruct_sb_v Hsb_v.
+  destruct Hsb_lso as [[_ [_ Hsbirr]] _].
+  intros x. apply Hsbirr.
+Qed.
+
 (** In a valid execution, the read-from relation is irreflexive *)
 
 Lemma rf_irr:
@@ -198,6 +208,18 @@ Proof.
   unfold irreflexive.
   rewrite rb_rw, refl_double, capone.
   mrewrite wr_0. ra.
+Qed.
+
+Lemma sbrfmorb_irr:
+  irreflexive (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb).
+Proof.
+  apply irreflexive_union.
+  apply irreflexive_union.
+  apply irreflexive_union.
+  apply sb_irr.
+  apply rf_irr.
+  apply mo_irr.
+  apply rb_irr.
 Qed.
 
 (** We can deduce from this that [eco] is acyclic *)

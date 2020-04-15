@@ -54,8 +54,8 @@ Lemma numbering_coherent_rtc (ex: Execution) (x y: Event):
   ((sb ex) ⊔ (rf ex))^* x y ->
   numbering ex y >= numbering ex x.
 Proof.
-  generalize x y.
-  clear x y.
+  generalize dependent y.
+  generalize dependent x.
   apply rtc_ind.
   - intros x y Hstep. apply numbering_coherent in Hstep. lia.
   - auto.
@@ -117,6 +117,14 @@ Import Numbering.
 Definition NLE (ex: Execution) (b: nat) : prop_set Event :=
   fun e => b >= (numbering ex e).
 
+Lemma NLE_bound_min_one (ex: Execution) (bound: nat):
+  [NLE ex (bound-1)] ≦ [NLE ex bound].
+Proof.
+  intros x y [H1 H2].
+  split; auto.
+  unfold NLE in *. lia.
+Qed.
+
 Lemma nle_double (ex: Execution) (k1 k2: nat):
   k1 < k2 ->
   [NLE ex k1]⋅[NLE ex k2] = [NLE ex k1].
@@ -154,6 +162,14 @@ Lemma simpl_mo_be (ex: Execution) (n:nat):
   mo (bounded_exec ex n) = [NLE ex n] ⋅ (mo ex) ⋅ [NLE ex n].
 Proof. compute; auto. Qed.
 
+Lemma simpl_rb_be (ex: Execution) (n:nat):
+  rb (bounded_exec ex n) ≦ [NLE ex n] ⋅ (rb ex) ⋅ [NLE ex n].
+Proof. 
+  unfold rb. rewrite simpl_mo_be, simpl_rf_be.
+  rewrite 2dot_cnv, injcnv.
+  kat.
+Qed.
+
 Create HintDb bounded_exec_db.
 
 Hint Rewrite simpl_sb_be simpl_rmw_be simpl_rf_be simpl_mo_be : bounded_exec_db.
@@ -161,6 +177,30 @@ Hint Rewrite simpl_sb_be simpl_rmw_be simpl_rf_be simpl_mo_be : bounded_exec_db.
 Tactic Notation "rew" "bounded" := autorewrite with bounded_exec_db.
 Tactic Notation "rew" "bounded" "in" hyp(H) := autorewrite with bounded_exec_db in H.
 
+Lemma sc_cycle_be_incl_be_sc_cycle (ex: Execution) (n: nat):
+  sb (bounded_exec ex n) ⊔
+  rf (bounded_exec ex n) ⊔
+  mo (bounded_exec ex n) ⊔
+  rb (bounded_exec ex n) ≦
+  [NLE ex n] ⋅
+  (sb (bounded_exec ex n) ⊔
+   rf (bounded_exec ex n) ⊔
+   mo (bounded_exec ex n) ⊔
+   rb (bounded_exec ex n) ) ⋅ [NLE ex n].
+Proof.
+  unfold rb.
+  rew bounded.
+  rewrite 2dot_cnv, injcnv.
+  kat.
+Qed.
+
+Lemma cycle_be_incl_cycle_ex (ex: Execution) (bound:nat):
+  sb (bounded_exec ex bound) ⊔ rf (bounded_exec ex bound) ⊔
+  mo (bounded_exec ex bound) ⊔ rb (bounded_exec ex bound) ≦
+  sb ex ⊔ rf ex ⊔ mo ex ⊔ rb ex.
+Proof.
+  unfold rb. rew bounded. rewrite 2dot_cnv, injcnv. kat.
+Qed.
 
 (** In a valid execution, if two events are related by [sb ex ⊔ rf ex], they 
 belong to the events of [ex] *)

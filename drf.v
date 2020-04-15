@@ -6,8 +6,7 @@ C/C++11; Lahav, Vafeiadis, Kang et al., PLDI 2017)
 Author: Quentin Ladeveze, Inria Paris, France
 *)
 
-From RelationAlgebra Require Import 
-  lattice prop monoid rel kat_tac normalisation kleene kat rewriting.
+From RelationAlgebra Require Import rel prop monoid kat relalg kat_tac.
 From RC11 Require Import proprel_classic.
 From RC11 Require Import util.
 From RC11 Require Import exec.
@@ -18,6 +17,7 @@ From RC11 Require Import numbering.
 Require Import Lia.
 Require Import Ensembles.
 Require Import Relations.
+Require Import Classical_Prop.
 
 Open Scope rel_notations.
 
@@ -343,6 +343,160 @@ Proof.
   - eapply bounded_exec_is_prefix. eauto.
   - apply mcp_write_race; auto.
 Qed.
+
+Lemma be_decomposable (ex: Execution) (bound: nat):
+  valid_exec ex ->
+  bound > 0 ->
+  sb (bounded_exec ex bound) ⊔
+  rf (bounded_exec ex bound) ⊔
+  mo (bounded_exec ex bound) ⊔
+  rb (bounded_exec ex bound) =
+  (sb (bounded_exec ex (bound - 1)) ⊔
+   rf (bounded_exec ex (bound - 1)) ⊔
+   mo (bounded_exec ex (bound - 1)) ⊔
+   rb (bounded_exec ex (bound - 1))) ⊔
+  (sb (bounded_exec ex bound) ⊔
+   rf (bounded_exec ex bound) ⊔
+   mo (bounded_exec ex bound) ⊔
+   rb (bounded_exec ex bound)).
+Proof.
+  intros Hval Hbndnotnull.
+  rew bounded. apply ext_rel, antisym.
+  - kat.
+  - rewrite NLE_bound_min_one.
+    assert (prefix (bounded_exec ex (bound - 1)) (bounded_exec ex bound)) as Hpre.
+    { apply (two_ord_bounds_pre _ _ _ Hval). lia. }
+    rewrite (rb_prefix_incl Hpre). kat.
+Qed.
+
+Ltac solve_trt_bounds := (simpl_trt; auto; unfold NLE; lia).
+
+Lemma be_union_bound_min_one (ex: Execution) (bound: nat) (x y: Event):
+  ((sb (bounded_exec ex bound) ⊔
+    rf (bounded_exec ex bound) ⊔
+    mo (bounded_exec ex bound) ⊔
+    rb (bounded_exec ex bound)) \
+   (sb (bounded_exec ex (bound-1)) ⊔
+    rf (bounded_exec ex (bound-1)) ⊔
+    mo (bounded_exec ex (bound-1)) ⊔
+    rb (bounded_exec ex (bound-1)))) x y ->
+  (numbering ex x) = bound \/ (numbering ex y) = bound.
+Proof.
+  intros [H Hnot].
+  destruct (Compare_dec.lt_eq_lt_dec (numbering ex x) bound) as [[Hordx|Hordx]|Hordx];
+  destruct (Compare_dec.lt_eq_lt_dec (numbering ex y) bound) as [[Hordy|Hordy]|Hordy].
+  - exfalso. apply Hnot.
+    unfold rb. unfold rb in H. rew bounded. rew bounded in H.
+    destruct H as [[[H|H]|H]|H].
+    + left; left; left. apply simpl_trt_rel in H. solve_trt_bounds.
+    + left; left; right. apply simpl_trt_rel in H. solve_trt_bounds.
+    + left; right. apply simpl_trt_rel in H. solve_trt_bounds.
+    + right. destruct H as [z Hrf Hmo]. exists z.
+      * apply simpl_trt_rel in Hrf. rewrite <- cnv_rev.
+        apply rf_num_ord in Hrf as Hordz. solve_trt_bounds.
+      * apply simpl_trt_rel in Hmo. apply simpl_trt_rel in Hrf.
+        apply rf_num_ord in Hrf as Hordz. solve_trt_bounds.
+  - right; auto.
+  - exfalso. unfold rb in H. rew bounded in H. destruct H as [[[H|H]|H]|H];
+    try (apply simpl_trt_tright in H; unfold NLE in H; lia).
+    destruct H as [z _ H]. apply simpl_trt_tright in H. unfold NLE in H. lia.
+  - left; auto.
+  - left; auto.
+  - left; auto.
+  - exfalso. unfold rb in H. rew bounded in H. destruct H as [[[H|H]|H]|H];
+    try (apply simpl_trt_hyp in H; unfold NLE in H; lia).
+    destruct H as [z H _]. apply simpl_trt_hyp in H. unfold NLE in H. lia.
+  - right; auto.
+  - exfalso. unfold rb in H. rew bounded in H. destruct H as [[[H|H]|H]|H];
+    try (apply simpl_trt_hyp in H; unfold NLE in H; lia).
+    destruct H as [z H _]. apply simpl_trt_hyp in H. unfold NLE in H. lia.
+Qed.
+
+Lemma mcp_write_cycle (ex: Execution) (bound: nat) (k j: Event):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  minimal_conflicting_pair ex bound j k ->
+  (numbering ex k) > (numbering ex j) ->
+  ~(sc_consistent (bounded_exec ex bound)) ->
+  (sb (bounded_exec ex bound) ⊔ rf (bounded_exec ex bound) ⊔ 
+   mo (bounded_exec ex bound) ⊔ rb (bounded_exec ex bound))^+ k k.
+Proof.
+  intros Hval Hrc11 Hmcp Hord Hnotsc.
+  assert (sc_consistent (bounded_exec ex (bound-1))) as Hsc.
+  { eapply smaller_than_smallest_sc; eauto.
+    inversion Hmcp as [Hscb _].
+    erewrite S_min_one. { auto. }
+    eapply mcp_bound_gt_zero. eauto. }
+  unfold sc_consistent in *.
+  apply not_and_or in Hnotsc as [Hnotat | Hcyc].
+  { apply (bounded_is_rc11 _ bound Hval) in Hrc11 as [_ [Hat _]].
+    intuition auto. }
+  apply not_acyclic_is_cyclic in Hcyc.
+  destruct Hsc as [_ Hsc].
+  rewrite (be_decomposable _ _ Hval (mcp_bound_gt_zero _ _ _ _ Hmcp)) in Hcyc.
+  destruct Hcyc as [x Hcyc].
+  pose proof (added_cycle_pass_through_addition _ _ _ Hsc Hcyc) as H.
+  destruct H as [z1 [z2 Hbegin Hmid] Hend].
+  rewrite <- (be_decomposable _ _ Hval (mcp_bound_gt_zero _ _ _ _ Hmcp)) in Hbegin, Hend.
+  inversion Hmid as [Hz1z2 _].
+  pose proof (be_union_bound_min_one _ _ _ _ Hmid) as [Hz|Hz]; clear Hmid;
+  apply (mcp_num_snd_evt _ _ _ _ Hval) in Hmcp as Hk;
+  rewrite (max_rewrite _ _ Hord) in Hk;
+  rewrite <-Hk in Hz; rewrite <-numbering_injective_eq in Hz; rewrite <-Hz.
+  - rewrite tc_inv_dcmp2. exists z1. { auto. }
+    apply rtc_trans. exists x; auto.
+  - rewrite tc_inv_dcmp. exists z2; auto.
+    apply rtc_trans. exists x; auto.
+Qed.
+
+Lemma mcp_write_1 (ex: Execution) (bound: nat) (k j b: Event):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  minimal_conflicting_pair ex bound j k ->
+  (numbering ex k) > (numbering ex j) ->
+  is_write k ->
+  ~(sc_consistent (bounded_exec ex bound)) ->
+  (rmw ex) b k ->
+  exists c, (mo ex) k c /\ (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb ex)^+ c k.
+Proof.
+  intros Hval Hrc11 Hmcp Hord Hwk Hnotsc Hrmw.
+  pose proof (mcp_write_cycle _ _ _ _ Hval Hrc11 Hmcp Hord Hnotsc).
+  rewrite tc_inv_dcmp3 in H. destruct H as [H|H].
+  { pose proof (sbrfmorb_irr _ Hval) as Hirr.
+    rewrite <-irreflexive_is_irreflexive in Hirr.
+    exfalso. apply (Hirr k).
+    apply cycle_be_incl_cycle_ex in H. auto. }
+  destruct H as [c H1 H2]. exists c; apply conj; auto.
+  destruct H1 as [[[Hsb|Hrf]|Hmo]|Hrb].
+  - exfalso. eapply (mcp_sb_last ex bound k j); eauto.
+    apply mcp_is_sym. auto.
+  - exfalso. eapply (mcp_rf_last ex bound k j); eauto.
+    apply mcp_is_sym. auto.
+  - eapply mo_prefix_incl.
+    + eapply bounded_exec_is_prefix. auto.
+    + eauto.
+  - destruct Hrb as [z Hrf _].
+    rewrite <-cnv_rev in Hrf.
+    eapply rf_dest_read in Hrf.
+    + exfalso. destruct k; auto.
+    + apply bounded_is_valid. auto.
+  - apply (tc_incl _ _ (cycle_be_incl_cycle_ex _ _))in H2. auto.
+Qed.
+
+Lemma mcp_write_not_at (ex: Execution) (bound: nat) (x y: Event):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  minimal_conflicting_pair ex bound x y ->
+  (numbering ex x) > (numbering ex y) ->
+  is_write x ->
+  ~(In _ (At ex) x).
+Proof.
+  intros Hval Hrc11 Hmcp Hord Hxw Hnot.
+  destruct Hnot as [x [z Hrmw] | x [z Hrmw]].
+  - eapply (rmw_orig_read _ Hval) in Hrmw.
+    destruct x; intuition auto.
+  - admit.
+Admitted.
 
 End DRF.
 
