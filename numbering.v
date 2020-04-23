@@ -261,6 +261,17 @@ Proof.
   eauto.
 Qed.
 
+Lemma bounded_is_complete (ex: Execution) (bound: nat):
+  complete_exec ex ->
+  complete_exec (bounded_exec ex bound).
+Proof.
+  intros Hcomp.
+  eapply prefix_complete.
+  eauto.
+  eapply bounded_exec_is_prefix.
+  destruct Hcomp as [Hval _]. auto.
+Qed.
+
 Lemma bounded_is_rc11 (ex: Execution) (bound: nat):
   valid_exec ex ->
   rc11_consistent ex ->
@@ -363,13 +374,14 @@ Proof.
 Qed.
 
 Theorem smaller_than_smallest_sc (ex: Execution) (bound: nat):
-  valid_exec ex ->
+  complete_exec ex ->
   rc11_consistent ex ->
   (smallest_conflicting_bounding ex bound) ->
   forall smaller, smaller < bound ->
                   sc_consistent (bounded_exec ex smaller).
 Proof.
-  intros Hval Hrc11 Hscb smaller Hsmaller. 
+  intros Hcomp Hrc11 Hscb smaller Hsmaller.
+  inversion Hcomp as [Hval _].
   eapply no_conflict_prefix_sc; eauto.
   - eauto using bounded_exec_is_prefix.
   - eapply smaller_than_smallest_not_conflicting; eauto.
@@ -648,13 +660,17 @@ Proof.
   - destruct ex. simpl. destruct Hink as [z Hkevts Hink]. split.
     + simpl in Hkevts. auto.
     + unfold In. lia.
+  (*
   - destruct (not_or_and _ _ Hbidir) as [Hjk Hkj].
-    apply and_not_or. split.
-    + intros Hnot. apply Hjk.
+    apply and_not_or. split; auto.
+  *)
+  - destruct (not_or_and _ _ Hbidir) as [Hjk Hkj].
+    intros Hnot. destruct Hnot as [Hnot|Hnot].
+    + apply Hjk.
       eapply sbrfsc_pre_inc.
       * eapply two_ord_bounds_pre; eauto.
       * auto.
-    + intros Hnot. apply Hkj. 
+    + apply Hkj.
       eapply sbrfsc_pre_inc.
       * eapply two_ord_bounds_pre; eauto.
       * auto.

@@ -28,6 +28,7 @@ Ltac byabsurd :=
   |  |- ?Hgoal => destruct (classic Hgoal) as [|Hcontr]; [auto|]
   end.
 
+
 (** A tactic to destruct the disjunction of n propositions, to n cases in the
 proof *)
 
@@ -531,6 +532,10 @@ Proof.
   apply ext_rel. kat.
 Qed.
 
+Lemma union_comm_assoc {A:Type} (r1 r2 r3: rlt A):
+  (r1 ⊔ r2 ⊔ r3) = (r1 ⊔ r3 ⊔ r2).
+Proof. kat_eq. Qed.
+
 (** If two relations are included in a third relation, their union is included
 in the third relation *)
 
@@ -679,6 +684,10 @@ Lemma tc_inv_dcmp4 {A:Type} (r: rlt A):
   r^+ = r ⊔ (r^+ ⋅ r).
 Proof. kat_eq. Qed.
 
+Lemma tc_inv_dcmp5 {A:Type} (r: rlt A):
+  r^+ = r ⊔ (r^* ⋅ r).
+Proof. kat_eq. Qed.
+
 Lemma rtc_inv_dcmp {A:Type} (r: rlt A):
   r^* ⋅ r^* ≦ r^*.
 Proof. kat. Qed.
@@ -698,6 +707,10 @@ Proof. kat. Qed.
 Lemma rtc_inv_dcmp5 {A:Type} (r: rlt A):
   r^+ ⋅ r^* ≦ r^*.
 Proof. kat. Qed.
+
+Lemma rtc_inv_dcmp6 {A:Type} (r: rlt A):
+  r^* = 1 ⊔ r^+.
+Proof. kat_eq. Qed.
 
 Lemma tc_incl_rtc {A:Type} (r: rlt A):
   r^+ ≦ r^*.
@@ -796,6 +809,8 @@ Proof.
   intros H1 H2.
   apply H2 in H1; auto.
 Qed.
+
+Ltac incl_rel_kat H := apply (incl_rel_thm H); kat.
 
 (** If an element is in the domain or in the range of a relation, it is in the
 domain or range of any relation in which the relation is included *)
@@ -1382,6 +1397,7 @@ Proof.
   apply tc_trans with z; auto.
 Qed.
 
+
 Lemma path_impl_pass_through_aux {A:Type} (r1 r2: rlt A):
   forall x y,
   (r1 ⊔ r2)^+ x y ->
@@ -1409,6 +1425,7 @@ Proof.
       apply rtc_inv_dcmp5. exists y; auto.
 Qed.
 
+
 Lemma path_impl_pass_through {A:Type} (r1 r2: rlt A) (x y: A):
   ~(r1^+ x y) ->
   (r1 ⊔ r2)^+ x y ->
@@ -1425,4 +1442,55 @@ Lemma added_cycle_pass_through_addition {A:Type} (r1 r2: rlt A) (x: A):
 Proof.
   intros Hac Hcyc.
   apply (path_impl_pass_through _ _ _ _ (Hac x) Hcyc).
+Qed.
+
+Lemma union_dcmp {A:Type} (r1 r2: rlt A):
+  (r1 ⊔ r2) = (r1 ⊔ (r2 \ r1)).
+Proof.
+  apply ext_rel, antisym; intros x y [H|H].
+  - left; auto.
+  - destruct (classic (r1 x y)).
+    + left; auto.
+    + right; split; auto.
+  - left; auto.
+  - destruct H as [H2 _].
+    right; auto.
+Qed.
+
+Lemma minus_incl {A:Type} (r1 r2: rlt A):
+  (r2 \ r1) ≦ r2.
+Proof.
+  intros x y [H _].
+  auto.
+Qed.
+
+Lemma tc_union_dcmp {A:Type} (r1 r2: rlt A):
+  (r1 ⊔ r2)^+ = r1^+ ⊔ (r1^* ⋅ (r2 \ r1) ⋅ (r1 ⊔ r2)^*).
+Proof.
+  apply ext_rel, antisym.
+  - intros x y H.
+    generalize dependent y.
+    generalize dependent x.
+    apply tc_ind.
+    + intros x y H. rewrite union_dcmp in H.
+      destruct H as [H|H].
+      * left. apply tc_incl_itself. auto.
+      * eapply (incl_rel_thm H). kat.
+    + intros x y z H1 IH1 H2 IH2.
+      destruct IH1 as [IH1|IH1];
+      destruct IH2 as [IH2|IH2].
+      * left. apply tc_trans with y; auto.
+      * destruct IH2 as [w1 [w2 Hr1 Hr2] Hr3].
+        right. exists w1;[|auto]. exists w2; auto.
+        apply rtc_trans. exists y; auto.
+        apply (incl_rel_thm IH1). kat.
+      * destruct IH1 as [w1 [w2 Hr1 Hr2] Hr3].
+        right. exists w1. exists w2; auto.
+        apply rtc_trans. exists y; auto.
+        apply (incl_rel_thm IH2). kat.
+      * destruct IH1 as [w1 [w2 Hr1 Hr2] Hr3].
+        right. exists w1. exists w2; auto.
+        apply rtc_trans. exists y; auto.
+        apply (incl_rel_thm H2). kat.
+  - rewrite (minus_incl r1 r2). kat.
 Qed.

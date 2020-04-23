@@ -10,7 +10,7 @@ From RelationAlgebra Require Import
   lattice prop monoid rel kat_tac normalisation kleene kat rewriting.
 From RC11 Require Import util proprel_classic.
 From RC11 Require Import exec.
-Require Import Ensembles.
+Require Import Ensembles Classical_Prop.
 
 Open Scope rel_notations.
 
@@ -19,7 +19,10 @@ Open Scope rel_notations.
 Section RC11.
 
 Variable ex: Execution.
-Variable Hval: valid_exec ex.
+Variable Hcomp: complete_exec ex.
+
+Lemma Hval: valid_exec ex.
+Proof. destruct Hcomp; auto. Qed.
 
 (** * Derived relations *)
 
@@ -43,7 +46,7 @@ Proof.
   intros Hrb.
   destruct Hrb as [z Hrf Hmo].
   simp_cnv Hrf.
-  eapply rf_dest_evts; eauto.
+  eapply rf_dest_evts; eauto using Hval.
 Qed.
 
 Lemma rb_dest_evts (x y : Event):
@@ -52,7 +55,7 @@ Lemma rb_dest_evts (x y : Event):
 Proof.
   intros Hrb.
   destruct Hrb as [z Hrf Hmo].
-  eapply mo_dest_evts; eauto.
+  eapply mo_dest_evts; eauto using Hval.
 Qed.
 
 Lemma rb_orig_read (x y : Event):
@@ -62,7 +65,7 @@ Proof.
   intros Hrb.
   destruct Hrb as [z Hrf Hmo].
   simp_cnv Hrf.
-  eapply rf_dest_read; eauto.
+  eapply rf_dest_read; eauto using Hval.
 Qed.
 
 Lemma rb_dest_write (x y : Event):
@@ -71,7 +74,7 @@ Lemma rb_dest_write (x y : Event):
 Proof.
   intros Hrb.
   destruct Hrb as [z Hrf Hmo].
-  eapply mo_dest_write; eauto.
+  eapply mo_dest_write; eauto using Hval.
 Qed.
 
 Lemma rb_same_loc (x y : Event):
@@ -84,7 +87,7 @@ Proof.
   apply rf_same_loc in Hrf.
   apply mo_same_loc in Hmo.
   congruence.
-  eauto. eauto.
+  all: eauto using Hval.
 Qed.
 
 (** ** Extended coherence order *)
@@ -279,7 +282,7 @@ Definition sw :=
 Lemma sw_incl_sbrf:
   sw ≦ ((sb ex) ⊔ (rf ex))^+.
 Proof.
-  unfold sw, rs. rewrite rmw_incl_sb. kat. auto.
+  unfold sw, rs. rewrite rmw_incl_sb. kat. auto using Hval.
 Qed.
   
 (** ** Happens-before *)
@@ -528,6 +531,60 @@ defined *)
 
 Definition rc11_consistent :=
   coherence /\atomicity /\ SC /\ no_thin_air.
+
+(** Coherence implies that [rmw] is included in [rb] *)
+
+Lemma rc11_rmw_incl_rb:
+  rc11_consistent ->
+  rmw ex ≦ rb.
+Proof.
+  intros [Hco _] x y Hrmw.
+  unfold coherence in Hco.
+  unfold hb, eco in Hco.
+  unfold rb. byabsurd.
+  destruct (Hco x).
+  assert (exists z, (rf ex) z x) as [z Hrf].
+  { destruct Hcomp as [_ Hrf].
+    unfold ran in Hrf. apply Hrf.
+    split.
+    - apply (rmw_orig_evts _ Hval _ y Hrmw).
+    - apply (rmw_orig_read _ Hval _ y Hrmw).
+  }
+  destruct (classic (y = z)) as [Hyz|Hyz].
+  - apply (rmw_incl_sb _ Hval) in Hrmw.
+    rewrite <-Hyz in Hrf.
+    exists y.
+    + apply tc_incl_itself. left. auto.
+    + left. apply tc_incl_itself. left. left. auto.
+  - assert (exists l, (get_loc y = Some l) /\ (get_loc z = Some l))
+    as [l [Hl1 Hl2]].
+    { apply (rf_dest_read _ Hval) in Hrf as Hxw.
+      apply (rf_same_loc _ Hval) in Hrf.
+      apply (rmw_same_loc _ Hval) in Hrmw.
+      rewrite <-Hrmw, Hrf. destruct x.
+      - exists l. intuition auto.
+      - exists l. intuition auto.
+      - simpl in Hxw. intuition auto.
+    }
+    edestruct (mo_diff_write _ Hval) as [Hmo|Hmo]; eauto.
+    + repeat (apply conj).
+      * apply (rmw_dest_evts _ Hval x). auto.
+      * apply (rmw_dest_write _ Hval x). auto.
+      * eauto.
+    + repeat (apply conj).
+      * apply (rf_orig_evts _ Hval _ x). auto.
+      * apply (rf_orig_write _ Hval _ x). auto.
+      * auto.
+    + exists y.
+      { apply (rmw_incl_sb _ Hval) in Hrmw.
+        apply (incl_rel_thm Hrmw). kat. }
+      left. apply tc_trans with z.
+      * apply (incl_rel_thm Hmo). kat.
+      * apply (incl_rel_thm Hrf). kat.
+    + destruct Hcontr. exists z.
+      * apply (incl_rel_thm Hrf). kat.
+      * apply (incl_rel_thm Hmo). kat.
+Qed.
 
 (** * SC-consistent executions *)
 

@@ -421,6 +421,30 @@ Proof.
   unfold res_neq_mode. kat.
 Qed.
 
+(** ** Set of reads and writes on a set of events *)
+
+Definition reads (evts: Ensemble Event) : Ensemble Event :=
+  fun e => (In _ evts e) /\ is_read e.
+
+Definition writes (evts: Ensemble Event) : Ensemble Event :=
+  fun e => (In _ evts e) /\ is_write e.
+
+Definition writes_loc (evts: Ensemble Event) (l: Loc) : Ensemble Event :=
+  fun e => 
+    (In _ evts e) /\
+    is_write e /\
+    (get_loc e) = Some l.
+
+Lemma writes_loc_incl (e1 e2: Ensemble Event) (l: Loc) (x: Event):
+  Included _ e1 e2 ->
+  In _ (writes_loc e1 l) x ->
+  In _ (writes_loc e2 l) x.
+Proof.
+  intros Hincl [Hevts [Hw Hl]].
+  apply Hincl in Hevts.
+  repeat (apply conj); auto.
+Qed.
+
 (** ** Sequenced before *)
 
 (** A sequenced before relation is valid if it is a strict partial order and
@@ -439,7 +463,6 @@ Definition valid_sb (evts: Ensemble Event) (sb : rlt Event) : Prop :=
 
 Ltac destruct_sb_v H :=
   destruct H as [Hsb_lso [Hsb_in_e Hsbinit]].
-
 
 (** ** Read-modify-write relation *)
 
@@ -579,7 +602,7 @@ Definition valid_mo (evts: Ensemble Event) (mo : rlt Event) : Prop :=
   (forall x y, mo x y ->
                (get_loc x) = (get_loc y)) /\
   (partial_order mo evts) /\
-  (forall l, total_rel (mo_for_loc mo l) evts).
+  (forall l, total_rel (mo_for_loc mo l) (writes_loc evts l)).
 
 Ltac destruct_mo_v H :=
   destruct H as [Hmoww [Hmosameloc [Hmopo Hmotot]]].
@@ -775,6 +798,18 @@ Proof.
   intuition (auto using (imm_rel_implies_rel (sb ex))).
 Qed.
 
+Lemma rmw_incl_imm_sb:
+  (rmw ex) ≦ imm (sb ex).
+Proof.
+  intros x y Hrmw.
+  destruct_val_exec val_exec.
+  destruct_rmw_v Hrmw_v.
+  apply Hrmw_vpairs in Hrmw as Hrmwp.
+  unfold valid_rmw_pair in Hrmwp.
+  (destruct (get_mode x); destruct (get_mode y)).
+  all: intuition auto.
+Qed.
+
 Lemma rmw_orig_read (x y: Event):
   (rmw ex) x y ->
   is_read x.
@@ -797,6 +832,19 @@ Proof.
   destruct_rmw_v Hrmw_v.
   apply Hrmw_vpairs in Hrmw as Hrmwp.
   unfold valid_rmw_pair in Hrmwp.
+  destruct (get_mode x); destruct (get_mode y);
+  intuition auto.
+Qed.
+
+Lemma rmw_same_loc (x y: Event):
+  (rmw ex) x y ->
+  (get_loc x) = (get_loc y).
+Proof.
+  intros Hrmw.
+  destruct_val_exec val_exec.
+  destruct_rmw_v Hrmw_v.
+  apply Hrmw_vpairs in Hrmw.
+  unfold valid_rmw_pair in Hrmw.
   destruct (get_mode x); destruct (get_mode y);
   intuition auto.
 Qed.
@@ -881,15 +929,40 @@ Proof.
   auto.
 Qed.
 
+(** If two write events to the same location are different, they must be related
+by mo in a direction or the other *)
+
+Lemma mo_diff_write (x y: Event) (l: Loc):
+  In _ (writes_loc (evts ex) l) x ->
+  In _ (writes_loc (evts ex) l) y ->
+  x <> y ->
+  (mo ex x y \/ mo ex y x).
+Proof.
+  intros Hxlw Hylw Hdiff.
+  destruct_val_exec val_exec.
+  destruct_mo_v Hmo_v.
+  unfold total_rel in Hmotot.
+  specialize (Hmotot l x y Hdiff Hxlw Hylw).
+  destruct Hmotot as [Hmotot|Hmotot].
+  - left. destruct Hmotot. auto.
+  - right. destruct Hmotot. auto.
+Qed.
+
+(** mo is transitive *)
+
+Lemma mo_trans (x y z: Event):
+  (mo ex) x y ->
+  (mo ex) y z ->
+  (mo ex) x z.
+Proof.
+  intros Hmo1 Hmo2.
+  destruct_val_exec val_exec.
+  destruct_mo_v Hmo_v.
+  destruct Hmopo as [_ [Hmotrans _]].
+  apply Hmotrans. exists y; auto.
+Qed.
+
 End ValidExecs.
-  
-(** ** Getters *)
-
-Definition reads (ex: Execution) : Ensemble Event :=
-  fun e => (In _ ex.(evts) e) /\ is_read e.
-
-Definition writes (ex: Execution) : Ensemble Event :=
-  fun e => (In _ ex.(evts) e) /\ is_write e.
 
 (** Atomic events are events that are either in the domain or in the range of
 [rmw] *)
@@ -903,4 +976,4 @@ Definition At (ex: Execution) : Ensemble Event :=
 that was written at some point *)
 
 Definition complete_exec (e: Execution) :=
-  valid_exec e /\ Included _ (reads e) (ran e.(rf)).
+  valid_exec e /\ Included _ (reads (evts e)) (ran e.(rf)).

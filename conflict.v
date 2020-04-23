@@ -160,10 +160,11 @@ Ltac solve_test_ineq :=
 (** ** SC-consistent prefixes *)
 
 Lemma nt_rfsc_incl_hb {ex: Execution}:
-  valid_exec ex ->
+  complete_exec ex ->
   [M Sc] ⋅ rf ex ⋅ [M Sc] ≦  sw ex.
 Proof.
-  intros Hval.
+  intros Hcomp.
+  inversion Hcomp as [Hval _].
   unfold sw.
   rewrite <- (one_incl_refl ([F]⋅sb ex)).
   rewrite <- (one_incl_refl (sb ex⋅[F])).
@@ -180,7 +181,7 @@ Proof.
   rewrite <- (one_incl_refl (sb ex)).
   rewrite <- (one_incl_rtc (rf ex⋅rmw ex)).
   rewrite !dot_one, dtest.
-  rewrite (rf_wr _ Hval) at 1.
+  rewrite (rf_wr _ Hcomp) at 1.
   mrewrite (test_dot_comm _ R).
   apply incl_dot_test_right. auto.
   rewrite (test_in_one _ (M Sc)) at 2.
@@ -193,23 +194,23 @@ Proof.
 Qed.
 
 Lemma sbrfsc_incl_hb {ex: Execution}:
-  valid_exec ex ->
+  complete_exec ex ->
   (sb ex ⊔ ([M Sc] ⋅ rf ex ⋅ [M Sc]))^+ ≦ hb ex.
 Proof.
-  intros Hval.
+  intros Hcomp.
   unfold hb.
   apply tc_incl.
   apply incl_cup; auto.
-  apply (nt_rfsc_incl_hb Hval).
+  apply (nt_rfsc_incl_hb Hcomp).
 Qed.
 
 Lemma sbrfsc_incl_pre (pre ex: Execution):
-  valid_exec ex ->
+  complete_exec ex ->
   prefix pre ex ->
   (sb pre ⊔ ([M Sc] ⋅ (rf pre) ⋅ [M Sc]))^+ ≦
   (sb ex ⊔ ([M Sc] ⋅ (rf ex) ⋅ [M Sc]))^+.
 Proof.
-  intros Hval Hpre.
+  intros Hcomp Hpre.
   apply tc_incl.
   apply incl_cup.
   apply sb_prefix_incl; auto.
@@ -226,13 +227,14 @@ of the union of the sequenced-before the reads-from restricted to SC events
 relations of this execution *)
 
 Lemma rf_prefix_in_sbrfsc_ex {pre ex: Execution}:
-  valid_exec ex ->
+  complete_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
   ~(expi pre) ->
   (rf pre) ≦ (((sb ex) ⊔ ((res_mode Sc (rf ex))))^+).
 Proof.
-  intros Hval H11cons Hpre Hnoconflict x y Hrfpre.
+  intros Hcomp H11cons Hpre Hnoconflict x y Hrfpre.
+  inversion Hcomp as [Hval _].
   (* We suppose that x and y are related by ex.rf *)
   apply (rf_prefix_incl Hpre) in Hrfpre as Hrf.
   destruct (classic ((get_mode x) = Sc /\ (get_mode y) = Sc)) 
@@ -250,7 +252,7 @@ Proof.
     as [Hres' | Hcontr'].
   (* If y and x are related by ex.(sb U rf_sc)^+ *)
   - destruct H11cons as [Hco _].
-    apply (sbrfsc_incl_hb Hval) in Hres'.
+    apply (sbrfsc_incl_hb Hcomp) in Hres'.
     destruct (coherence_no_future_read _ Hco) with (x := x).
     eexists; eauto.
   (* If y and x are not related by ex.(sb U rf_sc)^+ *)
@@ -261,7 +263,7 @@ Proof.
     + eapply rf_dest_evts; eauto.
       eauto using prefix_valid.
     + left. eauto using rf_orig_write.
-    + intros Hnot. eapply (rf_irr _ Hval).
+    + intros Hnot. eapply (rf_irr _ Hcomp).
       split; eauto.
     + eapply rf_same_loc; eauto.
     + auto.
@@ -271,13 +273,14 @@ Proof.
 Qed.
 
 Lemma sbrf_incl_sbrfsc (ex: Execution):
-  valid_exec ex ->
+  complete_exec ex ->
   rc11_consistent ex ->
   ~(expi ex) ->
   (sb ex ⊔ rf ex)^+ ≦ (sb ex ⊔ res_mode Sc (rf ex))^+.
 Proof.
-  intros Hval Hrc11 Hnotconf.
-  erewrite (rf_prefix_in_sbrfsc_ex Hval Hrc11 _ Hnotconf) at 1.
+  intros Hcomp Hrc11 Hnotconf.
+  inversion Hcomp as [Hval _].
+  erewrite (rf_prefix_in_sbrfsc_ex Hcomp Hrc11 _ Hnotconf) at 1.
   kat.
   Unshelve.
   apply prefix_itself.
@@ -291,14 +294,15 @@ relations of this execution and of the modification order restricted to SC event
 of this execution *)
 
 Lemma mo_prefix_in_sbrfscmo_ex {pre ex: Execution}:
-  valid_exec ex ->
+  complete_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
   ~(expi pre) ->
   (mo pre) ≦ ((((sb ex) ⊔ ((res_mode Sc (rf ex))))^+) ⊔ 
                                (res_mode Sc (mo ex))).
 Proof.
-  intros Hval H11cons Hpre Hnoconflict x y Hmopre.
+  intros Hcomp H11cons Hpre Hnoconflict x y Hmopre.
+  inversion Hcomp as [Hval _].
   (* We suppose that x and y are related by ex.rf *)
   apply (mo_prefix_incl Hpre) in Hmopre as H.
   destruct (classic ((get_mode x) = Sc /\ (get_mode y) = Sc)) 
@@ -316,7 +320,7 @@ Proof.
     as [Hres' | Hcontr'].
   (* If y and x are related by ex.(sb U rf_sc)^+ *)
   - destruct H11cons as [Hco _].
-    apply (sbrfsc_incl_hb Hval) in Hres'.
+    apply (sbrfsc_incl_hb Hcomp) in Hres'.
     destruct (coherence_coherence_ww _ Hco) with (x := x).
     eexists; eauto.
   (* If y and x are not related by ex.(sb U rf_sc)^+ *)
@@ -327,7 +331,7 @@ Proof.
     + eapply mo_dest_evts; eauto.
       eauto using prefix_valid.
     + left. eauto using mo_orig_write.
-    + intros Hnot. eapply (mo_irr _ Hval).
+    + intros Hnot. eapply (mo_irr _ Hcomp).
       split; eauto.
     + eapply mo_same_loc; eauto.
     + auto.
@@ -343,14 +347,15 @@ events relations of this execution and of the modification order restricted to
 SC events of this execution *)
 
 Lemma rb_prefix_in_sbrfscrb_ex {pre ex: Execution}:
-  valid_exec ex ->
+  complete_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
   ~(expi pre) ->
   (rb pre) ≦ ((((sb ex) ⊔ ((res_mode Sc (rf ex))))^+) ⊔
                                (res_mode Sc (rb ex))).
 Proof.
-  intros Hval H11cons Hpre Hnoconflict x y Hrbpre.
+  intros Hcomp H11cons Hpre Hnoconflict x y Hrbpre.
+  inversion Hcomp as [Hval _].
   (* We suppose that x and y are related by ex.rf *)
   apply (rb_prefix_incl Hpre) in Hrbpre as H.
   destruct (classic ((get_mode x) = Sc /\ (get_mode y) = Sc)) 
@@ -367,7 +372,7 @@ Proof.
     as [Hres' | Hcontr'].
   (* If y and x are related by ex.(sb U rf_sc)^+ *)
   - destruct H11cons as [Hco _].
-    apply (sbrfsc_incl_hb  Hval) in Hres'.
+    apply (sbrfsc_incl_hb  Hcomp) in Hres'.
     destruct H as [z Hrfinv Hmo].    
     destruct (coherence_coherence_wr _ Hco) with (x := z).
     eexists; try eexists; eauto.
@@ -375,11 +380,11 @@ Proof.
   - apply Hnoconflict. exists x,y.
     repeat (apply conj).
     + eapply rb_orig_evts; eauto.
-      eauto using prefix_valid.
+      eauto using prefix_complete.
     + eapply rb_dest_evts; eauto.
-      eauto using prefix_valid.
+      eauto using prefix_complete.
     + right. eauto using rb_dest_write.
-    + intros Hnot. eapply (rb_irr _ Hval).
+    + intros Hnot. eapply (rb_irr _ Hcomp).
       split; eauto.
     + eapply rb_same_loc; eauto.
     + auto.
@@ -393,11 +398,12 @@ and of the extended communication relation restricted to pairs of SC events is
 acyclic *)
 
 Lemma sb_sc_eco_sc_incl_psc {ex: Execution}:
-  valid_exec ex ->
+  complete_exec ex ->
   ((res_mode Sc (sb ex)) ⊔ (res_mode Sc (rf ex)) ⊔ (res_mode Sc (mo ex)) ⊔
   (res_mode Sc (rb ex))) ≦ (psc ex).
 Proof.
-  intros Hval.
+  intros Hcomp.
+  inversion Hcomp as [Hval _].
   apply union_incl; [apply union_incl; [apply union_incl|]|];
   unfold psc; apply incl_union_left; unfold psc_base;
   rewrite <- union_seq_left; rewrite <- seq_union_left;
@@ -412,7 +418,7 @@ Proof.
       auto.
     + unfold hb.
       rewrite tc_incl_itself. apply tc_incl.
-      apply incl_union_right. apply (nt_rfsc_incl_hb Hval).
+      apply incl_union_right. apply (nt_rfsc_incl_hb Hcomp).
   - apply incl_dot; [apply incl_dot|]; auto. kat.
   - apply incl_dot; [apply incl_dot|]; auto. kat.
 Qed.
@@ -452,19 +458,19 @@ Proof.
 Admitted.
 
 Lemma sb_eco_sc_acyclic ex:
-  valid_exec ex ->
+  complete_exec ex ->
   rc11_consistent ex ->
   acyclic ((sb ex) ⊔ 
            (res_mode Sc (rf ex)) ⊔ 
            (res_mode Sc (mo ex)) ⊔
            (res_mode Sc (rb ex))).
 Proof.
-  intros Hval Hrc11.
+  intros Hcomp Hrc11.
   apply sb_sc_eco_sc_ac_impl_sb_eco_sc_ac.
-  - apply Hval.
+  - apply Hcomp.
   - destruct Hrc11 as [_ [_ [Hsc _]]].
     apply (ac_incl _ _ Hsc).
-    apply (sb_sc_eco_sc_incl_psc Hval).
+    apply (sb_sc_eco_sc_incl_psc Hcomp).
 Qed.
 
 (** If there is a conflict in the prefix of an execution, there is a
@@ -497,17 +503,17 @@ Qed.
 conflicting events, it is SC-consistent *)
 
 Theorem no_conflict_prefix_sc : forall pre ex,
-  valid_exec ex ->
+  complete_exec ex ->
   rc11_consistent ex ->
   prefix pre ex ->
   ~(expi pre) ->
   sc_consistent pre.
 Proof.
-  intros pre ex Hval Hrc11 Hpre Hconflict.
+  intros pre ex Hcomp Hrc11 Hpre Hconflict.
   split.
   - destruct (prefix_rc11_consistent Hrc11 Hpre) as [_ [Hat _]].
     auto.
-  - apply (ac_incl _ _ (tc_ac_is_ac _ (sb_eco_sc_acyclic _ Hval Hrc11))).
+  - apply (ac_incl _ _ (tc_ac_is_ac _ (sb_eco_sc_acyclic _ Hcomp Hrc11))).
     apply union_incl; [apply union_incl; [apply union_incl|]|].
     + apply (incl_trans2 _ _ _ (tc_incl_itself _)).
       incl_union_r; incl_union_r; incl_union_r.
@@ -516,13 +522,13 @@ Proof.
       apply (incl_trans2 _ _ _ (incl_tc_union _ _)); incl_union_r.
       repeat (rewrite -> union_assoc);
       apply (incl_trans2 _ _ _ (incl_tc_union _ _)); incl_union_r.
-      apply (rf_prefix_in_sbrfsc_ex Hval Hrc11 Hpre Hconflict).
+      apply (rf_prefix_in_sbrfsc_ex Hcomp Hrc11 Hpre Hconflict).
     + repeat (rewrite -> union_assoc);
       apply (incl_trans2 _ _ _ (incl_tc_union _ _)); incl_union_r.
       rewrite -> union_assoc;
       apply (incl_trans2 _ _ _ (incl_tc_union _ _)).
       apply (incl_trans2 _ _ _ (incl_union_of_tc_right _ _)).
-      apply (mo_prefix_in_sbrfscmo_ex Hval Hrc11 Hpre Hconflict).
+      apply (mo_prefix_in_sbrfscmo_ex Hcomp Hrc11 Hpre Hconflict).
     + repeat (rewrite <- union_assoc).
       rewrite (union_comm (res_mode _ (mo _)) _).
       repeat (rewrite union_assoc).
@@ -530,14 +536,14 @@ Proof.
       rewrite -> union_assoc;
       apply (incl_trans2 _ _ _ (incl_tc_union _ _)).
       apply (incl_trans2 _ _ _ (incl_union_of_tc_right _ _)).
-      apply (rb_prefix_in_sbrfscrb_ex Hval Hrc11 Hpre Hconflict).
+      apply (rb_prefix_in_sbrfscrb_ex Hcomp Hrc11 Hpre Hconflict).
 Qed.
 
 (** If an execution is not SC-consistent, it contains (a) pair(s) of conflicting
 event(s) *)
 
 Theorem exec_sc_no_conflict (ex: Execution) :
-  valid_exec ex ->
+  complete_exec ex ->
   rc11_consistent ex ->
   ~(sc_consistent ex) ->
   expi ex.
@@ -545,5 +551,6 @@ Proof.
   intros Hval Hrc11 Hsc. byabsurd.
   exfalso. apply Hsc.
   apply (no_conflict_prefix_sc ex ex); auto.
-  apply prefix_itself. apply Hval.
+  apply prefix_itself.
+  destruct Hval. auto.
 Qed.

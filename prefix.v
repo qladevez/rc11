@@ -488,8 +488,10 @@ Proof.
     + rewrite Hmo. rewrite <- Hmotrans at 3. kat.
     + eauto using incl_irr, mo_prefix_incl.
   - intros l x y Hdiff Hin1 Hin2. rewrite Hmo.
-    apply Hevts in Hin1 as Hinpre1. apply Hevts in Hin2 as Hinpre2.
-    destruct (Hmotot l x y Hdiff Hinpre1 Hinpre2) as [[? [? ?]]|[? [? ?]]]; [left|right];
+    inversion Hin1 as [Hine1 _]. inversion Hin2 as [Hine2 _].
+    apply (writes_loc_incl _ _ _ _ Hevts) in Hin1.
+    apply (writes_loc_incl _ _ _ _ Hevts) in Hin2.
+    destruct (Hmotot l x y Hdiff Hin1 Hin2) as [[? [? ?]]|[? [? ?]]]; [left|right];
     (split; [simpl_trt|split]; auto).
 Qed.
   
@@ -508,6 +510,29 @@ Proof.
   - eauto using prefix_rmw_valid.
   - eauto using prefix_rf_valid.
   - eauto using prefix_mo_valid.
+Qed.
+
+Theorem prefix_complete {pre ex: Execution}:
+  complete_exec ex ->
+  prefix pre ex ->
+  complete_exec pre.
+Proof.
+  intros [Hval Hincl] Hpre.
+  split.
+  - eapply prefix_valid; eauto.
+  - inversion Hpre as [H _].
+    intros x [Hxe Hxr].
+    apply H in Hxe as H1.
+    assert (In _ (reads (evts ex)) x) as H2.
+    { split; auto. }
+    apply Hincl in H2.
+    destruct H2 as [y H2].
+    exists y.
+    destruct_prefix Hpre.
+    rewrite Hrf.
+    simpl_trt; auto. unfold I.
+    eapply Hclosed. right; eauto.
+    auto.
 Qed.
 
 (** ** RC11-consistency *)
