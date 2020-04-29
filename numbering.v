@@ -146,6 +146,10 @@ Definition bounded_exec (ex: Execution) (n: nat) : Execution :=
     exec.mo := [NLE ex n] ⋅  (mo ex) ⋅ [NLE ex n];
   |}.
 
+Lemma simpl_evts_be (ex: Execution) (n:nat):
+  evts (bounded_exec ex n) = Intersection _ (evts ex) (fun x => n >= numbering ex x).
+Proof. compute; auto. Qed.
+
 Lemma simpl_sb_be (ex: Execution) (n:nat):
   sb (bounded_exec ex n) = [NLE ex n] ⋅ (sb ex) ⋅ [NLE ex n].
 Proof. compute; auto. Qed.

@@ -290,6 +290,31 @@ Ltac kat_eq := apply ext_rel; kat.
 
 Ltac simp_cnv H := simpl in H; unfold hrel_cnv in H.
 
+Lemma I_simpl1 {A:Type} (s1 s2: Ensemble A):
+  Included _ s1 s2 ->
+  [I s1]⋅[I s2] = [I s1].
+Proof.
+  intros Hincl. apply ext_rel, antisym; intros x y H.
+  - destruct H as [z [Heq1 H1] [Heq2 H2]].
+    split; auto.
+    rewrite Heq1, Heq2. auto.
+  - destruct H as [Heq H]. exists x.
+    + split; auto.
+    + rewrite <-Heq. split; auto. apply Hincl. auto.
+Qed.
+
+Lemma I_simpl2 {A:Type} (s1 s2: Ensemble A):
+  Included _ s1 s2 ->
+  [I s2]⋅[I s1] = [I s1].
+Proof.
+  intros Hincl. apply ext_rel, antisym; intros x y H.
+  - destruct H as [z [Heq1 H1] [Heq2 H2]].
+    rewrite Heq1, <-Heq2. split; auto.
+  - destruct H as [Heq H]. exists x.
+    + split; auto. apply Hincl. auto. 
+    + rewrite <-Heq. split; auto.
+Qed.
+
 (** ** Basic Lemmas *)
 
 Lemma not_all_not_rel_ex_rel {A:Type} (r: rlt A):

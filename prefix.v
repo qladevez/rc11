@@ -66,7 +66,6 @@ Proof. unfold prefix. intuition. Qed.
 
 (** An execution is a prefix of itself *)
 
-
 Lemma prefix_itself (ex : Execution):
   valid_exec ex ->
   prefix ex ex.
@@ -82,6 +81,29 @@ Proof with auto.
   - destruct_mo_v Hmo_v.
     destruct Hmopo as [? _]...
   - destruct_rmw_v Hrmw_v...
+Qed.
+
+
+(** The relation "being a prefix of" is transitive *)
+
+Lemma prefix_trans (e1 e2 e3: Execution):
+  prefix e1 e2 ->
+  prefix e2 e3 ->
+  prefix e1 e3.
+Proof.
+  intros Hpre1 Hpre2.
+  destruct Hpre1 as [Hevts1 [Hclosed1 [Hsb1 [Hrf1 [Hmo1 Hrmw1]]]]].
+  destruct Hpre2 as [Hevts2 [Hclosed2 [Hsb2 [Hrf2 [Hmo2 Hrmw2]]]]].
+  repeat (apply conj).
+  - intros x Hin. apply Hevts1, Hevts2 in Hin. auto.
+  - intros a b Hab Hb. apply Hclosed1 with b; auto.
+    apply Hevts1 in Hb.
+    specialize (Hclosed2 a b Hab Hb).
+    destruct Hab; [left;rewrite Hsb2|right; rewrite Hrf2]; simpl_trt; auto.
+  - rewrite Hsb1. rewrite Hsb2. rewrite <-(I_simpl1 _ _ Hevts1). kat_eq.
+  - rewrite Hrf1. rewrite Hrf2. rewrite <-(I_simpl1 _ _ Hevts1). kat_eq.
+  - rewrite Hmo1. rewrite Hmo2. rewrite <-(I_simpl1 _ _ Hevts1). kat_eq.
+  - rewrite Hrmw1. rewrite Hrmw2. rewrite <-(I_simpl1 _ _ Hevts1). kat_eq.
 Qed.
 
 (** The sequenced-before relation of an execution prefix is included in the 
@@ -442,10 +464,28 @@ Proof.
   split.
   - intros r w Hrmwpre.
     eapply prefix_rmw_pair_valid; eauto.
-    apply Hrmwv. rewrite Hrmw in Hrmwpre.
-    apply simpl_trt_hyp in Hrmwpre.
-    intuition auto.
+    apply Hrmwv. eapply rmw_prefix_incl; eauto.
   - rewrite Hrmw. kat_eq.
+Qed.
+
+Lemma prefix_rmw_valid_diff_evts {pre1 pre2 ex: Execution}:
+  valid_rmw (evts ex) (sb ex) (rmw ex) ->
+  prefix pre1 pre2 ->
+  prefix pre2 ex ->
+  valid_rmw (evts pre2) (sb pre2) (rmw pre1).
+Proof.
+  intros Hval Hpre1 Hpre2.
+  split.
+  - intros r w Hrmwpre.
+    eapply prefix_rmw_pair_valid.
+    + destruct Hval as [Hval _].
+      apply (rmw_prefix_incl Hpre1) in Hrmwpre.
+      apply (rmw_prefix_incl Hpre2) in Hrmwpre.
+      specialize (Hval r w Hrmwpre). eauto.
+    + auto.
+    + apply (rmw_prefix_incl Hpre1) in Hrmwpre. auto.
+  - destruct_prefix Hpre1. rewrite Hrmw.
+    rewrite <-(I_simpl1 _ _ Hevts). kat_eq.
 Qed.
 
 (** If the read-from relation of an execution is valid, the read-from relation
@@ -460,15 +500,33 @@ Proof.
   inverse_prefix Hpre. destruct_rf_v Hrf_v.
   repeat (apply conj).
   - intros w r Hrfpre.
-    rewrite Hrf in Hrfpre.
-    apply simpl_trt_hyp in Hrfpre as [_ [Hrfex _]].
+    apply (rf_prefix_incl Hpre) in Hrfpre.
     eauto using Hrfco.
   - rewrite Hrf. kat_eq.
-  - rewrite Hrf. rewrite <- Hrfwr. kat_eq.
+  - rewrite Hrf. rewrite <-Hrfwr. kat_eq.
   - intros w1 w2 r [Hrfpre1 Hrfpre2].
-    eapply Hrfun. split.
-    + rewrite Hrf in Hrfpre1. apply simpl_trt_hyp in Hrfpre1. intuition eauto.
-    + rewrite Hrf in Hrfpre2. apply simpl_trt_hyp in Hrfpre2. intuition eauto.
+    eapply Hrfun. split;
+    eapply rf_prefix_incl; eauto.
+Qed.
+
+Lemma prefix_rf_valid_diff_evts {pre1 pre2 ex: Execution}:
+  valid_rf (evts ex) (rf ex) ->
+  prefix pre1 pre2 ->
+  prefix pre2 ex ->
+  valid_rf (evts pre2) (rf pre1).
+Proof.
+  intros Hrf_v Hpre1 Hpre2.
+  destruct_rf_v Hrf_v.
+  pose proof (prefix_trans _ _ _ Hpre1 Hpre2) as Hpre3.
+  repeat (apply conj).
+  - intros w r Hrf.
+    eapply (rf_prefix_incl Hpre3) in Hrf.
+    eauto using Hrfco.
+  - destruct_prefix Hpre1. rewrite Hrf.
+    rewrite <-(I_simpl1 _ _ Hevts). kat_eq.
+  - destruct_prefix Hpre3. rewrite Hrf. rewrite <-Hrfwr. kat_eq.
+  - intros w1 w2 r [H1 H2]. eapply Hrfun. split;
+    eapply rf_prefix_incl; eauto.
 Qed.
 
 Lemma prefix_mo_valid {pre ex: Execution}:
@@ -494,7 +552,8 @@ Proof.
     destruct (Hmotot l x y Hdiff Hin1 Hin2) as [[? [? ?]]|[? [? ?]]]; [left|right];
     (split; [simpl_trt|split]; auto).
 Qed.
-  
+
+
 (** If an execution is valid, any of its prefixes is also a valid execution *)
 
 Theorem prefix_valid {pre ex: Execution}:

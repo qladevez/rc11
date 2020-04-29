@@ -445,6 +445,21 @@ Proof.
   repeat (apply conj); auto.
 Qed.
 
+Lemma writes_loc_evts (e: Ensemble Event) (l: Loc) (x: Event):
+  In _ (writes_loc e l) x ->
+  In _ e x.
+Proof. intros [? _]. auto. Qed.
+
+Lemma writes_loc_is_write (e: Ensemble Event) (l: Loc) (x: Event):
+  In _ (writes_loc e l) x ->
+  is_write x.
+Proof. intros [_ [? _]]. auto. Qed.
+
+Lemma writes_loc_loc (e: Ensemble Event) (l: Loc) (x: Event):
+  In _ (writes_loc e l) x ->
+  (get_loc x) = Some l.
+Proof. intros [_ [_ ?]]. auto. Qed.
+
 (** ** Sequenced before *)
 
 (** A sequenced before relation is valid if it is a strict partial order and

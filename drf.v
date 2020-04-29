@@ -722,6 +722,260 @@ Proof.
         -- incl_rel_kat Hcd.
 Qed.
 
+
+(** This transformation is meaningful only when [y] is a write event whose
+numbering is equal to [bound], and if [bound] is the smallest conflicting
+bounding of the execution.
+
+The result of the transformation is an execution where the events, the
+sequenced-before, read-modify-write and read-from relation don't change, but
+where the write event is after all the other write events in the modification
+order. This means that the write is visible to all the threads of the execution
+after all the other writes events *)
+
+Definition prefix_change_mo (ex: Execution) (bound: nat) (y: Event) :=
+  mkex (evts (bounded_exec ex bound))
+       (sb   (bounded_exec ex bound))
+       (rmw  (bounded_exec ex (bound-1)))
+       (rf   (bounded_exec ex (bound-1)))
+       (mo   (bounded_exec ex (bound-1)) ⊔ (fun a b => (b = y) /\
+                   (In _ (evts (bounded_exec ex (bound-1))) a) /\
+                   (is_write a) /\
+                   (get_loc a) = (get_loc y))).
+
+Lemma simpl_evts_change_mo (ex: Execution) (bound: nat) (y: Event):
+  evts (prefix_change_mo ex bound y) = evts (bounded_exec ex bound).
+Proof. compute; auto. Qed.
+
+Lemma simpl_sb_change_mo (ex: Execution) (bound: nat) (y: Event):
+  sb (prefix_change_mo ex bound y) = sb (bounded_exec ex bound).
+Proof. compute; auto. Qed.
+
+Lemma simpl_rmw_change_mo (ex: Execution) (bound: nat) (y: Event):
+  rmw (prefix_change_mo ex bound y) = rmw (bounded_exec ex (bound-1)).
+Proof. compute; auto. Qed.
+
+Lemma simpl_rf_change_mo (ex: Execution) (bound: nat) (y: Event):
+  rf (prefix_change_mo ex bound y) = rf (bounded_exec ex (bound-1)).
+Proof. compute; auto. Qed.
+
+Lemma simpl_mo_change_mo (ex: Execution) (bound: nat) (y: Event):
+  mo (prefix_change_mo ex bound y) =
+    mo (bounded_exec ex (bound-1)) ⊔ (fun a b => (b = y) /\
+                   (In _ (evts (bounded_exec ex (bound-1))) a) /\
+                   (is_write a) /\
+                   (get_loc a) = (get_loc y)).
+Proof. compute; auto. Qed.
+
+Create HintDb change_mo_db.
+
+Hint Rewrite simpl_evts_change_mo simpl_sb_change_mo simpl_rmw_change_mo
+             simpl_rf_change_mo simpl_mo_change_mo : change_mo_db.
+
+Tactic Notation "rew" "change_mo" := autorewrite with change_mo_db.
+Tactic Notation "rew" "change_mo" "in" hyp(H) := autorewrite with change_mo_db in H.
+
+
+Lemma evt_diff_bound (ex: Execution) (bound: nat) (x y w: Event):
+  complete_exec ex ->
+  rc11_consistent ex ->
+  minimal_conflicting_pair ex bound x y ->
+  numbering ex y > numbering ex x ->
+  In _ (evts (bounded_exec ex bound)) w ->
+  w <> y ->
+  In _ (evts (bounded_exec ex (bound-1))) w.
+Proof.
+  intros Hco Hrc11 Hmcp Hord Hin Hdiff.
+  inversion Hco as [Hval _].
+  rewrite simpl_evts_be in *.
+  apply in_intersection in Hin as [Hevts Hnumw].
+  split; auto.
+  unfold In in *.
+  destruct (Compare_dec.lt_eq_lt_dec bound (numbering ex w)) as [[Hord1|Hord1]|Hord1].
+  - lia.
+  - pose proof (mcp_num_snd_evt _ _ _ _ Hval Hmcp) as Hnumy.
+    rewrite (max_rewrite _ _ Hord) in Hnumy.
+    rewrite Hord1 in Hnumy. apply numbering_injective_eq in Hnumy.
+    congruence.
+  - lia.
+Qed.
+
+Lemma mo_change_complete (ex: Execution) (bound: nat) (x y: Event):
+  complete_exec ex ->
+  rc11_consistent ex ->
+  minimal_conflicting_pair ex bound x y ->
+  (numbering ex y) > (numbering ex x) ->
+  is_write y ->
+  complete_exec (prefix_change_mo ex bound y).
+Proof.
+  intros Hcomp Hrc11 Hmcp Hord Hw.
+  inversion Hcomp as [Hval _]; inverse_val_exec Hval.
+  split;[split;[|split;[|split;[|split]]]|]; rew change_mo.
+  - eapply prefix_evts_valid. eauto. apply bounded_exec_is_prefix. auto.
+  - eapply prefix_sb_valid. eauto. apply bounded_exec_is_prefix. auto.
+  - eapply prefix_rmw_valid_diff_evts.
+    + eauto.
+    + apply two_ord_bounds_pre. auto. apply mcp_bound_gt_zero in Hmcp. lia.
+    + apply bounded_exec_is_prefix. auto.
+  - eapply prefix_rf_valid_diff_evts.
+    + eauto.
+    + apply two_ord_bounds_pre. auto. apply mcp_bound_gt_zero in Hmcp. lia.
+    + apply bounded_exec_is_prefix. auto.
+  - assert (valid_exec (bounded_exec ex (bound-1))) as Hvalbmin1.
+    { eapply bounded_is_valid. auto. }
+    assert (valid_exec (bounded_exec ex bound)) as Hvalbmin2.
+    { eapply bounded_is_valid. auto. }
+    assert (prefix (bounded_exec ex (bound-1)) (bounded_exec ex bound)) as Hpre.
+    { eapply two_ord_bounds_pre. auto. apply mcp_bound_gt_zero in Hmcp. lia. }
+    repeat (apply conj).
+    + apply ext_rel, antisym; intros w z H.
+      auto using (simpl_trt_rel _ _ _ _ _ H).
+      simpl_trt; auto.
+      * destruct H as [H|H];[|intuition auto].
+        destruct Hvalbmin1 as [_ [_ [_ [_ [Hmo_v1 _]]]]].
+        rewrite <-Hmo_v1 in H. destruct H as [? [? [_ H]]]. auto.
+      * destruct H as [H|H];[|destruct H as [Hzy _]; rewrite Hzy; auto].
+        destruct Hvalbmin1 as [_ [_ [_ [_ [Hmo_v1 _]]]]].
+        rewrite <-Hmo_v1 in H. destruct H as [? _ [Heq Hwz]].
+        rewrite <-Heq. auto.
+    + intros w z [Hmo|Hext].
+      * destruct Hvalbmin1 as [_ [_ [_ [_ [_ [Hmo_v1 _]]]]]].
+        apply Hmo_v1. auto.
+      * destruct Hext as [Heq [_ [_ Hloc]]].
+        rewrite Heq. auto.
+    + apply ext_rel, antisym; intros w z H; 
+      [|auto using (simpl_trt_rel _ _ _ _ _ H)].
+      simpl_trt; auto.
+      * destruct H as [H|H];
+        [inversion Hvalbmin1 as [_ [_ [_ [_ Hmo_v1]]]];
+         apply (mo_orig_evts _ Hvalbmin1) in H | destruct H as [_ [H _]]];
+        eapply prefix_incl_evts; eauto.
+      * destruct H as [H|H].
+        -- inversion Hvalbmin1 as [_ [_ [_ [_ Hmo_v1]]]].
+           eapply (mo_dest_evts _ Hvalbmin2).
+           eapply mo_prefix_incl. eauto. eauto.
+        -- destruct H as [H _]. rewrite H.
+           eapply mcp_in_evts_right. eauto.
+    + intros w1 w2 [z [H1|H1] [H2|H2]].
+      * left. eapply mo_trans with z; eauto.
+      * right. destruct H2 as [Heqw2 [Hinz [Hwz Heqloc]]].
+        repeat (apply conj).
+        -- auto.
+        -- eapply mo_orig_evts; eauto.
+        -- eapply mo_orig_write. eapply Hvalbmin1. eauto.
+        -- rewrite <-Heqloc. eapply mo_same_loc. eapply Hvalbmin1. eauto.
+      * destruct H1 as [H1 _].
+        rewrite H1 in H2. rew bounded in H2.
+        apply simpl_trt_hyp in H2 as [H2 _].
+        apply (mcp_num_snd_evt _ _ _ _ Hval) in Hmcp.
+        rewrite (max_rewrite _ _ Hord) in Hmcp.
+        unfold NLE in H2. rewrite Hmcp in H2. lia.
+      * right. intuition auto.
+    + intros w1 [Hnot|Hnot].
+      * destruct Hvalbmin1 as [_ [_ [_ [_ Hmo_v1]]]].
+        destruct Hmo_v1 as [_ [_ [[_ [_ Hmo_v1]] _]]].
+        apply (Hmo_v1 w1). auto.
+      * destruct Hnot as [Heq [Hin _]].
+        rewrite Heq in Hin.
+        apply (mcp_num_snd_evt _ _ _ _ Hval) in Hmcp.
+        rewrite (max_rewrite _ _ Hord) in Hmcp.
+        rewrite simpl_evts_be in Hin. apply in_intersection in Hin as [_ Hin].
+        unfold In in Hin. rewrite Hmcp in Hin. lia.
+    + intros l. intros w1 w2 Hdiff Hin1 Hin2.
+      destruct (classic (w1 = y)) as [Hw1|Hw1];
+      destruct (classic (w2 = y)) as [Hw2|Hw2].
+      * rewrite Hw1, Hw2 in Hdiff. intuition auto.
+      * right. split.
+        -- right. repeat (apply conj).
+          ++ auto.
+          ++ apply writes_loc_evts in Hin2.
+             apply (evt_diff_bound _ _ _ _ _ Hcomp Hrc11 Hmcp Hord Hin2 Hw2).
+          ++ apply (writes_loc_is_write _ _ _ Hin2).
+          ++ apply writes_loc_loc in Hin1.
+             apply writes_loc_loc in Hin2.
+             rewrite <-Hw1, Hin1. auto.
+        -- split; eapply writes_loc_loc; eauto.
+      * left. split.
+        -- right. repeat (apply conj).
+           ++ auto.
+           ++ apply writes_loc_evts in Hin1.
+              apply (evt_diff_bound _ _ _ _ _ Hcomp Hrc11 Hmcp Hord Hin1 Hw1).
+           ++ apply (writes_loc_is_write _ _ _ Hin1).
+           ++ apply writes_loc_loc in Hin1.
+              apply writes_loc_loc in Hin2.
+              rewrite <-Hw2, Hin2. auto.
+        -- split; eapply writes_loc_loc; eauto.
+      * apply writes_loc_evts in Hin1 as Hw1evts.
+        apply writes_loc_evts in Hin2 as Hw2evts.
+        destruct_mo_v Hmo_v.
+        edestruct Hmotot as [Hmow1w2|Hmow2w1].
+        -- eapply Hdiff.
+        -- destruct Hin1 as [Hin1 [Hw1w Hloc1]].
+           rewrite simpl_evts_be in Hin1.
+           apply in_intersection in Hin1 as [Hin1 _].
+           repeat (apply conj); eauto.
+        -- destruct Hin2 as [Hin2 [Hw2w Hloc2]].
+           rewrite simpl_evts_be in Hin2.
+           apply in_intersection in Hin2 as [Hin2 _].
+           repeat (apply conj); eauto.
+        -- left. repeat (apply conj).
+           ++ left. rew bounded. simpl_trt.
+             ** apply (evt_diff_bound _ _ _ _ _ Hcomp Hrc11 Hmcp Hord Hw1evts) in Hw1.
+                unfold In in Hw1. rewrite simpl_evts_be in Hw1.
+                apply in_intersection in Hw1 as [_ Hw1].
+                unfold In in Hw1. unfold NLE. lia.
+             ** destruct Hmow1w2. auto.
+             ** apply (evt_diff_bound _ _ _ _ _ Hcomp Hrc11 Hmcp Hord Hw2evts) in Hw2.
+                unfold In in Hw2. rewrite simpl_evts_be in Hw2.
+                apply in_intersection in Hw2 as [_ Hw2].
+                unfold In in Hw2. unfold NLE. lia.
+           ++ apply writes_loc_loc in Hin1. auto.
+           ++ apply writes_loc_loc in Hin2. auto.
+        -- right. repeat (apply conj).
+           ++ left. rew bounded. simpl_trt.
+             ** apply (evt_diff_bound _ _ _ _ _ Hcomp Hrc11 Hmcp Hord Hw2evts) in Hw2.
+                unfold In in Hw2. rewrite simpl_evts_be in Hw2.
+                apply in_intersection in Hw2 as [_ Hw2].
+                unfold In in Hw2. unfold NLE. lia.
+             ** destruct Hmow2w1. auto.
+             ** apply (evt_diff_bound _ _ _ _ _ Hcomp Hrc11 Hmcp Hord Hw1evts) in Hw1.
+                unfold In in Hw1. rewrite simpl_evts_be in Hw1.
+                apply in_intersection in Hw1 as [_ Hw1].
+                unfold In in Hw1. unfold NLE. lia.
+           ++ apply writes_loc_loc in Hin2. auto.
+           ++ apply writes_loc_loc in Hin1. auto.
+  - intros z [Hzevts Hzread].
+    assert (z <> y) as Hdiff.
+    { destruct (classic (y = z)); auto.
+      rewrite H in Hw. destruct z; auto. }
+    pose proof (evt_diff_bound _ _ _ _ _ Hcomp Hrc11 Hmcp Hord Hzevts Hdiff) as Hzb1.
+    destruct Hcomp as [_ Hcomp].
+    rewrite simpl_evts_be in Hzevts.
+    apply in_intersection in Hzevts as [Hzevts _].
+    edestruct Hcomp as [w H].
+    + split; eauto.
+    + exists w. rew bounded.
+      rewrite simpl_evts_be in Hzb1.
+      apply in_intersection in Hzb1 as [_ Hordz].
+      simpl_trt; unfold NLE; unfold In in *.
+      * apply rf_num_ord in H. lia.
+      * auto.
+Qed.
+
+(*
+Lemma sc_racy_exec (ex: Execution) (bound: nat) (x y: Event):
+  complete_exec ex ->
+  rc11_consistent ex ->
+  minimal_conflicting_pair ex bound x y ->
+  (numbering ex y) > (numbering ex x) ->
+  is_write y ->
+  ~(sc_consistent (bounded_exec ex bound)) ->
+  sc_consistent (prefix_change_mo ex bound y).
+Proof.
+  intros Hcomp Hrc11 Hmcp Hord Hw Hnotsc.
+  unfold.
+*)
+
 End DRF.
 
 
