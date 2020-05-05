@@ -1349,6 +1349,97 @@ Proof.
            lia.
 Qed.
 
+Lemma write_rf_eq_rfbminone (ex: Execution) (bound: nat) (x: Event):
+  valid_exec ex ->
+  numbering ex x = bound ->
+  is_write x ->
+  rf (bounded_exec ex bound) = rf (bounded_exec ex (bound-1)).
+Proof.
+  intros Hval Hnum Hw.
+  apply ext_rel, antisym.
+  - intros y z Hrf. rew bounded. rew bounded in Hrf.
+    apply simpl_trt_hyp in Hrf as [Hleft [Hrel Hright]].
+    unfold NLE in Hleft, Hright. simpl_trt; auto; unfold NLE;
+    apply rf_num_ord in Hrel as Hyz;
+    destruct (Compare_dec.lt_eq_lt_dec (numbering ex z) bound) as [[Hz|Hz]|Hz];
+    try lia.
+    rewrite <-Hz in Hnum.
+    apply numbering_injective_eq in Hnum. rewrite Hnum in Hw.
+    apply (rf_dest_read _ Hval) in Hrel.
+    destruct z; simpl in *; intuition auto.
+  - intros y z Hrf.
+    rew bounded in Hrf. rew bounded. apply simpl_trt_hyp in Hrf as [Hleft [Hrel Hright]].
+    simpl_trt; unfold NLE in *; auto; lia.
+Qed.
+
+Lemma write_rmw_eq_rmwbminone (ex: Execution) (bound: nat) (x y: Event):
+  complete_exec ex ->
+  rc11_consistent ex ->
+  minimal_conflicting_pair ex bound x y ->
+  numbering ex y > numbering ex x ->
+  is_write y ->
+  ~(sc_consistent (bounded_exec ex bound)) ->
+  rmw (bounded_exec ex bound) = rmw (bounded_exec ex (bound-1)).
+Proof.
+  intros Hcomp Hrc11 Hmcp Hord Hw Hnotsc.
+  inversion Hcomp as [Hval _].
+  pose proof (mcp_write_not_at _ _ _ _ Hcomp Hrc11 Hmcp Hord Hw Hnotsc) as Hnotat.
+  apply ext_rel, antisym.
+  - intros w z Hrmw. rew bounded. rew bounded in Hrmw.
+    apply simpl_trt_hyp in Hrmw as [Hleft [Hrel Hright]].
+    apply (rmw_incl_sb _ Hval) in Hrel as Hsb.
+    unfold NLE in Hleft, Hright. simpl_trt; auto; unfold NLE;
+    apply sb_num_ord in Hsb;
+    destruct (Compare_dec.lt_eq_lt_dec (numbering ex z) bound) as [[Hz|Hz]|Hz];
+    try lia.
+    apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp)in Hord.
+    rewrite <-Hz in Hord. apply numbering_injective_eq in Hord.
+    rewrite Hord in Hnotat.
+    exfalso. apply Hnotat. right. exists w.
+    rew bounded. simpl_trt. auto.
+  - intros w z Hrf.
+    rew bounded in Hrf. rew bounded. apply simpl_trt_hyp in Hrf as [Hleft [Hrel Hright]].
+    simpl_trt; unfold NLE in *; auto; lia.
+Qed.
+
+(** If there is a race in an execution, changing the modification order of this
+execution maintains the race *)
+
+Lemma race_implies_race_change_mo (ex: Execution) (bound: nat) (x y: Event):
+  complete_exec ex ->
+  rc11_consistent ex ->
+  minimal_conflicting_pair ex bound x y ->
+  numbering ex y > numbering ex x ->
+  is_write y ->
+  ~(sc_consistent (bounded_exec ex bound)) ->
+  race (bounded_exec ex bound) x y ->
+  race (prefix_change_mo ex bound y) x y.
+Proof.
+  intros Hcomp Hrc11 Hmcp Hord Hyw Hnotsc [Hw [Hdiff [Hloc [Hxy Hyx]]]].
+  inversion Hcomp as [Hval _].
+  repeat (apply conj); auto.
+  - clear Hyx.
+    intros Hnot. apply Hxy.
+    apply (incl_rel_thm Hnot).
+    unfold hb. apply tc_incl, union_incl.
+    { kat. }
+    unfold sw, rs. rew change_mo.
+    unshelve (erewrite <-(write_rf_eq_rfbminone _ _ _ Hval _ Hyw)).
+    { eapply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp Hord). }
+    erewrite (write_rmw_eq_rmwbminone _ _ _ _ Hcomp Hrc11 Hmcp Hord Hyw Hnotsc).
+    kat.
+  - clear Hxy.
+    intros Hnot. apply Hyx.
+    apply (incl_rel_thm Hnot).
+    unfold hb. apply tc_incl, union_incl.
+    { kat. }
+    unfold sw, rs. rew change_mo.
+    unshelve (erewrite <-(write_rf_eq_rfbminone _ _ _ Hval _ Hyw)).
+    { eapply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp Hord). }
+    erewrite (write_rmw_eq_rmwbminone _ _ _ _ Hcomp Hrc11 Hmcp Hord Hyw Hnotsc).
+    kat.
+Qed.
+
 End DRF.
 
 
