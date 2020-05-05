@@ -433,6 +433,22 @@ Proof.
   intros x y [Hr _]. auto.
 Qed.
 
+Lemma capincl {A:Type} (r1 r2 r3 r4: rlt A):
+  r1 ≦ r2 ->
+  r3 ≦ r4 ->
+  r1 ⊓ r3 ≦ r2 ⊓ r4.
+Proof.
+  intros H1 H2. rewrite H1, H2. auto.
+Qed.
+
+Lemma incl_as_eq {A:Type} (r s: rlt A):
+  r ≦ s -> r ⊔ s = s.
+Proof.
+  intros Hincl. apply ext_rel, antisym. 
+  - rewrite Hincl. kat.
+  - kat.
+Qed.
+
 (** The sequence of two relations restricted to their respective reflexive
 subrelations is the sequence of the two relations restricted to its reflexive
 subrelation *)

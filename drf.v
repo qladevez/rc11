@@ -962,7 +962,138 @@ Proof.
       * auto.
 Qed.
 
-(*
+Lemma rf_incl_rf_le (ex: Execution) (b1 b2: nat):
+  b1 <= b2 ->
+  rf (bounded_exec ex b1) ≦ rf (bounded_exec ex b2).
+Proof.
+  intros Hord.
+  rew bounded.
+  apply incl_dot. apply incl_dot; [|auto].
+  all: intros x y [Heq Ht]; split; auto; unfold NLE in *; lia.
+Qed.
+
+Lemma mo_incl_mo_le (ex: Execution) (b1 b2: nat):
+  b1 <= b2 ->
+  mo (bounded_exec ex b1) ≦ mo (bounded_exec ex b2).
+Proof.
+  intros Hord.
+  rew bounded.
+  apply incl_dot. apply incl_dot; [|auto].
+  all: intros x y [Heq Ht]; split; auto; unfold NLE in *; lia.
+Qed.
+
+Lemma rmw_incl_rmw_le (ex: Execution) (b1 b2: nat):
+  b1 <= b2 ->
+  rmw (bounded_exec ex b1) ≦ rmw (bounded_exec ex b2).
+Proof.
+  intros Hord.
+  rew bounded.
+  apply incl_dot. apply incl_dot; [|auto].
+  all: intros x y [Heq Ht]; split; auto; unfold NLE in *; lia.
+Qed.
+
+Lemma sb_incl_sb_le (ex: Execution) (b1 b2: nat):
+  b1 <= b2 ->
+  sb (bounded_exec ex b1) ≦ sb (bounded_exec ex b2).
+Proof.
+  intros Hord.
+  rew bounded.
+  apply incl_dot. apply incl_dot; [|auto].
+  all: intros x y [Heq Ht]; split; auto; unfold NLE in *; lia.
+Qed.
+
+Lemma rb_incl_rb_le (ex: Execution) (b1 b2: nat):
+  b1 <= b2 ->
+  rb (bounded_exec ex b1) ≦ rb (bounded_exec ex b2).
+Proof.
+  intros Hord.
+  apply incl_dot.
+  - apply cnv_leq_iff. auto using rf_incl_rf_le.
+  - auto using mo_incl_mo_le.
+Qed.
+
+Lemma rb_incl_change_mo (ex: Execution) (b: nat) (y: Event):
+  rb (bounded_exec ex (b-1)) ≦ rb (prefix_change_mo ex b y).
+Proof.
+  unfold rb.
+  rew change_mo.
+  kat.
+Qed.
+
+Lemma bound_min_one_incl_change_mo (ex: Execution) (bound: nat) (y: Event):
+  bound > 0 ->
+  (sb (bounded_exec ex (bound-1)) ⊔
+   rf (bounded_exec ex (bound-1)) ⊔
+   mo (bounded_exec ex (bound-1)) ⊔
+   rb (bounded_exec ex (bound-1)))^+ ≦
+  (sb (prefix_change_mo ex bound y) ⊔
+   rf (prefix_change_mo ex bound y) ⊔
+   mo (prefix_change_mo ex bound y) ⊔
+   rb (prefix_change_mo ex bound y))^+.
+Proof.
+  intros Hboundgt0.
+  rew change_mo.
+  erewrite (sb_incl_sb_le _ (bound-1) bound);[|lia].
+  rewrite (rb_incl_change_mo _ _ y). kat.
+Qed.
+
+
+Lemma nothing_after_max_in_change_mo_1 (ex: Execution) (bound: nat) (x y: Event):
+  bound > 0 ->
+  numbering ex x = bound ->
+  forall z, ~(sb (prefix_change_mo ex bound y) ⊔
+               rf (prefix_change_mo ex bound y) ⊔
+               mo (prefix_change_mo ex bound y) ⊔
+               rb (prefix_change_mo ex bound y)) x z.
+Proof.
+  intros Hgtzero Hnum z Hnot.
+  destruct Hnot as [[[Hend|Hend]|Hend]|Hend].
+  - rew change_mo in Hend. rew bounded in Hend.
+    apply simpl_trt_tright in Hend as Hordw3.
+    apply simpl_trt_rel in Hend.
+    apply sb_num_ord in Hend. unfold NLE in *. lia.
+  - rew change_mo in Hend. rew bounded in Hend.
+    apply simpl_trt_tright in Hend as Hordw3.
+    apply simpl_trt_rel in Hend.
+    apply rf_num_ord in Hend. unfold NLE in *. lia.
+  - rew change_mo in Hend. destruct Hend as [Hend|Hend].
+    + rew bounded in Hend. apply simpl_trt_hyp in Hend as [Ht _].
+      unfold NLE in *. lia.
+    + destruct Hend as [_ [Hend _]]. apply in_intersection in Hend as [_ Hend].
+      unfold In in Hend. lia.
+  - unfold rb in Hend. rew change_mo in Hend. destruct Hend as [w Hrf _].
+    rewrite <-cnv_rev in Hrf. rew bounded in Hrf. apply simpl_trt_tright in Hrf.
+    unfold NLE in *. lia.
+Qed.
+
+Lemma nothing_after_max_in_change_mo (ex: Execution) (bound: nat) (x y: Event):
+  bound > 0 ->
+  numbering ex x = bound ->
+  forall z, ~((sb (bounded_exec ex (bound-1)) ⊔
+               rf (bounded_exec ex (bound-1)) ⊔
+               mo (bounded_exec ex (bound-1)) ⊔
+               rb (bounded_exec ex (bound-1))) ⊔
+              (sb (prefix_change_mo ex bound y) ⊔
+               rf (prefix_change_mo ex bound y) ⊔
+               mo (prefix_change_mo ex bound y) ⊔
+               rb (prefix_change_mo ex bound y))) x z.
+Proof.
+  intros Hgtzero Hnum z Hnot.
+  destruct Hnot as [[[[Hend|Hend]|Hend]|Hend]|Hend];
+  rew bounded in Hend.
+  - apply simpl_trt_hyp in Hend as [Ht _].
+    unfold NLE in *. lia.
+  - apply simpl_trt_hyp in Hend as [Ht _].
+    unfold NLE in *. lia.
+  - apply simpl_trt_hyp in Hend as [Ht _].
+    unfold NLE in *. lia.
+  - unfold rb in Hend. destruct Hend as [w4 Hrf _].
+    rewrite <-cnv_rev in Hrf. rew bounded in Hrf.
+    apply simpl_trt_tright in Hrf. unfold NLE in *. lia.
+  - eapply nothing_after_max_in_change_mo_1;
+    eauto.
+Qed.
+
 Lemma sc_racy_exec (ex: Execution) (bound: nat) (x y: Event):
   complete_exec ex ->
   rc11_consistent ex ->
@@ -973,8 +1104,250 @@ Lemma sc_racy_exec (ex: Execution) (bound: nat) (x y: Event):
   sc_consistent (prefix_change_mo ex bound y).
 Proof.
   intros Hcomp Hrc11 Hmcp Hord Hw Hnotsc.
-  unfold.
-*)
+  inversion Hcomp as [Hval _].
+  unshelve (epose proof (smaller_than_smallest_sc _ bound Hcomp Hrc11 _ (bound-1) _) as Hsc).
+  { destruct Hmcp. auto. } 
+  { apply mcp_bound_gt_zero in Hmcp. lia. }
+  apply conj.
+  - destruct Hsc as [Hat _].
+    intros w z.
+    destruct (Compare_dec.lt_eq_lt_dec (numbering ex w) bound) as [[Hordw|Hordw]|Hordw];
+    destruct (Compare_dec.lt_eq_lt_dec (numbering ex z) bound) as [[Hordz|Hordz]|Hordz].
+    + intros [Hrmw [v1 [v2 Hrfinv Hmo1] Hmo2]]. apply (Hat w z). apply conj.
+      { rew change_mo. auto. }
+      exists v1.
+      { exists v2. 
+        - rew change_mo in Hrfinv. auto.
+        - destruct Hmo1 as [Hmo1|[Hv1y _]];[auto|].
+          apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp) in Hord.
+          apply (numbering_injective_eq ex) in Hv1y.
+          rewrite Hord in Hv1y.
+          destruct Hmo2 as [Hmo2|[_ [Hv1minone _]]].
+          + rew bounded in Hmo2. apply simpl_trt_hyp in Hmo2 as [Hv1ord _].
+            unfold NLE in Hv1ord. lia.
+          + apply in_intersection in Hv1minone as [_ Hv1ord].
+            unfold In in Hv1ord. lia.
+      }
+      destruct Hmo2 as [Hmo2|[Hzy _]];[auto|].
+      apply (numbering_injective_eq ex) in Hzy.
+      apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp) in Hord.
+      rewrite Hord in Hzy. lia.
+    + intros [Hrmw _].
+      eapply mcp_write_not_at; eauto.
+      apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp) in Hord.
+      rewrite <-Hord in Hordz.
+      apply (numbering_injective_eq ex) in Hordz.
+      rewrite Hordz in Hrmw. right. exists w.
+      rew change_mo in Hrmw. apply (incl_rel_thm Hrmw).
+      apply rmw_incl_rmw_le. lia.
+    + intros [_ [v _ Hmo]].
+      rew change_mo in Hmo. destruct Hmo as [Hmo|[Hzy _]].
+      * rew bounded in Hmo.
+        apply simpl_trt_tright in Hmo. unfold NLE in Hmo. lia.
+      * apply (numbering_injective_eq ex) in Hzy.
+        apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp) in Hord.
+        rewrite Hord in Hzy. lia.
+    + intros [Hrmw _].
+      rew change_mo in Hrmw. rew bounded in Hrmw.
+      apply simpl_trt_hyp in Hrmw as [Ht _].
+      unfold NLE in *. lia.
+    + intros [Hrmw _].
+      rew change_mo in Hrmw. rew bounded in Hrmw.
+      apply simpl_trt_hyp in Hrmw as [Ht _].
+      unfold NLE in *. apply mcp_bound_gt_zero in Hmcp. lia.
+    + intros [Hrmw _].
+      rew change_mo in Hrmw. rew bounded in Hrmw.
+      apply simpl_trt_hyp in Hrmw as [Ht _].
+      unfold NLE in *. apply mcp_bound_gt_zero in Hmcp. lia.
+    + intros [Hrmw _].
+      rew change_mo in Hrmw. rew bounded in Hrmw.
+      apply simpl_trt_hyp in Hrmw as [Ht _].
+      unfold NLE in *. lia.
+    + intros [Hrmw _].
+      rew change_mo in Hrmw. rew bounded in Hrmw.
+      apply simpl_trt_hyp in Hrmw as [Ht _].
+      unfold NLE in *. lia.
+    + intros [Hrmw _].
+      rew change_mo in Hrmw. rew bounded in Hrmw.
+      apply simpl_trt_hyp in Hrmw as [Ht _].
+      unfold NLE in *. lia.
+  - intros z Hcyc.
+    unshelve (epose proof (bound_min_one_incl_change_mo ex bound y _) as Hdec).
+    { eapply mcp_bound_gt_zero. eauto. }
+    apply incl_as_eq in Hdec.
+    rewrite <-Hdec in Hcyc. clear Hdec.
+    destruct Hsc as [_ Hac].
+    apply incl_tc_union in Hcyc.
+    apply (added_cycle_pass_through_addition _ _ _ Hac) in Hcyc.
+    destruct Hcyc as [w1 [w2 Hbeg [Hmid Hnotmid]] Hend].
+    apply not_or_and in Hnotmid as [Hnotmid Hnotrb].
+    apply not_or_and in Hnotmid as [Hnotmid Hnotmo].
+    apply not_or_and in Hnotmid as [Hnotsb Hnotrf].
+    destruct (Compare_dec.lt_eq_lt_dec (numbering ex w1) bound) as [[Hordw1|Hordw1]|Hordw1];
+    destruct (Compare_dec.lt_eq_lt_dec (numbering ex w2) bound) as [[Hordw2|Hordw2]|Hordw2].
+    + destruct Hmid as [[[Hsb|Hrf]|Hmo]|Hrb].
+      * rew change_mo in Hsb. apply Hnotsb.
+        apply simpl_trt_rel in Hsb. rew bounded.
+        simpl_trt; unfold NLE; try lia. auto.
+      * rew change_mo in Hrf. apply Hnotrf.
+        apply simpl_trt_rel in Hrf. rew bounded.
+        simpl_trt; unfold NLE; try lia. auto.
+      * rew change_mo in Hmo. destruct Hmo as [Hmo|[Hw1y _]].
+        -- rew bounded in Hmo. apply simpl_trt_rel in Hmo.
+           apply Hnotmo. rew bounded. simpl_trt; unfold NLE; try lia. auto.
+        -- apply (numbering_injective_eq ex) in Hw1y.
+           apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp) in Hord.
+           rewrite Hord in Hw1y. lia.
+      * unfold rb in Hrb. destruct Hrb as [w3 Hrfinv Hmo].
+        apply cnv_rev in Hrfinv as Hrf. clear Hrfinv.
+        rew change_mo in Hrf. apply simpl_trt_rel in Hrf.
+        rew change_mo in Hmo. destruct Hmo as [Hmo|[Hw1y _]].
+        -- rew bounded in Hmo. apply Hnotrb.
+           apply rf_num_ord in Hrf as Hw3ord.
+           exists w3.
+           ++ rewrite <-cnv_rev. rew bounded. simpl_trt; auto;
+              unfold NLE; lia.
+           ++ apply simpl_trt_rel in Hmo. rew bounded. simpl_trt; auto;
+              unfold NLE; lia.
+        -- apply (numbering_injective_eq ex) in Hw1y.
+           apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp) in Hord.
+           rewrite Hord in Hw1y. lia.
+    + destruct Hmid as [[[Hsb|Hrf]|Hmo]|Hrb].
+      * rew change_mo in Hsb. rew bounded in Hsb. apply simpl_trt_rel in Hsb.
+        apply sb_num_ord in Hsb. lia.
+      * rew change_mo in Hrf. rew bounded in Hrf. apply simpl_trt_rel in Hrf.
+        apply rf_num_ord in Hrf. lia.
+      * rew change_mo in Hmo. destruct Hmo as [Hmo|[Hw1y _]].
+        -- rew bounded in Hmo. apply simpl_trt_hyp in Hmo as [Ht _].
+           unfold NLE in Ht. lia.
+        -- apply (numbering_injective_eq ex) in Hw1y.
+           apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp) in Hord.
+           lia.
+      * unfold rb in Hrb. destruct Hrb as [w3 Hrfinv _].
+        rewrite <-cnv_rev in Hrfinv. rew change_mo in Hrfinv.
+        rew bounded in Hrfinv. apply simpl_trt_tright in Hrfinv.
+        unfold NLE in *. lia.
+    + destruct Hmid as [[[Hsb|Hrf]|Hmo]|Hrb].
+      * rew change_mo in Hsb. rew bounded in Hsb.
+        apply simpl_trt_hyp in Hsb as [Ht _].
+        unfold NLE in *. lia.
+      * rew change_mo in Hrf. rew bounded in Hrf.
+        apply simpl_trt_hyp in Hrf as [Ht _].
+        unfold NLE in *. lia.
+      * rew change_mo in Hmo. destruct Hmo as [Hmo|[_ [Hmo _]]].
+        -- rew bounded in Hmo.
+           apply simpl_trt_hyp in Hmo as [Ht _].
+           unfold NLE in *. lia.
+        -- apply in_intersection in Hmo as [_ Hmo].
+           unfold In in Hmo. lia.
+      * unfold rb in Hrb. destruct Hrb as [w3 Hinvrf _].
+        rewrite <-cnv_rev in Hinvrf. rew change_mo in Hinvrf.
+        rew bounded in Hinvrf. apply simpl_trt_tright in Hinvrf.
+        unfold NLE in *. lia.
+    + rewrite rtc_inv_dcmp6 in Hend.
+      rewrite rtc_inv_dcmp6 in Hbeg.
+      destruct Hbeg as [Hbeg|Hbeg];
+      destruct Hend as [Hend|Hend].
+      * simpl in Hbeg, Hend. rewrite <-Hbeg, Hend in Hmid.
+        unfold rb in Hmid. rew change_mo in Hmid. rew bounded in Hmid.
+        destruct Hmid as [[[Hmid|Hmid]|Hmid]|Hmid].
+        -- eapply ((proj2 (irreflexive_is_irreflexive _)) (sb_irr _ Hcomp)).
+           apply simpl_trt_rel in Hmid. eauto.
+        -- eapply ((proj2 (irreflexive_is_irreflexive _)) (rf_irr _ Hcomp)).
+           apply simpl_trt_rel in Hmid. eauto.
+        -- destruct Hmid as [Hmid|Hmid].
+           ++ eapply ((proj2 (irreflexive_is_irreflexive _)) (mo_irr _ Hcomp)).
+              apply simpl_trt_rel in Hmid. eauto.
+           ++ destruct Hmid as [Hzy [Hzbmin1 _]].
+              apply in_intersection in Hzbmin1 as [_ Hzord].
+              unfold In in Hzord. 
+              apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp) in Hord.
+              apply (numbering_injective_eq ex _ _) in Hzy.
+              rewrite Hord in Hzy. lia.
+        -- destruct Hmid as [w3 Hrfinv [Hmo|Hmo]].
+           ++ eapply ((proj2 (irreflexive_is_irreflexive _)) (rb_irr _ Hcomp)).
+              rewrite 2dot_cnv in Hrfinv. destruct Hrfinv as [w4 [Heq _] [w5 Hrf [Heq2 _]]].
+              rewrite <-cnv_rev in Hrf. rewrite Heq, <-Heq2 in Hrf.
+              apply simpl_trt_rel in Hmo. exists w3.
+              ** rewrite <-cnv_rev. eauto.
+              ** eauto.
+           ++ destruct Hmo as [Hzy _]. rewrite Hzy in Hbeg.
+              apply (numbering_injective_eq ex) in Hbeg.
+              apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp) in Hord.
+              rewrite Hord in Hbeg. lia.
+      * rewrite tc_inv_dcmp2 in Hend. destruct Hend as [w3 Hend _].
+        eapply (nothing_after_max_in_change_mo _ bound _ _); eauto.
+        eapply mcp_bound_gt_zero. eauto.
+      * simpl in Hend. rewrite <-Hend in Hbeg. rewrite tc_inv_dcmp2 in Hbeg.
+        destruct Hbeg as [w3 Hbeg _].
+        eapply (nothing_after_max_in_change_mo _ bound _ _); eauto.
+        eapply mcp_bound_gt_zero. eauto.
+      * rewrite tc_inv_dcmp2 in Hend. destruct Hend as [w3 Hend _].
+        eapply (nothing_after_max_in_change_mo _ bound _ _); eauto.
+        eapply mcp_bound_gt_zero. eauto.
+    + eapply (nothing_after_max_in_change_mo_1 _ bound); eauto.
+      eapply mcp_bound_gt_zero. eauto.
+    + destruct Hmid as [[[Hsb|Hrf]|Hmo]|Hrb].
+      * rew change_mo in Hsb. rew bounded in Hsb. apply simpl_trt_rel in Hsb.
+        apply sb_num_ord in Hsb. lia.
+      * rew change_mo in Hrf. rew bounded in Hrf. apply simpl_trt_rel in Hrf.
+        apply rf_num_ord in Hrf. lia.
+      * rew change_mo in Hmo. destruct Hmo as [Hmo|[_ [Hw2bmin1 _]]].
+        -- rew bounded in Hmo. apply simpl_trt_hyp in Hmo as [Ht _].
+           unfold NLE in Ht. lia.
+        -- apply in_intersection in Hw2bmin1 as [_ Hw2bmin1].
+           unfold In in Hw2bmin1. lia.
+      * unfold rb in Hrb. destruct Hrb as [w3 Hrfinv _].
+        rewrite <-cnv_rev in Hrfinv. rew change_mo in Hrfinv.
+        rew bounded in Hrfinv. apply simpl_trt_tright in Hrfinv.
+        unfold NLE in *. lia.
+    + destruct Hmid as [[[Hsb|Hrf]|Hmo]|Hrb].
+      * rew change_mo in Hsb. rew bounded in Hsb.
+        apply simpl_trt_tright in Hsb as Ht.
+        unfold NLE in *. lia.
+      * rew change_mo in Hrf. rew bounded in Hrf.
+        apply simpl_trt_tright in Hrf as Ht.
+        unfold NLE in *. lia.
+      * rew change_mo in Hmo. destruct Hmo as [Hmo|[Hmo _]].
+        -- rew bounded in Hmo.
+           apply simpl_trt_tright in Hmo as Ht.
+           unfold NLE in *. lia.
+        -- apply (numbering_injective_eq ex) in Hmo.
+           apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp) in Hord.
+           lia.
+      * unfold rb in Hrb. destruct Hrb as [w3 _ Hmo].
+        rew change_mo in Hmo. destruct Hmo as [Hmo|[Hmo _]].
+        -- rew bounded in Hmo.
+           apply simpl_trt_tright in Hmo as Ht.
+           unfold NLE in *. lia.
+        -- apply (numbering_injective_eq ex) in Hmo.
+           apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp) in Hord.
+           lia.
+    + eapply (nothing_after_max_in_change_mo_1 _ bound); eauto.
+      eapply mcp_bound_gt_zero. eauto.
+    + destruct Hmid as [[[Hsb|Hrf]|Hmo]|Hrb].
+      * rew change_mo in Hsb. rew bounded in Hsb.
+        apply simpl_trt_tright in Hsb as Ht.
+        unfold NLE in *. lia.
+      * rew change_mo in Hrf. rew bounded in Hrf.
+        apply simpl_trt_tright in Hrf as Ht.
+        unfold NLE in *. lia.
+      * rew change_mo in Hmo. destruct Hmo as [Hmo|[Hmo _]].
+        -- rew bounded in Hmo.
+           apply simpl_trt_tright in Hmo as Ht.
+           unfold NLE in *. lia.
+        -- apply (numbering_injective_eq ex) in Hmo.
+           apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp) in Hord.
+           lia.
+      * unfold rb in Hrb. destruct Hrb as [w3 _ Hmo].
+        rew change_mo in Hmo. destruct Hmo as [Hmo|[Hmo _]].
+        -- rew bounded in Hmo.
+           apply simpl_trt_tright in Hmo as Ht.
+           unfold NLE in *. lia.
+        -- apply (numbering_injective_eq ex) in Hmo.
+           apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp) in Hord.
+           lia.
+Qed.
 
 End DRF.
 

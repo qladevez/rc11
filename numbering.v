@@ -468,6 +468,26 @@ Proof.
   auto.
 Qed.
 
+Lemma mcp_left_eq_lt_bound (ex: Execution) (bound: nat) (x y: Event):
+  minimal_conflicting_pair ex bound x y ->
+  (numbering ex x) = bound \/ (numbering ex x) < bound.
+Proof.
+  intros Hmcp.
+  destruct (Compare_dec.lt_eq_lt_dec (numbering ex x) bound) as [[Hord|Hord]|Hord];
+  [right;auto|left;auto|].
+  apply mcp_left_le_bound in Hmcp. lia.
+Qed.
+
+Lemma mcp_right_eq_lt_bound (ex: Execution) (bound: nat) (x y: Event):
+  minimal_conflicting_pair ex bound x y ->
+  (numbering ex y) = bound \/ (numbering ex y) < bound.
+Proof.
+  intros Hmcp.
+  destruct (Compare_dec.lt_eq_lt_dec (numbering ex y) bound) as [[Hord|Hord]|Hord];
+  [right;auto|left;auto|].
+  apply mcp_right_le_bound in Hmcp. lia.
+Qed.
+
 Lemma mcp_exists (ex: Execution):
   expi ex ->
   (exists bound j k, minimal_conflicting_pair ex bound j k).
@@ -742,6 +762,17 @@ Proof.
       * auto.
       * destruct Hconf as [[[? _] _] _]. destruct ex. simpl in H.
         destruct H as [? ?]. unfold In in *. lia.
+Qed.
+
+Lemma mcp_num_snd_evt_ord (ex: Execution) (bound: nat) (j k: Event):
+  valid_exec ex ->
+  (minimal_conflicting_pair ex bound j k) ->
+  (numbering ex k) > (numbering ex j) ->
+  numbering ex k = bound.
+Proof.
+  intros Hval Hmcp Hord.
+  pose proof (mcp_num_snd_evt _ _ _ _ Hval Hmcp) as Hmax.
+  rewrite (max_rewrite _ _ Hord) in Hmax. auto.
 Qed.
 
 End NumberingPrefix.
