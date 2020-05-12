@@ -370,6 +370,19 @@ Proof.
     auto. apply Full_intro.
 Qed.
 
+
+Lemma I_inter {A:Type} (e1 e2: Ensemble A):
+  [I (Intersection _ e1 e2)] = [I e1]⋅[I e2].
+Proof.
+  apply ext_rel, antisym; intros x y H.
+  - destruct H as [Heq Ht]. unfold I in Ht.
+    apply in_intersection in Ht as [Ht1 Ht2].
+    rewrite <-Heq. exists x; split; unfold I; auto.
+  - destruct H as [z [Heq1 Ht1] [Heq2 Ht2]].
+    rewrite Heq1 in Ht1. rewrite Heq1, <-Heq2.
+    split; auto. split; auto.
+Qed.
+
 (** Sequencing with [1] has no effect *)
 
 Lemma dot_one {A:Type} (r: rlt A):
