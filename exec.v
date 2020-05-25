@@ -468,7 +468,6 @@ to 0, is sequenced before all the events of the program and after no events *)
 
 Definition valid_sb (evts: Ensemble Event) (sb : rlt Event) : Prop :=
   (linear_strict_order sb evts) /\
-  (sb = [I evts] ⋅ sb ⋅ [I evts]) /\
   (forall (l : Loc),
   exists (e: Event),
     (get_loc e) = Some l /\
@@ -477,7 +476,7 @@ Definition valid_sb (evts: Ensemble Event) (sb : rlt Event) : Prop :=
     forall e', In _ (ran sb) e' -> sb e e').
 
 Ltac destruct_sb_v H :=
-  destruct H as [Hsb_lso [Hsb_in_e Hsbinit]].
+  destruct H as [Hsb_lso Hsbinit].
 
 (** ** Read-modify-write relation *)
 
@@ -675,7 +674,7 @@ Lemma sb_orig_evts (x y : Event):
 Proof.
   intros Hsb.
   destruct_val_exec val_exec.
-  destruct Hsb_v as [_ [Hsb_v _]].
+  destruct Hsb_v as [[[Hsb_v _] _] _].
   rewrite Hsb_v in Hsb.
   destruct Hsb as [z [z' [_ Ht] _] _].
   auto.
@@ -687,7 +686,7 @@ Lemma sb_dest_evts (x y : Event):
 Proof.
   intros Hsb.
   destruct_val_exec val_exec.
-  destruct Hsb_v as [_ [Hsb_v _]].
+  destruct Hsb_v as [[[Hsb_v _] _] _].
   rewrite Hsb_v in Hsb.
   destruct Hsb as [z _ [Heq Ht]].
   rewrite Heq in Ht.
@@ -801,6 +800,9 @@ Proof.
   auto.
 Qed.
 
+(** The read-modify-write relation is included in the sequenced-before
+relation *)
+
 Lemma rmw_incl_sb:
   (rmw ex) ≦ (sb ex).
 Proof.
@@ -813,6 +815,9 @@ Proof.
   intuition (auto using (imm_rel_implies_rel (sb ex))).
 Qed.
 
+(** The read-modify-write relation is included in the immediate edges of the
+sequenced-before relation *)
+
 Lemma rmw_incl_imm_sb:
   (rmw ex) ≦ imm (sb ex).
 Proof.
@@ -824,6 +829,9 @@ Proof.
   (destruct (get_mode x); destruct (get_mode y)).
   all: intuition auto.
 Qed.
+
+(** In a valid execution, the origin of a read-modify-write edge is a read 
+event *)
 
 Lemma rmw_orig_read (x y: Event):
   (rmw ex) x y ->
@@ -838,6 +846,9 @@ Proof.
   intuition auto.
 Qed.
 
+(** In a valid execution, the destination of a read-modify-write edge is write
+event *)
+
 Lemma rmw_dest_write (x y: Event):
   (rmw ex) x y ->
   is_write y.
@@ -850,6 +861,9 @@ Proof.
   destruct (get_mode x); destruct (get_mode y);
   intuition auto.
 Qed.
+
+(** In a valid execution, two events related by the read-modify-write relation
+affect the same location *)
 
 Lemma rmw_same_loc (x y: Event):
   (rmw ex) x y ->
