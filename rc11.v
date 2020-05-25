@@ -58,6 +58,9 @@ Proof.
   eapply mo_dest_evts; eauto using Hval.
 Qed.
 
+(** In a valid execution, an event in the origin of read-before is a read
+event *)
+
 Lemma rb_orig_read (x y : Event):
   rb x y ->
   is_read x.
@@ -68,6 +71,9 @@ Proof.
   eapply rf_dest_read; eauto using Hval.
 Qed.
 
+(** In a valid execution, an event in the destination of read-before is a
+write event *)
+
 Lemma rb_dest_write (x y : Event):
   rb x y ->
   is_write y.
@@ -76,6 +82,9 @@ Proof.
   destruct Hrb as [z Hrf Hmo].
   eapply mo_dest_write; eauto using Hval.
 Qed.
+
+(** In a valid execution, two events related by read-before affect the same
+location *)
 
 Lemma rb_same_loc (x y : Event):
   rb x y ->
@@ -213,6 +222,9 @@ Proof.
   mrewrite wr_0. ra.
 Qed.
 
+(** In a valid execution, the union of sequenced-before, reads-from, 
+modification order and reads-before is irreflexive *)
+
 Lemma sbrfmorb_irr:
   irreflexive (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb).
 Proof.
@@ -279,6 +291,9 @@ in case [b] is a fence, a [sb]-prior read) reads from the release sequence of
 Definition sw :=
   [Mse Rel] ⋅ ([F] ⋅ (sb ex)) ? ⋅ rs ⋅ (rf ex) ⋅ [R] ⋅ [Mse Rlx] ⋅ ((sb ex) ⋅ [F]) ? ⋅ [Mse Acq].
 
+(** The synchronises-with relation is included in the transitive closure of the
+union of sequenced-before and reads-from *)
+
 Lemma sw_incl_sbrf:
   sw ≦ ((sb ex) ⊔ (rf ex))^+.
 Proof.
@@ -294,6 +309,9 @@ two events consisting of [sb] and [sw] edges *)
 
 Definition hb  :=
   ((sb ex) ⊔ sw)^+.
+
+(** The happens-before relation is included in the transitive closure of the
+union of sequenced-before and reads-from *)
 
 Lemma hb_incl_sbrf:
   hb ≦ ((sb ex) ⊔ (rf ex))^+.
