@@ -36,9 +36,13 @@ Ltac destruct_disjunction H :=
   destruct H as [H|H];
   try (destruct_disjunction H).
 
+(** Apply the split tactic as much as possible *)
+
 Ltac splitall := (split;(try splitall)).
 
 (** ** Natural numbers *)
+
+(** The greater or equal to relation is transitive *)
 
 Instance ge_trans : Transitive ge.
 Proof. compute; lia. Qed.
@@ -53,6 +57,9 @@ Proof. lia. Qed.
 Lemma max_rewrite' (k1 k2: nat):
   k1 < k2 -> max k1 k2 = k2.
 Proof. lia. Qed.
+
+(** If a numbering is strictly greater than 0, the successor of the number minus
+one is the number *)
 
 Lemma S_min_one (k: nat):
   k > 0 -> S (k - 1) = k.
@@ -90,12 +97,22 @@ Proof.
   intros x [H1 H2]; auto.
 Qed.
 
-(** If a set belongs to the intersection of two sets, it belongs to both sets *)
+(** If an element belongs to the intersection of two sets, it belongs to both 
+sets *)
 
 Lemma in_intersection {A:Type} (s1 s2 : Ensemble A) (e: A):
   In _ (Intersection _ s1 s2) e -> In _ s1 e /\ In _ s2 e.
 Proof.
-  intros [H1 H2]. split; auto.
+  intros [H1 H2]; intuition auto.
+Qed.
+
+(** If a element belongs to the union of two sets, it belongs to one of the 
+sets *)
+
+Lemma in_union {A:Type} (s1 s2 : Ensemble A) (e: A):
+  In _ (Union _ s1 s2) e -> In _ s1 e \/ In _ s2 e.
+Proof.
+  intros [x H1|x H2]; intuition auto.
 Qed.
 
 (** If a predicate is always true, it is the full set *)
@@ -205,16 +222,6 @@ Definition acyclic {A:Type} (r: rlt A) : Prop :=
 Definition cyclic {A:Type} (r: rlt A) : Prop :=
   exists x, r^+ x x.
 
-(** [res_eset e r] restricts a relation [r] to the subset of [r] relating
-events of [e] *)
-
-(*
-Definition res_eset {A:Type} (e: Ensemble A) (r: rlt A) : rlt A :=
-  fun x => fun y => (In _ e x) /\
-                    (In _ e y) /\
-                    r x y.
-*)
-
 (** A relation forms a partial order on a set of elements if:
 
 - All the elements related by the relation belong to the set of elements
@@ -222,7 +229,7 @@ Definition res_eset {A:Type} (e: Ensemble A) (r: rlt A) : rlt A :=
 - The relation is irreflexive *)
 
 Definition partial_order {A:Type} (r:rlt A) (xs: Ensemble A) : Prop :=
-  r = [I xs] ⋅ r ⋅ [I xs] /\
+  r = [I xs] ⋅ r ⋅ [I xs] /\ (* Inclusion in the set *)
   (r ⋅ r ≦ r)/\ (* Transitivity *)
   (forall x, ~(r x x)).     (* Irreflexivity *)
 
@@ -290,6 +297,24 @@ Ltac kat_eq := apply ext_rel; kat.
 
 Ltac simp_cnv H := simpl in H; unfold hrel_cnv in H.
 
+(** ** Basic Lemmas *)
+
+(** If not all elements are not related by a relation, two elements exists such
+that they are related by the relation *)
+
+Lemma not_all_not_rel_ex_rel {A:Type} (r: rlt A):
+  ~(forall x y, ~(r x y)) ->
+  exists x y, r x y.
+Proof.
+  intros Hnotforall.
+  byabsurd. exfalso.
+  apply Hnotforall. intros x y Hr.
+  apply Hcontr. exists x, y. auto.
+Qed.
+
+(** Testing if an element belongs to a set [A] and to a subset of [A] is
+equivalent to testing if it belongs to the subset of [A] *)
+
 Lemma I_simpl1 {A:Type} (s1 s2: Ensemble A):
   Included _ s1 s2 ->
   [I s1]⋅[I s2] = [I s1].
@@ -315,18 +340,6 @@ Proof.
     + rewrite <-Heq. split; auto.
 Qed.
 
-(** ** Basic Lemmas *)
-
-Lemma not_all_not_rel_ex_rel {A:Type} (r: rlt A):
-  ~(forall x y, ~(r x y)) ->
-  exists x y, r x y.
-Proof.
-  intros Hnotforall.
-  byabsurd. exfalso.
-  apply Hnotforall. intros x y Hr.
-  apply Hcontr. exists x, y. auto.
-Qed.
-
 (** A relation being included in another is equivalent to the union of the
 smaller and bigger relation being equal to the bigger relation *)
 
@@ -349,6 +362,8 @@ Proof.
     split; simpl; auto.
 Qed.
 
+(** If two relations are irreflexive, their union is irreflexive *)
+
 Lemma irreflexive_union {A:Type} (r1 r2: rlt A):
   irreflexive r1 ->
   irreflexive r2 ->
@@ -370,6 +385,9 @@ Proof.
     auto. apply Full_intro.
 Qed.
 
+(** Testing if an element belongs to the intersection of two sets is equivalent
+to testing if it belongs to the first set, and then testing if it belongs to
+the second test *)
 
 Lemma I_inter {A:Type} (e1 e2: Ensemble A):
   [I (Intersection _ e1 e2)] = [I e1]⋅[I e2].
@@ -391,6 +409,9 @@ Proof.
   apply ext_rel. rewrite dotx1. auto.
 Qed.
 
+(** The converse of the sequence of two relations, is the sequence of the
+converse of the second relation and of the converse of the first relation *)
+
 Lemma dot_cnv {A:Type} (r1 r2: rlt A):
   (r1⋅r2)° = r2°⋅r1°.
 Proof.
@@ -398,6 +419,9 @@ Proof.
   rewrite cnvdot.
   auto.
 Qed.
+
+(** A relation relating [x] to [y], is equal to the converse of the relation 
+relating [y] to [x] *)
 
 Lemma cnv_rev {A:Type} (r: rlt A) (x y: A):
   r x y <-> r° y x.
@@ -446,6 +470,9 @@ Proof.
   intros x y [Hr _]. auto.
 Qed.
 
+(** The intersection of the subsets of two sets is included in the intersection
+of these two sets *)
+
 Lemma capincl {A:Type} (r1 r2 r3 r4: rlt A):
   r1 ≦ r2 ->
   r3 ≦ r4 ->
@@ -453,6 +480,8 @@ Lemma capincl {A:Type} (r1 r2 r3 r4: rlt A):
 Proof.
   intros H1 H2. rewrite H1, H2. auto.
 Qed.
+
+(** The union of a set and of one of its subsets is equal to the set *)
 
 Lemma incl_as_eq {A:Type} (r s: rlt A):
   r ≦ s -> r ⊔ s = s.
@@ -570,15 +599,13 @@ Lemma seq_union_right {A:Type} (r1 r2 r3: rlt A):
   r1 ⋅ r3 ≦ r1 ⋅ (r2 ⊔ r3).
 Proof. kat. Qed.
 
-(** The union of relations is commutative *)
+(** The union of relations is commutative and associative *)
 
 Lemma union_comm {A:Type} (r1 r2 : rlt A):
   (r1 ⊔ r2) = (r2 ⊔ r1).
 Proof.
   apply ext_rel. kat.
 Qed.
-
-(** The union of relations is commutative *)
 
 Lemma union_assoc {A:Type} (r1 r2 r3 : rlt A):
   (r1 ⊔ (r2 ⊔ r3)) = ((r1 ⊔ r2) ⊔ r3).
@@ -738,37 +765,67 @@ Lemma tc_inv_dcmp4 {A:Type} (r: rlt A):
   r^+ = r ⊔ (r^+ ⋅ r).
 Proof. kat_eq. Qed.
 
+(** The transitive closure of a relation is either itself or the sequence of
+its reflexive transitive closure with itself *)
+
 Lemma tc_inv_dcmp5 {A:Type} (r: rlt A):
   r^+ = r ⊔ (r^* ⋅ r).
 Proof. kat_eq. Qed.
+
+(** The sequence of the reflexive transitive closure of a relation with the
+reflexie transitive closure of the same relation is included in the reflexive
+transitive closure of this relation *)
 
 Lemma rtc_inv_dcmp {A:Type} (r: rlt A):
   r^* ⋅ r^* ≦ r^*.
 Proof. kat. Qed.
 
+(** The sequence of relation with its reflexive transitive closure is included
+in the reflexive transitive closure of this relation *)
+
 Lemma rtc_inv_dcmp2 {A:Type} (r: rlt A):
   r ⋅ r^* ≦ r^*.
 Proof. kat. Qed.
+
+(** The sequence of the reflexive transitive closure of a relation with itself
+is included in the reflexive transitive closure of this relation *)
 
 Lemma rtc_inv_dcmp3 {A:Type} (r: rlt A):
   r^* ⋅ r ≦ r^*.
 Proof. kat. Qed.
 
+(** The sequence of the reflexive transitive closure of a relation and of the
+transitive closure of the same relation is included in the reflexive
+transitive closure of this relation *)
+
 Lemma rtc_inv_dcmp4 {A:Type} (r: rlt A):
   r^* ⋅ r^+ ≦ r^*.
 Proof. kat. Qed.
+
+(** The sequence of the transitive closure of a relation and of the reflexive
+transitive closure of the same relation is included in the reflexive
+transitive closure of this relation *)
 
 Lemma rtc_inv_dcmp5 {A:Type} (r: rlt A):
   r^+ ⋅ r^* ≦ r^*.
 Proof. kat. Qed.
 
+(** The reflexive transitive closure is equal to the union of the identity
+relation with the transitive closure of this relation *)
+
 Lemma rtc_inv_dcmp6 {A:Type} (r: rlt A):
   r^* = 1 ⊔ r^+.
 Proof. kat_eq. Qed.
 
+(** The transitive closure of a relation is included in the reflexive transitive
+closure of this relation *)
+
 Lemma tc_incl_rtc {A:Type} (r: rlt A):
   r^+ ≦ r^*.
 Proof. kat. Qed.
+
+(** The transitive closure of a relation is included in the transitive closure
+of this relation with another relation *)
 
 Lemma tc_union_left {A:Type} (r1 r2: rlt A):
   r1^+ ≦ (r1 ⊔ r2)^+.
@@ -1089,6 +1146,9 @@ Proof.
     + apply (incl_rel_thm Hend). kat.
 Qed.
 
+(** If a relation is acyclic, but there is a cycle in the union of this relation
+with a second relation, there is an element in this cycle that is in the domain
+or the range of the second relation *)
 
 Lemma added_cycle_pass_through_addition1 {A:Type} (x:A) (r1 r2 : rlt A) :
   acyclic r1 ->
@@ -1154,7 +1214,6 @@ Lemma imm_rel_implies_rel {A:Type} (r:rlt A) (x y: A):
 Proof.
   intros [Hr _]. auto.
 Qed.
-
 
 (** The transitive closure of a strict linear order is itself *)
 
@@ -1227,7 +1286,6 @@ Lemma simpl_rt_hyp {A:Type} (t: prop_set A) (r: rlt A) (x y: A):
   r x y /\ t y.
 Proof. intros [z Hr [Heq Ht]]. rewrite Heq in Ht, Hr. intuition. Qed.
 
-  
 Lemma dom_trt {A:Type} (t1 t2: prop_set A) (r: rlt A) (x: A):
   In _ (dom ([t1] ⋅ r ⋅ [t2])) x ->
   t1 x /\ (exists y, t2 y /\ r x y).
@@ -1244,6 +1302,15 @@ Proof.
   intros [z [z' [y [Heqy Hty] Hr] [Heqx Htx]]].
   rewrite Heqy in Hty; rewrite Heqx in Htx; rewrite Heqx in Hr.
   split; auto. exists y; intuition auto.
+Qed.
+
+Lemma add_test_left {A:Type} (t: prop_set A) (r: rlt A) (x y: A):
+  r x y ->
+  t x ->
+  ([t] ⋅ r) x y.
+Proof.
+  intros Hr Ht.
+  exists x; auto. split; auto.
 Qed.
 
 Lemma add_test_right {A:Type} (t: prop_set A) (r: rlt A) (x y: A):
@@ -1309,10 +1376,15 @@ Qed.
 
 End KatTests.
 
-Lemma tc_test_restriction {A:Type} (t: prop_set A) (r: rlt A):
-  ([t]⋅r⋅[t])^+ ≦ [t]⋅r^+⋅[t].
+(** The transitive closure of a relation framed by two tests is included in the
+framing of the transitive closure of the relation by the two tests *)
+
+Lemma tc_test_restriction {A:Type} (t1 t2: prop_set A) (r: rlt A):
+  ([t1]⋅r⋅[t2])^+ ≦ [t1]⋅r^+⋅[t2].
 Proof. kat. Qed.
 
+(** If the transitive closure of a relation doesn't relate any of the elements
+that verifies a given test, the framing of the relation by the test is acyclic *)
 Lemma ac_test_restriction {A:Type} (t: prop_set A) (r: rlt A):
   (forall x, t x -> ~(r^+ x x)) ->
   acyclic ([t]⋅r⋅[t]).
@@ -1325,7 +1397,7 @@ Qed.
 
 (** If a test implies another test, and if a first relation whose domain is
 restricted to the elements satisfying the first test is included in a second
-relation, then the first relation whose domain is restricted to the elements 
+relation, then the first relation whose domain is restricted to the elements
 satisfying the first test is included in the second relation whose domain is
 restricted to the elements satisfying the second test. *)
 
@@ -1441,6 +1513,9 @@ Proof.
   apply clos_trans_ind.
 Qed.
 
+(** If there is not path between two elements in a relation, there is no third
+element such that there is a path between the first and third elements, and a
+path between the third and second element in the same relation *)
 
 Lemma no_path_impl_no_step {A:Type} (r: rlt A) (x y: A):
   ~(r^+ x y) ->
@@ -1451,6 +1526,10 @@ Proof.
   apply tc_trans with z; auto.
 Qed.
 
+(** If there is no path between two elements in a first relation, but there is
+a path between these two elements in the union of a first relation with a second
+relation, this path must pass through two elements that are related by the
+second relation and not by the first one *)
 
 Lemma path_impl_pass_through_aux {A:Type} (r1 r2: rlt A):
   forall x y,
@@ -1479,7 +1558,6 @@ Proof.
       apply rtc_inv_dcmp5. exists y; auto.
 Qed.
 
-
 Lemma path_impl_pass_through {A:Type} (r1 r2: rlt A) (x y: A):
   ~(r1^+ x y) ->
   (r1 ⊔ r2)^+ x y ->
@@ -1489,6 +1567,10 @@ Proof.
   apply path_impl_pass_through_aux; auto.
 Qed.
 
+(** If a first relation is acyclic and there is a cycle in the union of the
+first relation with a second relation, the cycle must passe through two elements
+that are related by the second relation and not by the first one *)
+
 Lemma added_cycle_pass_through_addition {A:Type} (r1 r2: rlt A) (x: A):
   acyclic r1 ->
   (r1 ⊔ r2)^+ x x ->
@@ -1497,6 +1579,9 @@ Proof.
   intros Hac Hcyc.
   apply (path_impl_pass_through _ _ _ _ (Hac x) Hcyc).
 Qed.
+
+(** The union of two relations is equivalent to the union of the first relation
+with the second relation minus the first one *)
 
 Lemma union_dcmp {A:Type} (r1 r2: rlt A):
   (r1 ⊔ r2) = (r1 ⊔ (r2 \ r1)).
@@ -1511,12 +1596,22 @@ Proof.
     right; auto.
 Qed.
 
+(** A relation [A] minus another relation is included in [A] *)
+
 Lemma minus_incl {A:Type} (r1 r2: rlt A):
   (r2 \ r1) ≦ r2.
 Proof.
   intros x y [H _].
   auto.
 Qed.
+
+(** The transitive closure of the union of two relations is equal to the union
+of the transitive closure of the first relation and of the sequence of:
+
+- the reflexive transitive closure of the first relation
+- the second relation minus the first one
+- the reflexive transitive closure of the union of the two relations
+*)
 
 Lemma tc_union_dcmp {A:Type} (r1 r2: rlt A):
   (r1 ⊔ r2)^+ = r1^+ ⊔ (r1^* ⋅ (r2 \ r1) ⋅ (r1 ⊔ r2)^*).
