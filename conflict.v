@@ -39,6 +39,8 @@ Definition conflicting ex: rlt Event :=
     x <> y /\
     (get_loc x) = (get_loc y).
 
+(** Conflicting events of an execution belong to the events of this execution *)
+
 Lemma conflicting_in_evts_left (ex: Execution) (x y: Event):
   conflicting ex x y ->
   In _ (evts ex) x.
@@ -49,20 +51,29 @@ Lemma conflicting_in_evts_right (ex: Execution) (x y: Event):
   In _ (evts ex) y.
 Proof. compute; intuition auto. Qed.
 
+(** If two events are conflicting, at least one of them is a write event *)
+
 Lemma conflicting_one_is_write (ex: Execution) (x y: Event):
   conflicting ex x y ->
   is_write x \/ is_write y.
 Proof. compute; intuition auto. Qed.
+
+(** Two conflicting events are different *)
 
 Lemma conflicting_diff (ex: Execution) (x y: Event):
   conflicting ex x y ->
   x <> y.
 Proof. compute; intuition auto. Qed.
 
+(** Two conflicting events affect the same location *)
+
 Lemma conflicting_same_loc (ex: Execution) (x y: Event):
   conflicting ex x y ->
   get_loc x = get_loc y.
 Proof. compute; intuition auto. Qed.
+
+(** If two events are conflicting in the prefix of an execution, they are
+conflicting in the execution *)
 
 Lemma conflicting_pre (pre ex: Execution) (x y: Event):
   prefix pre ex ->
@@ -91,9 +102,14 @@ Definition pi (ex: Execution) : rlt Event :=
   at_least_one_not_sc ⊓
   (!(bidir (((sb ex) ⊔ (res_mode Sc (rf ex)))^+))).
 
+(** Two pi-conflicting events are conflicting *)
+
 Lemma pi_is_conflicting (ex: Execution) (x y: Event):
   (pi ex) x y -> (conflicting ex) x y.
 Proof. intros [[? _] _]. auto. Qed.
+
+(** Pi-conflicting events of an execution belong to the events of this 
+execution *)
 
 Lemma pi_in_evts_left (ex: Execution) (x y: Event):
   pi ex x y ->
@@ -105,25 +121,37 @@ Lemma pi_in_evts_right (ex: Execution) (x y: Event):
   In _ (evts ex) y.
 Proof. intros. eauto using conflicting_in_evts_right, pi_is_conflicting. Qed.
 
+(** If two events are pi-conflicting, at least one of them is a write event *)
+
 Lemma pi_one_is_write (ex: Execution) (x y: Event):
   pi ex x y ->
   is_write x \/ is_write y.
 Proof. intros. eauto using conflicting_one_is_write, pi_is_conflicting. Qed.
+
+(** Two pi-conflicting events are different *)
 
 Lemma pi_diff (ex: Execution) (x y: Event):
   pi ex x y ->
   x <> y.
 Proof. intros. eauto using conflicting_diff, pi_is_conflicting. Qed.
 
+(** Two pi-conflicting events affect the same location *)
+
 Lemma pi_same_loc (ex: Execution) (x y: Event):
   pi ex x y ->
   get_loc x = get_loc y.
 Proof. intros. eauto using conflicting_same_loc, pi_is_conflicting. Qed.
 
+(** If two events are pi-conflicting,at least one of them is SC *)
+
 Lemma pi_at_least_one_not_sc (ex: Execution) (x y: Event):
   pi ex x y ->
   at_least_one_not_sc x y.
 Proof. compute; intuition auto. Qed.
+
+(** Two pi-conflicting events are not related by the transitive closure of the
+union of sequenced-before and of read-from restricted to SC events in either
+direction *)
 
 Lemma pi_not_sbrfsc (ex: Execution) (x y: Event):
   pi ex x y ->
@@ -159,6 +187,9 @@ Ltac solve_test_ineq :=
   
 (** ** SC-consistent prefixes *)
 
+(** In a complete execution, the restriction of reads-from relation to SC events 
+is included in the synchronises-with relation *)
+
 Lemma nt_rfsc_incl_hb {ex: Execution}:
   complete_exec ex ->
   [M Sc] ⋅ rf ex ⋅ [M Sc] ≦  sw ex.
@@ -193,6 +224,10 @@ Proof.
   solve_test_ineq.
 Qed.
 
+(** In a complete execution, the transitive closure of the union of the 
+sequenced-before relation with restriction of the reads-from relation restricted
+to SC events is included in the happens-before relation *)
+
 Lemma sbrfsc_incl_hb {ex: Execution}:
   complete_exec ex ->
   (sb ex ⊔ ([M Sc] ⋅ rf ex ⋅ [M Sc]))^+ ≦ hb ex.
@@ -203,6 +238,10 @@ Proof.
   apply incl_cup; auto.
   apply (nt_rfsc_incl_hb Hcomp).
 Qed.
+
+(** In a complete execution, the transitive closure of the union of the
+sequenced-before relation and reads-from relation restricted to SC events of the
+prefix of an execution is included in the same relation in the execution *)
 
 Lemma sbrfsc_incl_pre (pre ex: Execution):
   complete_exec ex ->
