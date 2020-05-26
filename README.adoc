@@ -4,6 +4,8 @@ This repository contains a coq development of the Repaired C11 Memory Model pres
 
 == Compilation ==
 
+The https://github.com/damien-pous/relation-algebra[relation-algebra] library is needed to compile the proofs.
+
 You can compile the proofs by running `make`.
 
 You can generate documentation in HTML format using two different tools:
