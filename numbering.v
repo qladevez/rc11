@@ -32,8 +32,12 @@ Module Type Numbering.
 
 Parameter numbering : Execution -> (Event -> nat).
 
+(** Two different events can't have the same numbering *)
+
 Axiom numbering_injective: forall ex x y, 
   x <> y <-> numbering ex x <> numbering ex y.
+
+(** Two identical events have the same numbering *)
 
 Lemma numbering_injective_eq (ex: Execution) (x y: Event):
   x = y <-> numbering ex x = numbering ex y.
@@ -46,9 +50,18 @@ Proof.
       destruct (Hxy H).
 Qed.
 
+(** If an first event is related to a second event by the union of the sequenced
+before relation and reads-from relation, the numbering of the first event is
+strictly inferior to the numbering of the second event *)
+
 Axiom numbering_coherent: 
   forall ex x y, ((sb ex) ⊔ (rf ex)) x y ->
                  numbering ex x < numbering ex y.
+
+(** If a first event is related to a second event by the reflexive transitive
+closure of the union of the sequenced-before relation and reads-from relation,
+the numbering of the second event is greater or equal to the numbering of the
+first event *)
 
 Lemma numbering_coherent_rtc (ex: Execution) (x y: Event):
   ((sb ex) ⊔ (rf ex))^* x y ->
@@ -62,6 +75,11 @@ Proof.
   - intros x y z _ IH1 _ IH2. lia.
 Qed.
 
+(** If a first event is related to a second event by the transitive closure of 
+the union of the sequenced-before relation and reads-from relation, the
+numbering of the second event is greater than the numbering of the first
+event *)
+
 Lemma numbering_coherent_tc (ex: Execution) (x y: Event):
   ((sb ex) ⊔ (rf ex))^+ x y ->
   numbering ex y > numbering ex x.
@@ -72,6 +90,10 @@ Proof.
   lia.
 Qed.
 
+(** If a first event is related by the sequenced-before relation to a second
+event, the numbering of the second event is strictly greater than the numbering
+of the first event *)
+
 Lemma sb_num_ord (ex: Execution) (x y: Event):
   sb ex x y ->
   (numbering ex y) > (numbering ex x).
@@ -80,6 +102,10 @@ Proof.
   apply numbering_coherent_tc, tc_incl_itself.
   left; auto.
 Qed.
+
+(** If a first event is related by the reads-from relation to a second event, 
+the numbering of the second event is strictly greater than the numbering of the
+first event *)
 
 Lemma rf_num_ord (ex: Execution) (x y: Event):
   rf ex x y ->
@@ -95,10 +121,6 @@ the one of all the other events *)
 
 Axiom numbering_bounded :
   forall ex, { e | forall x, numbering ex e >= numbering ex x}.
-
-Definition has_number (ex: Execution) (e: Event) (k:nat) : Prop :=
-  numbering ex e = k.
-
 
 (** If an execution is a prefix of the other, the events that are in the prefix
 have the same numbering in the execution and in the prefix *)
@@ -117,6 +139,9 @@ Import Numbering.
 Definition NLE (ex: Execution) (b: nat) : prop_set Event :=
   fun e => b >= (numbering ex e).
 
+(** If an event's numbering is less or equal to a bound minus one, it is less
+or equal to the bound *)
+
 Lemma NLE_bound_min_one (ex: Execution) (bound: nat):
   [NLE ex (bound-1)] ≦ [NLE ex bound].
 Proof.
@@ -124,6 +149,10 @@ Proof.
   split; auto.
   unfold NLE in *. lia.
 Qed.
+
+(** If we test that an event's numbering is less or equal to two bounds, one of
+which is strictly inferior to the other, we can replace these two tests by the
+test of the event's numbering being less or equal to the smaller bound *)
 
 Lemma nle_double (ex: Execution) (k1 k2: nat):
   k1 < k2 ->
@@ -137,6 +166,9 @@ Proof.
     unfold NLE in Hr. unfold NLE. lia.
 Qed.
 
+(** An bounded execution is a restriction of the events and relations of an
+execution to the events whose numbering is less or equal to a given bound. *)
+
 Definition bounded_exec (ex: Execution) (n: nat) : Execution :=
   {|
     exec.evts := Intersection _ (evts ex) (fun x => n >= numbering ex x);
@@ -145,6 +177,8 @@ Definition bounded_exec (ex: Execution) (n: nat) : Execution :=
     exec.rf := [NLE ex n] ⋅ (rf ex) ⋅ [NLE ex n];
     exec.mo := [NLE ex n] ⋅  (mo ex) ⋅ [NLE ex n];
   |}.
+
+(** Simplifications of the different getters applied over bounded executions *)
 
 Lemma simpl_evts_be (ex: Execution) (n:nat):
   evts (bounded_exec ex n) = Intersection _ (evts ex) (fun x => n >= numbering ex x).
@@ -181,6 +215,10 @@ Hint Rewrite simpl_sb_be simpl_rmw_be simpl_rf_be simpl_mo_be : bounded_exec_db.
 Tactic Notation "rew" "bounded" := autorewrite with bounded_exec_db.
 Tactic Notation "rew" "bounded" "in" hyp(H) := autorewrite with bounded_exec_db in H.
 
+(** The union of all the relations of an execution bounded by [n] is included in
+the union of all the relations of the execution bounded by [n] restricted to the
+events whose numbering is less or equal to [n] *)
+
 Lemma sc_cycle_be_incl_be_sc_cycle (ex: Execution) (n: nat):
   sb (bounded_exec ex n) ⊔
   rf (bounded_exec ex n) ⊔
@@ -197,6 +235,10 @@ Proof.
   rewrite 2dot_cnv, injcnv.
   kat.
 Qed.
+
+
+(** The union of all the relations of a bounded execution is included in the
+union of all the relations of the execution *)
 
 Lemma cycle_be_incl_cycle_ex (ex: Execution) (bound:nat):
   sb (bounded_exec ex bound) ⊔ rf (bounded_exec ex bound) ⊔
@@ -217,6 +259,9 @@ Proof.
   intros Hval [Hsb | Hrf]; split;
   eauto using sb_orig_evts, sb_dest_evts, rf_orig_evts, rf_dest_evts.
 Qed.
+
+(** If an event belongs to the events of an execution bounded by [n], its 
+numbering is less or equal to [n] and it belongs to the events of the execution *)
 
 Lemma I_evts_bounded_le_bnd (ex: Execution) (n: nat):
   [I (evts (bounded_exec ex n))] = [NLE ex n] ⋅ [I (evts ex)].
@@ -247,12 +292,16 @@ Proof.
   - rew bounded.
     repeat (apply conj);
     destruct_val_exec Hval.
-    + destruct_sb_v Hsb_v. rewrite Hsb_in_e, I_evts_bounded_le_bnd. kat_eq.
+    + destruct_sb_v Hsb_v.
+      destruct Hsb_lso as [[Hsb_in_e _] _].
+      rewrite Hsb_in_e, I_evts_bounded_le_bnd. kat_eq.
     + destruct_rf_v Hrf_v. rewrite Hrf_in_e, I_evts_bounded_le_bnd. kat_eq.
     + destruct_mo_v Hmo_v. destruct Hmopo as [Hmo_in_e _].
       rewrite Hmo_in_e, I_evts_bounded_le_bnd. kat_eq.
     + destruct_rmw_v Hrmw_v. rewrite Hrmw_in_e, I_evts_bounded_le_bnd. kat_eq.
 Qed.
+
+(** If an execution is valid, any of its boundings is valid *)
 
 Lemma bounded_is_valid (ex: Execution) (bound: nat):
   valid_exec ex ->
@@ -265,6 +314,8 @@ Proof.
   eauto.
 Qed.
 
+(** If an execution is complete, any of its boundings is complete *)
+
 Lemma bounded_is_complete (ex: Execution) (bound: nat):
   complete_exec ex ->
   complete_exec (bounded_exec ex bound).
@@ -275,6 +326,9 @@ Proof.
   eapply bounded_exec_is_prefix.
   destruct Hcomp as [Hval _]. auto.
 Qed.
+
+(** If an execution is consistent in the RC11 model, any of its boundings is 
+consistent in the RC11 model *)
 
 Lemma bounded_is_rc11 (ex: Execution) (bound: nat):
   valid_exec ex ->
@@ -288,8 +342,8 @@ Proof.
   eauto.
 Qed.
 
-(** If we have to boundings of an execution, the smallest is a prefix of the
-biggest *)
+(** If we have two boundings of an execution, the bounding bounded by the 
+smallest bound is a prefix of the bounding bounded by the biggest bound *)
 
 Lemma two_ord_bounds_pre (ex: Execution) (k1 k2: nat):
   valid_exec ex ->
@@ -314,7 +368,9 @@ Proof.
   - rew bounded. rewrite I_evts_bounded_le_bnd.
     rewrite <- (nle_double ex _ _ Hord) at 1.
     rewrite <- (nle_double ex _ _ Hord) at 2.
-    destruct_sb_v Hsb_v. rewrite Hsb_in_e. kat_eq.
+    destruct_sb_v Hsb_v.
+    destruct Hsb_lso as [[Hsb_in_e _] _].
+    rewrite Hsb_in_e. kat_eq.
   - rew bounded. rewrite I_evts_bounded_le_bnd.
     rewrite <- (nle_double ex _ _ Hord) at 1.
     rewrite <- (nle_double ex _ _ Hord) at 2.
@@ -330,8 +386,8 @@ Proof.
     destruct_rmw_v Hrmw_v. rewrite Hrmw_in_e. kat_eq.
 Qed.
 
-(** There is a bound high enough so that the bounding of the execution 
-corresponds to the execution *)
+(** There is a bound high enough so that the bounding of the execution is equal
+to the execution *)
 
 Lemma bounded_execution_itself_exists (ex: Execution):
   valid_exec ex ->
@@ -353,7 +409,7 @@ Qed.
 (** ** Smallest conflicting prefix *)
 
 (** A bound encodes the smallest possible conflicting prefix if all the other
-bounds producing a conflicting prefix are bigger *)
+conflicting boundings are bounded by a bigger bound *)
 
 Definition smallest_conflicting_bounding (ex: Execution) (bound: nat) :=
   expi (bounded_exec ex bound) /\
@@ -364,7 +420,7 @@ Axiom smallest_conflicting_bounding_exists:
   forall ex, expi ex ->
              (exists bound, smallest_conflicting_bounding ex bound).
 
-(** The bounding smaller than the smallest conflicting bounding are not 
+(** The boundings smaller than the smallest conflicting bounding are not 
 conflicting *)
 
 Lemma smaller_than_smallest_not_conflicting (ex: Execution) (bound: nat):
@@ -400,15 +456,26 @@ Definition minimal_conflicting_pair (ex: Execution) (bound: nat) (j k: Event) :=
   (smallest_conflicting_bounding ex bound) /\
   (pi (bounded_exec ex bound) j k).
 
+(** The minimal conflicting pair of given execution and bound is a symmetric
+relation *)
+
 Lemma mcp_is_sym (ex: Execution) (bound: nat) (j k: Event):
   (minimal_conflicting_pair ex bound j k) <->
   (minimal_conflicting_pair ex bound k j).
 Proof. compute; intuition eauto. Qed.
 
+(** The two events and the bound forming the minimal conflicting pair of an 
+execution are such that the two events are pi-conflicting in the bounding of
+the execution by the bound *)
+
 Lemma mcp_is_pi (ex: Execution) (bound:nat) (j k: Event):
   minimal_conflicting_pair ex bound j k ->
   pi (bounded_exec ex bound) j k.
 Proof. intros [_ ?]. auto. Qed.
+
+(** The two events and the bound forming the minimal conflicting pair of an 
+execution are such that the two events belong to the events of the bounding of
+the execution by the bound *)
 
 Lemma mcp_in_evts_left (ex: Execution) (x y: Event) (bound:nat):
   minimal_conflicting_pair ex bound x y ->
@@ -420,25 +487,40 @@ Lemma mcp_in_evts_right (ex: Execution) (x y: Event) (bound:nat):
   In _ (evts (bounded_exec ex bound)) y.
 Proof. intros. eauto using pi_in_evts_right, mcp_is_pi. Qed.
 
+(** One of the two events forming a minimal conflicting pair must be a write 
+event *)
+
 Lemma mcp_one_is_write (ex: Execution) (x y: Event) (bound:nat):
   minimal_conflicting_pair ex bound x y ->
   is_write x \/ is_write y.
 Proof. intros. eauto using pi_one_is_write, mcp_is_pi. Qed.
+
+(** Two events forming a minimal conflicting pair are different *)
 
 Lemma mcp_diff (ex: Execution) (x y: Event) (bound:nat):
   minimal_conflicting_pair ex bound x y ->
   x <> y.
 Proof. intros. eauto using pi_diff, mcp_is_pi. Qed.
 
+(** Two events forming a minimal conflicting pair affect the same location *)
+
 Lemma mcp_same_loc (ex: Execution) (x y: Event) (bound:nat):
   minimal_conflicting_pair ex bound x y ->
   get_loc x = get_loc y.
 Proof. intros. eauto using pi_same_loc, mcp_is_pi. Qed.
 
+(** At least one of the two events forming a conflicting pair must be a SC
+event *)
+
 Lemma mcp_at_least_one_not_sc (ex: Execution) (x y: Event) (bound:nat):
   minimal_conflicting_pair ex bound x y ->
   at_least_one_not_sc x y.
 Proof. intros. eauto using pi_at_least_one_not_sc, mcp_is_pi. Qed.
+
+(** Two events forming a minimal conflicting pair are not ordered by the 
+transitive closure of the union of the sequenced-before relation and of the
+restriction of the reads-from relation to SC events, in the execution bounded
+by the minimal bound in either direction *)
 
 Lemma mcp_not_sbrfsc (ex: Execution) (x y: Event) (bound:nat):
   minimal_conflicting_pair ex bound x y ->
@@ -449,6 +531,9 @@ Lemma mcp_not_cnv_sbrfsc (ex: Execution) (x y: Event) (bound:nat):
   minimal_conflicting_pair ex bound x y ->
   ~((sb (bounded_exec ex bound) ⊔ (res_mode Sc (rf (bounded_exec ex bound))))^+ y x).
 Proof. intros. eauto using pi_not_cnv_sbrfsc, mcp_is_pi. Qed.
+
+(** The events forming a minimal conflicting pair have a numbering less or equal
+to the minimal bound *)
 
 Lemma mcp_left_le_bound (ex: Execution) (x y: Event) (bound:nat):
   minimal_conflicting_pair ex bound x y ->
@@ -467,6 +552,10 @@ Proof.
   destruct Hmcp as [? _ Hxord]. unfold In in Hxord.
   auto.
 Qed.
+
+(** The numbering of one of the two events forming a minimal conflicting pair
+is equal to the minimal bound and the numbering of the other event is strictly
+inferior to the minmal bound *)
 
 Lemma mcp_left_eq_lt_bound (ex: Execution) (bound: nat) (x y: Event):
   minimal_conflicting_pair ex bound x y ->
@@ -487,6 +576,9 @@ Proof.
   [right;auto|left;auto|].
   apply mcp_right_le_bound in Hmcp. lia.
 Qed.
+
+(** Every execution containing pi-conflicting events has a minimal conflicting
+pair *)
 
 Lemma mcp_exists (ex: Execution):
   expi ex ->
@@ -509,6 +601,10 @@ Proof.
   intros [_ [[_ H] _]].
   auto.
 Qed.
+
+(** In a valid execution, the set of events whose numbering in an execution 
+bounded by [n] is less or equal to a bound, is the same as the set of events
+whose numbering in the execution is less or equal to the same bound *)
 
 Lemma NLE_set_in_bound_ex_rew (ex: Execution) (b1 b2: nat):
   valid_exec ex ->
