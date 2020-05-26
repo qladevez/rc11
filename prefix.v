@@ -48,7 +48,7 @@ Ltac inverse_prefix H :=
   inversion H as [Hevts [Hclosed [Hsb [Hrf [Hmo Hrmw]]]]].
 
 (** These lemmas allow extracting information from a prefix hypothesis without
-explicitely destructing the hypothesis, which is more robust *)
+explicitely destructing the hypothesis *)
 
 Lemma prefix_incl_evts (pre ex: Execution):
   prefix pre ex ->
@@ -76,7 +76,8 @@ Proof with auto.
   - intros a b [Hsb|Hrf] Hin.
     + apply sb_orig_evts with (y:=b); auto.
     + apply rf_orig_evts with (y:=b); auto.
-  - destruct_sb_v Hsb_v...
+  - destruct_sb_v Hsb_v.
+    destruct Hsb_lso as [[Hsb_lso _] _]...
   - destruct_rf_v Hrf_v...
   - destruct_mo_v Hmo_v.
     destruct Hmopo as [? _]...
@@ -392,22 +393,20 @@ Proof.
   inverse_prefix Hpre. destruct_sb_v Hsb_v.
   split.
   { eauto using prefix_lso_valid. }
-  split.
-  { rewrite Hsb. kat_eq. }
-  - intros l. destruct (Hsbinit l) as [e [? [? [H H']]]]. exists e.
-    splitall; auto.
-    + intros Hnot. apply H.
-      rewrite Hsb in Hnot.
-      eapply (elt_ran_incl _ _ _ _ Hnot).
-      Unshelve. kat.
-    + intros e' Hinsbpre. rewrite Hsb.
-      rewrite Hsb in Hinsbpre.
-      simpl_trt;
-      eapply ran_trt in Hinsbpre as [Hine' [y [Hine Hr]]].
-      * eapply (Hclosed _ e'); eauto.
-        left. eapply H'. exists y. eauto.
-      * eapply H'. exists y. eauto.
-      * auto.
+  intros l. destruct (Hsbinit l) as [e [? [? [H H']]]]. exists e.
+  splitall; auto.
+  - intros Hnot. apply H.
+    rewrite Hsb in Hnot.
+    eapply (elt_ran_incl _ _ _ _ Hnot).
+    Unshelve. kat.
+  - intros e' Hinsbpre. rewrite Hsb.
+    rewrite Hsb in Hinsbpre.
+    simpl_trt;
+    eapply ran_trt in Hinsbpre as [Hine' [y [Hine Hr]]].
+    + eapply (Hclosed _ e'); eauto.
+      left. eapply H'. exists y. eauto.
+    + eapply H'. exists y. eauto.
+    + auto.
 Qed.
 
 (** If the read-modify write relation of an execution is valid, the read-modify-
@@ -468,6 +467,11 @@ Proof.
   - rewrite Hrmw. kat_eq.
 Qed.
 
+(** If the read-modify-write relation of an execution is valid on the events
+and the sequenced-before relation of the execution, the read-modify-write 
+relation of the prefix of a prefix of the execution is valid on the events and
+sequenced-before relation of the prefix of the execution *)
+
 Lemma prefix_rmw_valid_diff_evts {pre1 pre2 ex: Execution}:
   valid_rmw (evts ex) (sb ex) (rmw ex) ->
   prefix pre1 pre2 ->
@@ -509,6 +513,10 @@ Proof.
     eapply rf_prefix_incl; eauto.
 Qed.
 
+(** If the read-from relation of an execution is valid on the events of the
+execution, the read-from relation of the prefix of the prefix of an execution is
+valid on the events of the prefix of the execution *)
+
 Lemma prefix_rf_valid_diff_evts {pre1 pre2 ex: Execution}:
   valid_rf (evts ex) (rf ex) ->
   prefix pre1 pre2 ->
@@ -528,6 +536,9 @@ Proof.
   - intros w1 w2 r [H1 H2]. eapply Hrfun. split;
     eapply rf_prefix_incl; eauto.
 Qed.
+
+(** If the modification order of an execution is valid, the modification order
+of a prefix of the execution is valid *)
 
 Lemma prefix_mo_valid {pre ex: Execution}:
   valid_mo (evts ex) (mo ex) ->
@@ -570,6 +581,8 @@ Proof.
   - eauto using prefix_rf_valid.
   - eauto using prefix_mo_valid.
 Qed.
+
+(** If an execution is complete, all its prefix are complete as well *)
 
 Theorem prefix_complete {pre ex: Execution}:
   complete_exec ex ->
