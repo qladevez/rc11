@@ -115,6 +115,18 @@ Proof.
   intros [x H1|x H2]; intuition auto.
 Qed.
 
+Lemma in_union_l {A:Type} (s1 s2 : Ensemble A) (e: A):
+  In _ s1 e -> In _ (Union _ s1 s2) e.
+Proof.
+  intros H. left. auto.
+Qed.
+
+Lemma in_union_r {A:Type} (s1 s2 : Ensemble A) (e: A):
+  In _ s2 e -> In _ (Union _ s1 s2) e.
+Proof.
+  intros H. right. auto.
+Qed.
+
 (** If a predicate is always true, it is the full set *)
 
 Lemma tautology_makes_fullset {A:Type} (P: A -> Prop):

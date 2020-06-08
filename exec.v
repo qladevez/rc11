@@ -135,35 +135,37 @@ Definition fence_mode (m: Mode) : Prop :=
 - A read event, it then has a read mode, a location and a value
 - A write event, it then has a write mode, a location and a value
 - A fence event, it then has a fence mode
+
+Every single event has a unique event id
 *)
 
 Inductive Event : Type :=
-| Read (m: Mode) (l: Loc) (v: Val)
-| Write (m: Mode) (l: Loc) (v: Val)
-| Fence (m: Mode).
+| Read (eid: nat) (m: Mode) (l: Loc) (v: Val)
+| Write (eid: nat) (m: Mode) (l: Loc) (v: Val)
+| Fence (eid: nat) (m: Mode).
 
 Instance incl_event_trans : Transitive (Included Event).
 Proof. compute; auto. Qed.
 
 Definition is_read (e: Event) : Prop :=
   match e with
-  | Read _ _ _ =>  True
-  | Write _ _ _ => False
-  | Fence _ => False
+  | Read _ _ _ _ =>  True
+  | Write _ _ _ _ => False
+  | Fence _ _ => False
   end.
 
 Definition is_write (e: Event) : Prop :=
   match e with
-  | Read _ _ _ =>  False
-  | Write _ _ _ => True
-  | Fence _ => False
+  | Read _ _ _ _ =>  False
+  | Write _ _ _ _ => True
+  | Fence _ _ => False
   end.
 
 Definition is_fence (e: Event) : Prop :=
   match e with
-  | Read _ _ _ =>  False
-  | Write _ _ _ => False
-  | Fence _ => True
+  | Read _ _ _ _ =>  False
+  | Write _ _ _ _ => False
+  | Fence _ _ => True
   end.
 
 
@@ -173,44 +175,57 @@ Definition is_fence (e: Event) : Prop :=
 
 Definition valid_mode (e: Event) : Prop :=
   match e with
-  | Read m _ _ => read_mode m
-  | Write m _ _ => write_mode m
-  | Fence m => fence_mode m
+  | Read _ m _ _ => read_mode m
+  | Write _ m _ _ => write_mode m
+  | Fence _ m => fence_mode m
   end.
 
-(** Are the modes of a set of events valid *)
-
-Definition valid_evts (evts: Ensemble Event) : Prop :=
-  (forall e, (In _ evts e) -> valid_mode e).
-
 (** ** Getter functions *)
+
+(** Get the id of an event *)
+
+Definition get_eid (e: Event) : nat :=
+  match e with
+  | Read eid _ _ _ => eid
+  | Write eid _ _ _ => eid
+  | Fence eid _ => eid
+  end.
 
 (** Get the location of an event if it has one *)
 
 Definition get_loc (e: Event) : option Loc :=
   match e with
-  | Read _ l _ => Some l
-  | Write _ l _ => Some l
-  | Fence _ => None
+  | Read _ _ l _ => Some l
+  | Write _ _ l _ => Some l
+  | Fence _ _ => None
   end.
 
 (** Get the value of an event if it has one *)
 
 Definition get_val (e: Event) : option Val :=
   match e with
-  | Read _ _ v => Some v
-  | Write _ _ v => Some v
-  | Fence _ => None
+  | Read _ _ _ v => Some v
+  | Write _ _ _ v => Some v
+  | Fence _ _ => None
   end.
 
 (** Get the mode of an event *)
 
 Definition get_mode (e: Event) : Mode :=
   match e with
-  | Read m _ _ => m
-  | Write m _ _ => m
-  | Fence m => m
+  | Read _ m _ _ => m
+  | Write _ m _ _ => m
+  | Fence _ m => m
   end.
+
+(** ** Events validity *)
+
+(** Are the modes of a set of events valid *)
+
+Definition valid_evts (evts: Ensemble Event) : Prop :=
+  (forall e1 e2, (In _ evts e1) -> (In _ evts e2) -> 
+    (get_eid e1) <> (get_eid e2) \/ e1 = e2) /\
+  (forall e, (In _ evts e) -> valid_mode e).
 
 (** ** Order Extension of events relation *)
 
@@ -254,21 +269,21 @@ Definition E : prop_set Event := top.
 Definition R : prop_set Event :=
   fun e =>
     match e with
-    | Read _ _ _ => top
+    | Read _ _ _ _ => top
     | _ => bot
     end.
 
 Definition W : prop_set Event :=
   fun e =>
     match e with
-    | Write _ _ _ => top
+    | Write _ _ _ _ => top
     | _ => bot
     end.
 
 Definition F : prop_set Event :=
   fun e =>
     match e with
-    | Fence _ => top
+    | Fence _ _ => top
     | _ => bot
     end.
 
@@ -664,6 +679,22 @@ Section ValidExecs.
 
 Variable ex : Execution.
 Variable val_exec : valid_exec ex.
+
+(** Same eid implies same event *)
+
+Lemma same_eid_same_evts (x y : Event):
+  In _ (evts ex) x ->
+  In _ (evts ex) y ->
+  get_eid x = get_eid y ->
+  x = y.
+Proof.
+  intros Hx Hy H.
+  destruct_val_exec val_exec.
+  destruct Hevts_v as [Hevts_v _].
+  destruct (Hevts_v x y Hx Hy).
+  - intuition auto.
+  - auto.
+Qed.
 
 (** In a valid execution, events related by sequenced-before belong to the set
 of events of the execution *)

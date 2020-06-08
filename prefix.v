@@ -353,9 +353,10 @@ Lemma prefix_evts_valid {pre ex: Execution}:
   prefix pre ex ->
   valid_evts (evts pre).
 Proof.
-  intros Hevts_v Hpre e Hin.
-  destruct Hpre as [? _].
-  auto.
+  intros [Hevts_v1 Hevts_v2] Hpre.
+  destruct Hpre as [? _]. apply conj.
+  - intros e1 e2 Hin1 Hin2. auto.
+  - intros e Hin. auto.
 Qed.
 
 (** If the sequenced-before relation of an execution is a linear strict order,

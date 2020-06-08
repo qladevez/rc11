@@ -1514,6 +1514,20 @@ Proof.
   - rewrite Hrmw, Hevts. auto.
 Qed.
 
+Lemma res_valid (ex res: Execution) (bound: nat) (j k: Event):
+  complete_exec ex ->
+  rc11_consistent ex ->
+  minimal_conflicting_pair ex bound j k ->
+  numbering ex k > numbering ex j ->
+  sb_closed_restriction ex res (sbrf_before_jk ex bound j k) ->
+  valid_exec res.
+Proof.
+  intros Hcomp Hrc11 Hmcp Hord Hres.
+  eapply prefix_valid.
+  - destruct Hcomp. eauto.
+  - eapply prefix_res_ex; eauto.
+Qed.
+
 Lemma res_of_bound (ex res: Execution) (bound: nat) (e: Ensemble Event):
   sb_closed_restriction (bounded_exec ex bound) res e ->
   sb_closed_restriction ex res e.
@@ -1680,6 +1694,479 @@ Proof.
     + kat.
     + rewrite <-(NLE_bound_min_one _ bound). kat.
 Qed.
+
+Definition max_mo (e: Event) (ex: Execution) :=
+  forall x, (In _ (evts ex) x) -> (x = e \/ (mo ex) x e).
+
+Definition change_val_read_k (ex1 ex2: Execution) (k c n: Event) (l: Loc) (v: Val) :=
+  Some l = get_loc k /\
+  Some v = get_val c /\
+  n = Read (get_eid k) (get_mode k) l v /\
+  numbering ex1 n = numbering ex1 k /\
+  evts ex2 = Union _ (evts (bounded_exec ex1 ((numbering ex1 k)-1)))
+                     (fun x => x = n) /\
+  sb ex2 = (sb (bounded_exec ex1 ((numbering ex1 k)-1))) ⊔
+           (fun x y => (sb ex1) x k /\ y = n) /\
+  rmw ex2 = rmw (bounded_exec ex1 ((numbering ex1 k)-1)) /\
+  rf ex2 = (rf (bounded_exec ex1 ((numbering ex1 k)-1))) ⊔
+           (fun x y => x = c /\ y = n) /\
+  mo ex2 = mo (bounded_exec ex1 ((numbering ex1 k)-1)).
+
+Ltac inversion_chval H :=
+  let H1 := fresh "Hloc" in
+  let H2 := fresh "Hval" in
+  let H3 := fresh "Hn" in
+  let H4 := fresh "Hnum" in
+  let H5 := fresh "Hevts" in
+  let H6 := fresh "Hsb" in
+  let H7 := fresh "Hrmw" in
+  let H8 := fresh "Hrf" in
+  let H9 := fresh "Hmo" in
+  inversion H as [H1 [H2 [H3 [H4 [H5 [H6 [H7 [H8 H9]]]]]]]].
+
+Lemma change_val_valid (ex1 ex2: Execution) (j k c n: Event) (bound: nat) (l: Loc) (v: Val):
+  complete_exec ex1 ->
+  minimal_conflicting_pair ex1 bound j k ->
+  numbering ex1 k > numbering ex1 j ->
+  is_read k ->
+  get_loc k = get_loc c ->
+  In Event (evts (bounded_exec ex1 (numbering ex1 k - 1))) c ->
+  is_write c ->
+  change_val_read_k ex1 ex2 k c n l v ->
+  valid_exec ex2.
+Proof.
+  intros Hcomp Hmcp Hord Hkr Hloceq Hnumc Hwc Hchval.
+  apply (bounded_is_complete _ (numbering ex1 k -1)) in Hcomp as Hcompre.
+  inversion Hcomp as [Hval _].
+  inversion Hcompre as [Hvalpre _].
+  inversion_chval Hchval.
+  split;[|split;[|split;[|split]]].
+  - unfold valid_evts. apply conj.
+    + intros e1 e2 Hin1 Hin2.
+      rewrite Hevts in Hin1, Hin2.
+      apply in_union in Hin1 as [Hin1|Hin1];
+      apply in_union in Hin2 as [Hin2|Hin2].
+      * destruct_val_exec Hvalpre.
+        destruct Hevts_v as [Hevts_v _]. auto.
+      * destruct_val_exec Hval. destruct Hevts_v as [Hevts_v _].
+        apply in_intersection in Hin1 as [Hin1 Hnume1].
+        apply mcp_in_evts_right, in_intersection in Hmcp as [Hmcp _].
+        destruct (Hevts_v _ _ Hin1 Hmcp) as [H|H].
+        -- left. unfold In in Hin2. rewrite Hin2, Hn. cbn. auto.
+        -- rewrite H in Hnume1. unfold In in Hnume1. lia.
+      * destruct_val_exec Hval. destruct Hevts_v as [Hevts_v _].
+        apply in_intersection in Hin2 as [Hin2 Hnume2].
+        apply mcp_in_evts_right, in_intersection in Hmcp as [Hmcp _].
+        destruct (Hevts_v _ _ Hin2 Hmcp) as [H|H].
+        -- left. unfold In in Hin1. rewrite Hin1, Hn. cbn. auto.
+        -- rewrite H in Hnume2. unfold In in Hnume2. lia.
+      * unfold In in Hin1, Hin2. right. rewrite Hin1, Hin2. auto.
+    + intros e Hin.
+      rewrite Hevts in Hin.
+      apply in_union in Hin as [Hin|Hin].
+      * destruct_val_exec Hvalpre.
+        apply Hevts_v in Hin. auto.
+      * unfold In in Hin. rewrite Hin, Hn.
+        apply mcp_in_evts_right in Hmcp as Hkin.
+        rewrite simpl_evts_be in Hkin.
+        apply in_intersection in Hkin as [Hkin _].
+        apply Hval in Hkin.
+        unfold valid_mode.
+        unfold valid_mode in Hkin.
+        destruct k; simpl in Hkr; intuition auto.
+  - rewrite Hevts, Hsb. repeat (apply conj).
+    + apply ext_rel, antisym.
+      * intros x y Hr.
+        exists y. exists x.
+        -- split; auto.
+           destruct Hr as [Hr|[Hr _]].
+           ++ rewrite simpl_sb_be in Hr.
+              apply simpl_trt_hyp in Hr as [Hx [Hxsb _]].
+              destruct_val_exec Hval.
+              destruct_sb_v Hsb_v. destruct Hsb_lso as [[Hsb_lso _] _].
+              left. rewrite simpl_evts_be. split.
+              ** rewrite Hsb_lso in Hxsb. apply simpl_trt_hyp in Hxsb as [Hxsb _].
+                 unfold I in Hxsb. auto.
+              ** unfold NLE in Hx. unfold In. auto.
+           ++ left. rewrite simpl_evts_be.
+              split.
+              ** destruct_val_exec Hval.
+                 destruct_sb_v Hsb_v. destruct Hsb_lso as [[Hsb_lso _] _].
+                 rewrite Hsb_lso in Hr. apply simpl_trt_hyp in Hr as [Hr _].
+                 unfold I in Hr. auto.
+              ** apply sb_num_ord in Hr. unfold In. lia.
+        -- auto.
+        -- split; auto.
+           destruct Hr as [Hr|[_ Hr]].
+           ++ rewrite simpl_sb_be in Hr.
+              apply simpl_trt_hyp in Hr as [_ [Hysb Hy]].
+              destruct_val_exec Hval.
+              destruct_sb_v Hsb_v. destruct Hsb_lso as [[Hsb_lso _] _].
+              left. rewrite simpl_evts_be. split.
+              ** rewrite Hsb_lso in Hysb. 
+                 apply simpl_trt_hyp in Hysb as [_ [_ Hysb]].
+                 unfold I in Hysb. auto.
+              ** unfold NLE in Hy. unfold In. auto.
+           ++ right. unfold In. auto.
+      * intros x y H. apply simpl_trt_rel in H. auto.
+    + inversion Hval as [_ [Hsb_v _]].
+      destruct Hvalpre as [_ [Hsbpre_v _]].
+      destruct Hsb_v as [[[_ [Hsbt _]] _] _].
+      destruct Hsbpre_v as [[[_ [Hsbpret _]] _] _].
+      intros x y [z [H1|[H1 H3]] [H2|[H2 H4]]].
+      * left. apply Hsbpret. exists z; auto.
+      * right. rew bounded in H1. apply simpl_trt_rel in H1.
+        split; auto. apply Hsbt. exists z; auto.
+      * left. rew bounded in H2. apply simpl_trt_hyp in H2 as [H2 _].
+        apply (mcp_num_snd_evt_ord _ _ _ _ Hval Hmcp) in Hord.
+        apply mcp_bound_gt_zero in Hmcp. rewrite <-Hord in Hmcp.
+        unfold NLE in H2. rewrite H3 in H2. rewrite <-Hnum in H2.
+        lia.
+      * right. split; auto.
+    + intros x [H|[H Heq]].
+      * destruct_val_exec Hvalpre.
+        destruct_sb_v Hsb_v.
+        destruct Hsb_lso as [[_ [_ Hsb_lso]] _].
+        eapply Hsb_lso. eauto.
+      * destruct_val_exec Hval.
+        destruct_sb_v Hsb_v.
+        destruct Hsb_lso as [[H1 [_ H2]] _].
+        rewrite H1 in H.
+        apply simpl_trt_hyp in H as [Hx [H Hk]].
+        destruct Hevts_v as [Hevts_v _].
+        destruct (Hevts_v _ _ Hx Hk) as [Hnot|Hnot].
+        -- rewrite Heq in Hnot. rewrite Hn in Hnot. cbn in Hnot. auto.
+        -- apply (H2 k). rewrite Hnot in H. auto.
+    + intros x y Hdiff Hin1 Hin2.
+      apply in_union in Hin1 as [Hin1|Hin1];
+      apply in_union in Hin2 as [Hin2|Hin2].
+      * destruct_val_exec Hvalpre.
+        destruct_sb_v Hsb_v. destruct Hsb_lso as [_ Htot].
+        destruct (Htot _ _ Hdiff Hin1 Hin2).
+        -- left; left; auto.
+        -- right; left; auto.
+      * unfold In in Hin2.
+        apply mcp_in_evts_right in Hmcp.
+        rewrite simpl_evts_be in Hin1, Hmcp.
+        apply in_intersection in Hmcp as [Hmcp _].
+        apply in_intersection in Hin1 as [Hin1 Hnume1].
+        destruct_val_exec Hval. destruct_sb_v Hsb_v.
+        destruct Hsb_lso as [_ Htot].
+        destruct (classic (x = k)) as [Hxk|Hxk].
+        { rewrite Hxk in Hnume1. unfold In in Hnume1. lia. }
+        destruct (Htot _ _ Hxk Hin1 Hmcp) as [Hsbxk|Hsbxk].
+        -- left; right. apply conj; auto.
+        -- apply sb_num_ord in Hsbxk. unfold In in Hnume1. lia.
+      * unfold In in Hin1.
+        apply mcp_in_evts_right in Hmcp.
+        rewrite simpl_evts_be in Hin2, Hmcp.
+        apply in_intersection in Hmcp as [Hmcp _].
+        apply in_intersection in Hin2 as [Hin2 Hnume2].
+        destruct_val_exec Hval. destruct_sb_v Hsb_v.
+        destruct Hsb_lso as [_ Htot].
+        destruct (classic (y = k)) as [Hyk|Hyk].
+        { rewrite Hyk in Hnume2. unfold In in Hnume2. lia. }
+        destruct (Htot _ _ Hyk Hin2 Hmcp) as [Hsbyk|Hsbyk].
+        -- right; right. apply conj; auto.
+        -- apply sb_num_ord in Hsbyk. unfold In in Hnume2. lia.
+      * unfold In in Hin1, Hin2. rewrite Hin1, Hin2 in Hdiff. intuition auto.
+    + intros l2.
+      destruct_val_exec Hval. destruct_sb_v Hsb_v.
+      destruct (Hsbinit l2) as [e [Heloc [Heval [Heinit Hebef]]]].
+      exists e; repeat (apply conj); auto.
+      * intros Hnot. destruct Hnot as [z [Hnot|[Hnot Hnoteq]]].
+        -- rew bounded in Hnot. apply simpl_trt_rel in Hnot.
+           apply Heinit. exists z. auto.
+        -- assert (In _ (ran (sb ex1)) k) as Hkran. { exists z; auto. }
+           apply Hebef in Hkran. rewrite Hnoteq in Hkran.
+           apply sb_num_ord in Hkran. lia.
+      * intros e' [z [Hin|[Hin1 Hin2]]].
+        -- left. apply simpl_trt_hyp in Hin as [_ [Hze' He']].
+           assert (In _ (ran (sb ex1)) e') as He'ran. { exists z; auto. }
+           apply Hebef in He'ran. rew bounded; simpl_trt; auto.
+           apply sb_num_ord in He'ran. unfold NLE in *. lia.
+        -- right. split; auto.
+           assert (In _ (ran (sb ex1)) k) as He'ran. { exists z; auto. }
+           apply Hebef in He'ran. auto.
+  - apply conj.
+    + intros r w Hrw. rewrite Hrmw in Hrw.
+      destruct_val_exec Hval. destruct Hrmw_v as [Hrmw_v _].
+      apply simpl_trt_hyp in Hrw as [Hrnum [Hrw Hwnum]].
+      apply Hrmw_v in Hrw. unfold valid_rmw_pair.
+      unfold valid_rmw_pair in Hrw.
+      destruct (get_mode r); destruct (get_mode w); auto.
+      * destruct Hrw as [Hread [Hwrite [Hlocrw Himmsb]]].
+        repeat (apply conj); auto.
+        -- rewrite Hsb. left. rew bounded. simpl_trt.
+           destruct Himmsb. auto.
+        -- { intros z Hzw. rewrite Hsb. rewrite Hsb in Hzw.
+             destruct Hzw as [Hzw|Hzw].
+             - destruct Himmsb as [Hrw1 Himmrw1].
+               apply simpl_trt_hyp in Hzw as [Hznum [Hzw _]].
+               apply Himmrw1 in Hzw as [Hzw1 Hzw2].
+               split.
+               + destruct Hzw1.
+                 * left. left. rew bounded. simpl_trt. auto.
+                 * right. auto.
+               + intros z1 [H|H].
+                 * apply simpl_trt_hyp in H as [H1 [H2 H3]].
+                   apply Hzw2 in H2. destruct H2.
+                   -- left. left. rew bounded. simpl_trt. auto.
+                   -- right. auto.
+                 * destruct H as [H1 H2]. apply Hzw2 in H1.
+                   destruct H1.
+                   -- left. right. split; auto.
+                   -- simpl in H. rewrite H in Hwrite.
+                      destruct k; unfold is_write, is_read in *; intuition auto.
+             - destruct Hzw as [Hzk Hwn].
+               rewrite Hwn in Hwrite. rewrite Hn in Hwrite.
+               unfold is_write in Hwrite; intuition auto.
+           }
+      * destruct Hrw as [Hread [Hwrite [Hlocrw Himmsb]]].
+        repeat (apply conj); auto.
+        -- rewrite Hsb. left. rew bounded. simpl_trt.
+           destruct Himmsb. auto.
+        -- { intros z Hzw. rewrite Hsb. rewrite Hsb in Hzw.
+             destruct Hzw as [Hzw|Hzw].
+             - destruct Himmsb as [Hrw1 Himmrw1].
+               apply simpl_trt_hyp in Hzw as [Hznum [Hzw _]].
+               apply Himmrw1 in Hzw as [Hzw1 Hzw2].
+               split.
+               + destruct Hzw1.
+                 * left. left. rew bounded. simpl_trt. auto.
+                 * right. auto.
+               + intros z1 [H|H].
+                 * apply simpl_trt_hyp in H as [H1 [H2 H3]].
+                   apply Hzw2 in H2. destruct H2.
+                   -- left. left. rew bounded. simpl_trt. auto.
+                   -- right. auto.
+                 * destruct H as [H1 H2]. apply Hzw2 in H1.
+                   destruct H1.
+                   -- left. right. split; auto.
+                   -- simpl in H. rewrite H in Hwrite.
+                      destruct k; unfold is_write, is_read in *; intuition auto.
+             - destruct Hzw as [Hzk Hwn].
+               rewrite Hwn in Hwrite. rewrite Hn in Hwrite.
+               unfold is_write in Hwrite; intuition auto.
+           }               
+      * destruct Hrw as [Hread [Hwrite [Hlocrw Himmsb]]].
+        repeat (apply conj); auto.
+        -- rewrite Hsb. left. rew bounded. simpl_trt.
+           destruct Himmsb. auto.
+        -- { intros z Hzw. rewrite Hsb. rewrite Hsb in Hzw.
+             destruct Hzw as [Hzw|Hzw].
+             - destruct Himmsb as [Hrw1 Himmrw1].
+               apply simpl_trt_hyp in Hzw as [Hznum [Hzw _]].
+               apply Himmrw1 in Hzw as [Hzw1 Hzw2].
+               split.
+               + destruct Hzw1.
+                 * left. left. rew bounded. simpl_trt. auto.
+                 * right. auto.
+               + intros z1 [H|H].
+                 * apply simpl_trt_hyp in H as [H1 [H2 H3]].
+                   apply Hzw2 in H2. destruct H2.
+                   -- left. left. rew bounded. simpl_trt. auto.
+                   -- right. auto.
+                 * destruct H as [H1 H2]. apply Hzw2 in H1.
+                   destruct H1.
+                   -- left. right. split; auto.
+                   -- simpl in H. rewrite H in Hwrite.
+                      destruct k; unfold is_write, is_read in *; intuition auto.
+             - destruct Hzw as [Hzk Hwn].
+               rewrite Hwn in Hwrite. rewrite Hn in Hwrite.
+               unfold is_write in Hwrite; intuition auto.
+           }        
+      * destruct Hrw as [Hread [Hwrite [Hlocrw Himmsb]]].
+        repeat (apply conj); auto.
+        -- rewrite Hsb. left. rew bounded. simpl_trt.
+           destruct Himmsb. auto.
+        -- { intros z Hzw. rewrite Hsb. rewrite Hsb in Hzw.
+             destruct Hzw as [Hzw|Hzw].
+             - destruct Himmsb as [Hrw1 Himmrw1].
+               apply simpl_trt_hyp in Hzw as [Hznum [Hzw _]].
+               apply Himmrw1 in Hzw as [Hzw1 Hzw2].
+               split.
+               + destruct Hzw1.
+                 * left. left. rew bounded. simpl_trt. auto.
+                 * right. auto.
+               + intros z1 [H|H].
+                 * apply simpl_trt_hyp in H as [H1 [H2 H3]].
+                   apply Hzw2 in H2. destruct H2.
+                   -- left. left. rew bounded. simpl_trt. auto.
+                   -- right. auto.
+                 * destruct H as [H1 H2]. apply Hzw2 in H1.
+                   destruct H1.
+                   -- left. right. split; auto.
+                   -- simpl in H. rewrite H in Hwrite.
+                      destruct k; unfold is_write, is_read in *; intuition auto.
+             - destruct Hzw as [Hzk Hwn].
+               rewrite Hwn in Hwrite. rewrite Hn in Hwrite.
+               unfold is_write in Hwrite; intuition auto.
+           }
+      * destruct Hrw as [Hread [Hwrite [Hlocrw Himmsb]]].
+        repeat (apply conj); auto.
+        -- rewrite Hsb. left. rew bounded. simpl_trt.
+           destruct Himmsb. auto.
+        -- { intros z Hzw. rewrite Hsb. rewrite Hsb in Hzw.
+             destruct Hzw as [Hzw|Hzw].
+             - destruct Himmsb as [Hrw1 Himmrw1].
+               apply simpl_trt_hyp in Hzw as [Hznum [Hzw _]].
+               apply Himmrw1 in Hzw as [Hzw1 Hzw2].
+               split.
+               + destruct Hzw1.
+                 * left. left. rew bounded. simpl_trt. auto.
+                 * right. auto.
+               + intros z1 [H|H].
+                 * apply simpl_trt_hyp in H as [H1 [H2 H3]].
+                   apply Hzw2 in H2. destruct H2.
+                   -- left. left. rew bounded. simpl_trt. auto.
+                   -- right. auto.
+                 * destruct H as [H1 H2]. apply Hzw2 in H1.
+                   destruct H1.
+                   -- left. right. split; auto.
+                   -- simpl in H. rewrite H in Hwrite.
+                      destruct k; unfold is_write, is_read in *; intuition auto.
+             - destruct Hzw as [Hzk Hwn].
+               rewrite Hwn in Hwrite. rewrite Hn in Hwrite.
+               unfold is_write in Hwrite; intuition auto.
+           }
+    + rewrite Hevts, Hrmw.
+      apply ext_rel, antisym.
+      * intros x y H.
+        destruct_val_exec Hvalpre. destruct_rmw_v Hrmw_v.
+        rewrite Hrmw_in_e in H. apply simpl_trt_hyp in H as [H1 [H2 H3]].
+        simpl_trt; auto; unfold I; left; auto.
+      * kat.
+  - unfold valid_rf. repeat (apply conj).
+    + intros w r Hwr. rewrite Hrf in Hwr.
+      destruct Hwr as [Hwr|Hwr].
+      * destruct_val_exec Hvalpre. destruct_rf_v Hrf_v.
+        apply Hrfco in Hwr. auto.
+      * destruct Hwr as [Hw Hr]. rewrite Hw, Hr, Hn. simpl.
+        rewrite Hloc, Hval0. split; auto.
+    + rewrite Hevts, Hrf. apply ext_rel, antisym; try kat.
+      intros x y [H|[H1 H2]].
+      * destruct_val_exec Hvalpre. destruct_rf_v Hrf_v.
+        rewrite Hrf_in_e in H. apply simpl_trt_hyp in H as [Hl [Hm Hr]].
+        exists y. exists x.
+        -- split. auto. apply in_union_l. auto.
+        -- left. auto.
+        -- split. auto. apply in_union_l. auto.
+      * exists y. exists x.
+        -- split. auto. apply in_union_l. rewrite H1. auto.
+        -- right. auto.
+        -- split. auto. apply in_union_r. cbv. auto.
+    + rewrite Hrf. apply ext_rel, antisym; try kat.
+      intros x y [H|[H1 H2]].
+      * destruct_val_exec Hvalpre. destruct_rf_v Hrf_v.
+        rewrite <-Hrfwr in H.
+        apply simpl_trt_hyp in H as [Hl [Hm Hr]].
+        exists y. exists x.
+        -- split; auto.
+        -- left. auto.
+        -- split; auto.
+      * exists y. exists x.
+        -- split; auto. rewrite H1. 
+           destruct c; unfold is_write in Hwc; intuition auto.
+        -- right; auto.
+        -- split; auto. rewrite H2, Hn. simpl. auto.
+    + rewrite Hrf. intros w1 w2 r [[H1|[H1 H2]] [H3|[H3 H4]]].
+      * destruct_val_exec Hvalpre. destruct_rf_v Hrf_v.
+        eapply Hrfun. split; eauto.
+      * rewrite H4 in H1.
+        apply simpl_trt_rel in H1 as Hwn.
+        apply (rf_dest_evts _ Hval) in Hwn.
+        apply mcp_in_evts_right in Hmcp.
+        rewrite simpl_evts_be in Hmcp.
+        apply in_intersection in Hmcp as [Hmcp _].
+        assert (n = k) as Hnk.
+        { eapply (same_eid_same_evts ex1); eauto.
+          rewrite Hn. cbn. auto. }
+        apply (rf_dest_evts _ Hvalpre) in H1.
+        rewrite Hnk in H1. rewrite simpl_evts_be in H1.
+        apply in_intersection in H1 as [_ H1].
+        unfold In in H1. lia.
+      * rewrite H2 in H3.
+        apply simpl_trt_rel in H3 as Hwn.
+        apply (rf_dest_evts _ Hval) in Hwn.
+        apply mcp_in_evts_right in Hmcp.
+        rewrite simpl_evts_be in Hmcp.
+        apply in_intersection in Hmcp as [Hmcp _].
+        assert (n = k) as Hnk.
+        { eapply (same_eid_same_evts ex1); eauto.
+          rewrite Hn. cbn. auto. }
+        apply (rf_dest_evts _ Hvalpre) in H3.
+        rewrite Hnk in H3. rewrite simpl_evts_be in H3.
+        apply in_intersection in H3 as [_ H3].
+        unfold In in H3. lia.
+      * rewrite H1, H3. auto.
+  - rewrite Hevts, Hmo. unfold valid_mo.
+    repeat (apply conj).
+    + destruct_val_exec Hvalpre. destruct_mo_v Hmo_v. auto.
+    + destruct_val_exec Hvalpre. destruct_mo_v Hmo_v. auto.
+    + apply ext_rel, antisym; try kat.
+      intros x y H.
+      apply (mo_orig_evts _ Hvalpre) in H as Hxevts.
+      apply (mo_dest_evts _ Hvalpre) in H as Hyevts.
+      exists y. exists x.
+      * split. auto. left. auto.
+      * auto.
+      * split. auto. left. auto.
+    + destruct_val_exec Hvalpre. destruct_mo_v Hmo_v.
+      destruct Hmopo as [_ [Hmopo _]]. auto.
+    + destruct_val_exec Hvalpre. destruct_mo_v Hmo_v.
+      destruct Hmopo as [_ [_ Hmopo]]. auto.
+    + destruct_val_exec Hvalpre. destruct_mo_v Hmo_v.
+      assert (forall s l, writes_loc (Union _ s (fun x => x =n)) l =
+                          writes_loc s l).
+      { intros s l0. apply ext_set. intros x. split; intros H.
+        - unfold writes_loc in *. destruct H as [H1 [H2 H3]]; auto;
+          repeat (apply conj); auto.
+          apply in_union in H1 as [H1|H1]. auto.
+          unfold In in H1. rewrite H1 in H2. rewrite Hn in H2.
+          simpl in H2. intuition auto.
+        - unfold writes_loc in *. destruct H as [H1 [H2 H3]];
+          repeat (apply conj); auto.
+          left. auto.
+      }
+      intros l0.
+      rewrite (H (evts (bounded_exec ex1 (numbering ex1 k - 1))) l0).
+      auto.
+Qed.
+
+Lemma change_val_complete (ex1 ex2: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  complete_exec ex1 ->
+  minimal_conflicting_pair ex1 bound j k ->
+  numbering ex1 k > numbering ex1 j ->
+  is_read k ->
+  get_loc k = get_loc c ->
+  In Event (evts (bounded_exec ex1 (numbering ex1 k - 1))) c ->
+  is_write c ->
+  change_val_read_k ex1 ex2 k c n l v ->
+  complete_exec ex2.
+Proof.
+  intros Hcomp Hmcp Hord Hkr Hsameloc Hc Hcw Hchval.
+  inversion_chval Hchval.
+  apply conj.
+  eapply change_val_valid; eauto.
+  apply (bounded_is_complete _ (numbering ex1 k -1)) in Hcomp as Hcompre.
+  destruct Hcompre as [_ Hcompre].
+  intros x H.
+  rewrite Hevts in H. rewrite Hrf.
+  unfold reads, In in H. destruct H as [H Hr].
+  apply in_union in H as [H|H].
+  - assert (In _ (reads (evts (bounded_exec ex1 (numbering ex1 k - 1)))) x) as H'.
+    { split; auto. }
+    apply Hcompre in H'. destruct H' as [y H'].
+    exists y. left. auto.
+  - exists c. right. split; intuition auto.
+Qed.
+
+
+(** the max mo is different from j *)
+
+
+(** the max mo is j *)
 
 End DRF.
 
