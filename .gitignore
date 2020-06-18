@@ -1,0 +1,10 @@
+*.vo
+*.glob
+*.vok
+*.vos
+*.aux
+.Makefile.d
+html/
+.coqdeps.d
+.lia.cache
+*.html
