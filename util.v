@@ -784,6 +784,14 @@ Lemma tc_inv_dcmp5 {A:Type} (r: rlt A):
   r^+ = r ⊔ (r^* ⋅ r).
 Proof. kat_eq. Qed.
 
+Lemma tc_inv_dcmp6 {A:Type} (r: rlt A):
+  r⋅r^+ ≦ r^+.
+Proof. kat. Qed.
+
+Lemma tc_inv_dcmp7 {A:Type} (r: rlt A):
+  r^+⋅r ≦ r^+.
+Proof. kat. Qed.
+
 (** The sequence of the reflexive transitive closure of a relation with the
 reflexie transitive closure of the same relation is included in the reflexive
 transitive closure of this relation *)
@@ -1472,6 +1480,36 @@ Proof.
     * apply rtc_trans. exists y; auto.
 Qed.
 
+(** We can also use the alternative definitions of the coq standard library *)
+
+Lemma clos_refl_trans_clos_refl_trans_1n {A:Type} (r: rlt A):
+  (clos_refl_trans _ r) = (clos_refl_trans_1n _ r).
+Proof.
+  apply ext_rel, antisym;
+  intros x y H;
+  apply clos_rt_rt1n_iff in H; auto.
+Qed.
+
+Lemma rtc_clos_refl_trans_1n {A:Type} (r: rlt A):
+  r^* = (clos_refl_trans_1n _ r).
+Proof.
+  rewrite rtc_clos_refl_trans, clos_refl_trans_clos_refl_trans_1n. auto.
+Qed.
+
+Lemma clos_refl_trans_clos_refl_trans_n1 {A:Type} (r: rlt A):
+  (clos_refl_trans _ r) = (clos_refl_trans_n1 _ r).
+Proof.
+  apply ext_rel, antisym;
+  intros x y H;
+  apply clos_rt_rtn1_iff in H; auto.
+Qed.
+
+Lemma rtc_clos_refl_trans_n1 {A:Type} (r: rlt A):
+  r^* = (clos_refl_trans_n1 _ r).
+Proof.
+  rewrite rtc_clos_refl_trans, clos_refl_trans_clos_refl_trans_n1. auto.
+Qed.
+
 (** The transitive closure defined as a positive and non-null number of 
 sequence of a relation with itself is equivalent to its inductive definition,
 i.e. the transitive closure of a relation is either the relation itself, or the
@@ -1492,6 +1530,34 @@ Proof.
   - intros H. induction H as [ | x y z H IH H' IH' ].
     + exists y. auto. exists O. simpl. auto.
     + apply tc_trans with y; auto.
+Qed.
+
+(** We can also use the alternative definitions of the coq standard library *)
+
+Lemma clos_trans_clos_trans_1n {A:Type} (r: rlt A):
+  (clos_trans _ r) = (clos_trans_1n _ r).
+Proof.
+  apply ext_rel, antisym; intros x y H;
+  apply clos_trans_t1n_iff in H; auto.
+Qed.
+
+Lemma tc_clos_trans_1n {A:Type} (r: rlt A):
+  r^+ = (clos_trans_1n _ r).
+Proof.
+  rewrite tc_clos_trans, clos_trans_clos_trans_1n. auto.
+Qed.
+
+Lemma clos_trans_clos_trans_n1 {A:Type} (r: rlt A):
+  (clos_trans _ r) = (clos_trans_n1 _ r).
+Proof.
+  apply ext_rel, antisym; intros x y H;
+  apply clos_trans_tn1_iff in H; auto.
+Qed.
+
+Lemma tc_clos_trans_n1 {A:Type} (r: rlt A):
+  r^+ = (clos_trans_n1 _ r).
+Proof.
+  rewrite tc_clos_trans, clos_trans_clos_trans_n1. auto.
 Qed.
 
 (** We can do an induction on the reflexive transitive closure as defined in
@@ -1523,6 +1589,28 @@ Proof.
   intros A R.
   rewrite tc_clos_trans.
   apply clos_trans_ind.
+Qed.
+
+Lemma tc_ind_right_aux:
+  forall (A: Type) (R: rlt A) (x: A) (P: A -> A -> Prop),
+  (forall y: A, R x y -> P x y) ->
+  (forall y z: A, R y z -> R^+ x y -> P x y -> P x z) ->
+  forall a: A, R^+ x a -> P x a.
+Proof.
+  intros A R x P.
+  rewrite tc_clos_trans_n1.
+  apply clos_trans_n1_ind.
+Qed.
+
+Lemma tc_ind_right:
+  forall (A: Type) (R: rlt A) (P: A -> A -> Prop),
+  (forall x y: A, R x y -> P x y) ->
+  (forall x y z: A, R y z -> R^+ x y -> P x y -> P x z) ->
+  forall x a: A, R^+ x a -> P x a.
+Proof.
+  intros A R P Hbase Hind x a Hrel.
+  apply (tc_ind_right_aux _ R); auto.
+  intros y z Hyz Hxy Hpxy. eapply Hind; eauto.
 Qed.
 
 (** If there is not path between two elements in a relation, there is no third

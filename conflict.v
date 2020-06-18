@@ -538,6 +538,68 @@ Proof.
   apply (rf_prefix_incl Hpre).
 Qed.
 
+(** If the prefix of an execution is pi-conflicting, the execution is 
+pi-conflicting *)
+
+Lemma pi_prefix_aux (pre ex: Execution):
+  (forall a b, (sb ex ⊔ rf ex) a b -> In _ (evts pre) b -> In _ (evts pre) a) ->
+  sb pre = [I (evts pre)]⋅sb ex⋅[I (evts pre)] ->
+  rf pre = [I (evts pre)]⋅rf ex⋅[I (evts pre)] ->
+  (forall x y, (sb ex ⊔ res_mode Sc (rf ex))^+ x y ->
+               (fun w z => In _ (evts pre) w ->
+                           In _ (evts pre) z ->
+                           (sb pre ⊔ res_mode Sc (rf pre))^+ w z) x y).
+Proof.
+  intros Hclosed Hsb Hrf.
+  apply tc_ind_right.
+  - intros x y Hsbrfsc Hinx Hiny. apply tc_incl_itself.
+    destruct Hsbrfsc; [left|right].
+    + rewrite Hsb. simpl_trt. auto.
+    + apply simpl_trt_hyp in H as [H1 [H2 H3]].
+      unfold res_mode; simpl_trt.
+      rewrite Hrf; simpl_trt. auto.
+  - intros x y z Hxy Hyz IH2 Hin1 Hin2.
+    assert (In _ (evts pre) y).
+    { apply (Hclosed _ z); auto.
+      apply (incl_rel_thm Hxy). unfold res_mode. kat. }
+    apply tc_inv_dcmp7. exists y.
+    + apply IH2; auto.
+    + destruct Hxy as [Hxy|Hxy]; [left|right].
+      * rewrite Hsb. simpl_trt. auto.
+      * apply simpl_trt_hyp in Hxy as [H1 [H2 H3]].
+        unfold res_mode; simpl_trt.
+        rewrite Hrf; simpl_trt.
+        auto.
+Qed.
+
+Lemma pi_prefix (ex pre: Execution) (x y: Event):
+  prefix pre ex ->
+  pi pre x y ->
+  pi ex x y.
+Proof.
+  intros Hpre [[Hconf Hatsc] Hnotsbrf].
+  inverse_prefix Hpre.
+  unfold pi in *.
+  split;[split|]; auto.
+  - destruct Hconf as [H1 [H2 [H3 [H4 H5]]]].
+    repeat (apply conj); auto.
+  - intros [Hnot|Hnot]; apply Hnotsbrf; [left|right];
+    destruct Hconf as [Hinx [Hiny _]].
+    + eapply pi_prefix_aux; eauto.
+    + rewrite <-cnv_rev. rewrite <-cnv_rev in Hnot.
+      eapply pi_prefix_aux; eauto.
+Qed.
+
+Lemma expi_prefix (ex pre: Execution):
+  prefix pre ex ->
+  expi pre ->
+  expi ex.
+Proof.
+  intros Hpre [x [y Hexpi]].
+  exists x, y.
+  apply (pi_prefix _ _ _ _ Hpre Hexpi).
+Qed.
+
 (** If the prefix of an RC11-concistent execution doesn't contain any pair of 
 conflicting events, it is SC-consistent *)
 

@@ -139,6 +139,13 @@ Import Numbering.
 Definition NLE (ex: Execution) (b: nat) : prop_set Event :=
   fun e => b >= (numbering ex e).
 
+(** Being in the set of events whose numbering is less or equal to a bound is
+equivalent to satisfying the NLE test with this bound *)
+
+Lemma NLE_I_evts (ex: Execution) (bound: nat):
+  [I (fun x => bound >= numbering ex x)] = [NLE ex bound].
+Proof. unfold NLE. kat_eq. Qed.
+
 (** If an event's numbering is less or equal to a bound minus one, it is less
 or equal to the bound *)
 
@@ -148,6 +155,24 @@ Proof.
   intros x y [H1 H2].
   split; auto.
   unfold NLE in *. lia.
+Qed.
+
+(** All events that have a numbering less or equal to a bound in the prefix of
+an execution have a numbering less or equal to the same bound in the execution *)
+
+Lemma nle_prefix (pre ex: Execution) (bound: nat):
+  prefix pre ex ->
+  [NLE pre bound] = [NLE ex bound].
+Proof.
+  intros Hpre. apply ext_rel, antisym.
+  - intros x y [Heq Hnum].
+    split; auto.
+    unfold NLE in *. 
+    erewrite numbering_pre_stable in Hnum; eauto.
+  - intros x y [Heq Hnum].
+    split; auto.
+    unfold NLE in *.
+    erewrite numbering_pre_stable; eauto.
 Qed.
 
 (** If we test that an event's numbering is less or equal to two bounds, one of
@@ -214,6 +239,51 @@ Hint Rewrite simpl_sb_be simpl_rmw_be simpl_rf_be simpl_mo_be : bounded_exec_db.
 
 Tactic Notation "rew" "bounded" := autorewrite with bounded_exec_db.
 Tactic Notation "rew" "bounded" "in" hyp(H) := autorewrite with bounded_exec_db in H.
+
+(** Bounding two executions by the same bound maintains the prefix relationship
+between them *)
+
+Lemma bounding_of_prefix (pre ex: Execution) (bound: nat):
+  prefix pre ex ->
+  prefix (bounded_exec pre bound) (bounded_exec ex bound).
+Proof.
+  intros Hpre.
+  inverse_prefix Hpre.
+  repeat (apply conj).
+  - rewrite simpl_evts_be. intros x H.
+    apply in_intersection in H as [H1 H2].
+    split.
+    + apply Hevts in H1. auto.
+    + unfold In in *. rewrite (numbering_pre_stable _ _ Hpre) in H2. auto.
+  - intros a b Hsbrf Hinb. specialize (Hclosed a b).
+    split.
+    + apply Hclosed.
+      * destruct Hsbrf as [Hsbrf|Hsbrf];
+        rew bounded in Hsbrf; 
+        apply simpl_trt_rel in Hsbrf; [left|right]; auto.
+      * rewrite simpl_evts_be in Hinb. apply in_intersection in Hinb as [Hinb _].
+        auto.
+    + unfold In. rewrite (numbering_pre_stable _ _ Hpre).
+      destruct Hsbrf as [Hsbrf|Hsbrf];
+      apply simpl_trt_hyp in Hsbrf as [Hsbrf _];
+      unfold NLE in Hsbrf; auto.
+  - rew bounded. rewrite simpl_evts_be.
+    rewrite I_inter. rewrite NLE_I_evts.
+    rewrite (nle_prefix _ _ _ Hpre).
+    rewrite Hsb. kat_eq.
+  - rew bounded. rewrite simpl_evts_be.
+    rewrite I_inter. rewrite NLE_I_evts.
+    rewrite (nle_prefix _ _ _ Hpre).
+    rewrite Hrf. kat_eq.
+  - rew bounded. rewrite simpl_evts_be.
+    rewrite I_inter. rewrite NLE_I_evts.
+    rewrite (nle_prefix _ _ _ Hpre).
+    rewrite Hmo. kat_eq.
+  - rew bounded. rewrite simpl_evts_be.
+    rewrite I_inter. rewrite NLE_I_evts.
+    rewrite (nle_prefix _ _ _ Hpre).
+    rewrite Hrmw. kat_eq.
+Qed.
 
 (** The union of all the relations of an execution bounded by [n] is included in
 the union of all the relations of the execution bounded by [n] restricted to the
