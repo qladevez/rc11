@@ -724,6 +724,14 @@ Proof.
   auto.
 Qed.
 
+Lemma sb_trans (x y: Event):
+  (sb ex)⋅(sb ex) ≦ (sb ex).
+Proof.
+  destruct_val_exec val_exec.
+  destruct Hsb_v as [[[_ [Hsb_v _]] _] _].
+  auto.
+Qed.
+
 (** In a valid execution, the origin of a reads-from is a write event *)
 
 Lemma rf_orig_write x y:

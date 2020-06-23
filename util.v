@@ -311,6 +311,7 @@ Ltac simp_cnv H := simpl in H; unfold hrel_cnv in H.
 
 (** ** Basic Lemmas *)
 
+
 (** If not all elements are not related by a relation, two elements exists such
 that they are related by the relation *)
 
@@ -969,13 +970,31 @@ Qed.
 (** A relation that is not acyclic is cyclic *)
 
 Lemma not_acyclic_is_cyclic {A:Type} (r: rlt A):
-  ~(acyclic r) ->
+  ~(acyclic r) <->
   (cyclic r).
 Proof.
-  intros H.
-  unfold acyclic in H; unfold acyclic.
-  byabsurd. destruct H. intros x H.
-  apply Hcontr. exists x. auto.
+  split.
+  - intros H.
+    unfold acyclic in H; unfold acyclic.
+    byabsurd. destruct H. intros x H.
+    apply Hcontr. exists x. auto.
+  - intros Hcyc Hnot.
+    destruct Hcyc as [x Hcyc].
+    destruct (Hnot x).
+    auto.
+Qed.
+
+(** A relation that is not cyclic is acyclic *)
+
+Lemma not_cyclic_is_acyclic {A:Type} (r: rlt A):
+  ~(cyclic r) <->
+  (acyclic r).
+Proof.
+  split.
+  - intros Hnot x Hrel.
+    apply Hnot. exists x; auto.
+  - intros Hac Hcyc. destruct Hcyc as [z Hcyc].
+    destruct (Hac z). auto.
 Qed.
 
 (** If a relation is included in an acyclic relation, it is also acyclic *)
@@ -1743,3 +1762,302 @@ Proof.
         apply (incl_rel_thm H2). kat.
   - rewrite (minus_incl r1 r2). kat.
 Qed.
+
+(*
+Lemma test_aux {A:Type} (r1 r2: rlt A):
+  (forall w1 w2 w3 w4, r1^+ w1 w2 ->
+                       (r1 ⊔ r2)^+ w2 w3 ->
+                       r1^+ w3 w4 ->
+                       r1^+ w2 w3) ->
+  forall x y , (r1 ⊔ r2)^+ x y ->
+              (fun w1 w2 => ~(r2^+ w1 w2) ->
+                            (forall z1 z2, r1 z1 w1 ->
+                                           r1 w2 z2 ->
+                                           r1^+ w1 w2)) x y.
+Proof.
+  intros H.
+  apply tc_ind_right.
+  - intros x y [Hrel|Hrel] Hnot _ _ _ _.
+    + apply tc_incl_itself. auto.
+    + destruct Hnot. apply tc_incl_itself. auto.
+  - intros x z y [Hzy|Hzy] Hxz IHxz Hnot w1 w2 Hw1x Hyw2.
+    + destruct (classic (r2^+ x z)) as [H1|H1].
+      * apply (tc_trans _ _ z).
+        -- eapply H; auto.
+          ++ apply tc_incl_itself. eauto.
+          ++ apply tc_incl_itself. eauto.
+        -- incl_rel_kat Hzy.
+      * apply (tc_trans _ _ z).
+        -- eapply IHxz; eauto.
+        -- incl_rel_kat Hzy.
+    + destruct (classic (r2^+ x z)) as [H1|H1].
+      * destruct Hnot. apply (tc_trans _ _ z). auto.
+        incl_rel_kat Hzy.
+      * apply (H w1 _ _ w2).
+        -- incl_rel_kat Hw1x.
+        -- apply (tc_trans _ _ z). auto.
+           incl_rel_kat Hzy.
+        -- incl_rel_kat Hyw2.
+Qed.
+*)
+
+Lemma shift_cyc_thm {A:Type} (r1 r2: rlt A):
+  (exists x, (r1⋅r2) x x) ->
+  exists x, (r2⋅r1) x x.
+Proof.
+  intros [x [y H1 H2]].
+  exists y. exists x; auto.
+Qed.
+
+Ltac shift_cyc H :=
+  apply shift_cyc_thm in H;
+  repeat (rewrite <-seq_assoc in H).
+
+Lemma exists_cyc {A:Type} (r: rlt A) (x: A):
+  r x x ->
+  exists x, r x x.
+Proof. intros H. exists x. auto. Qed.
+
+Lemma test_aux2 {A:Type} (r1 r2: rlt A): 
+  cyclic (r1 ⊔ r2) ->
+  cyclic r2 \/
+  exists w, (r1⋅(r1 ⊔ r2)^+) w w.
+Proof.
+  intros Hcyc.
+  unfold cyclic in Hcyc.
+  rewrite tc_union_decomposition in Hcyc.
+  destruct Hcyc as [w Hcyc].
+  destruct_disjunction Hcyc.
+  - right. rewrite tc_inv_dcmp2 in Hcyc.
+    rewrite rtc_inv_dcmp6 in Hcyc.
+    exists w. destruct Hcyc as [z Hbeg Hend].
+    exists z. auto.
+    destruct Hend as [Hend|Hend].
+    + simpl in Hend. rewrite Hend in Hbeg.
+      rewrite Hend. incl_rel_kat Hbeg.
+    + incl_rel_kat Hend.
+  - left. exists w. auto.
+  - apply exists_cyc in Hcyc.
+    do 2 (shift_cyc Hcyc).
+    destruct Hcyc as [x Hcyc].
+    right. exists x. incl_rel_kat Hcyc.
+  - right. exists w. incl_rel_kat Hcyc.
+  - apply exists_cyc in Hcyc.
+    do 2 (shift_cyc Hcyc).
+    destruct Hcyc as [x Hcyc].
+    right. exists x. incl_rel_kat Hcyc.
+  - apply exists_cyc in Hcyc.
+    shift_cyc Hcyc.
+    destruct Hcyc as [x Hcyc].
+    right. exists x. incl_rel_kat Hcyc.
+  - right. exists w. incl_rel_kat Hcyc.
+  - apply exists_cyc in Hcyc.
+    do 2 (shift_cyc Hcyc).
+    destruct Hcyc as [x Hcyc].
+    right. exists x. incl_rel_kat Hcyc.
+  - apply exists_cyc in Hcyc.
+    do 3 (shift_cyc Hcyc).
+    destruct Hcyc as [x Hcyc].
+    right. exists x. incl_rel_kat Hcyc.
+Qed.
+
+Lemma itr_cup {A} (r s : rlt A) :
+  (r ⊔ s)^+ ≡ r^+ ⊔ s^+
+         ⊔ s^+⋅r^+
+         ⊔ (r^+⋅s^+)^+
+         ⊔ s^+⋅(r^+⋅s^+)^+⋅r^+
+         ⊔ (r^+⋅s^+)^+⋅r^+
+         ⊔ s^+⋅(r^+⋅s^+)^+.
+Proof.
+  ka.
+Qed.
+
+Lemma tc_of_dot_dcmp {A:Type} (r1 r2: rlt A):
+  (r1⋅r2)^+ = r1⋅(r2⋅r1)^*⋅r2.
+Proof.
+  kat_eq.
+Qed.
+
+Lemma add_dom {A:Type} (r: rlt A):
+  r = [I (dom r)]⋅r.
+Proof.
+  apply ext_rel, antisym; try kat.
+  intros x y H.
+  exists x.
+  - split; auto. exists y; auto.
+  - auto.
+Qed.
+
+Lemma add_dom_tc {A:Type} (r: rlt A):
+  r^+ = [I (dom r)]⋅r^+.
+Proof.
+  rewrite tc_inv_dcmp2. rewrite (add_dom r) at 1. kat_eq.
+Qed.
+
+Lemma add_ran {A:Type} (r: rlt A):
+  r = r⋅[I (ran r)].
+Proof.
+  apply ext_rel, antisym; try kat.
+  intros x y H.
+  exists y.
+  - auto.
+  - split; auto. exists x; auto.
+Qed.
+
+Lemma add_ran_tc {A:Type} (r: rlt A):
+  r^+ = r^+⋅[I (ran r)].
+Proof.
+  rewrite tc_inv_dcmp. rewrite (add_ran r) at 2. kat_eq.
+Qed.
+
+Lemma range_domain_cup {A} (r s : rlt A) :
+  [I (ran r)] ⋅ (r ⊔ s)^+ ⋅ [I (dom r)] =
+  [I (ran r)] ⋅ (r ⊔ [I (ran r)] ⋅ s^+ ⋅ [I (dom r)])^+ ⋅ [I (dom r)].
+Proof.
+  apply ext_rel.
+  apply antisym; (try kat).
+  intros x y [z1 [z2 Hran Hrel] Hdom].
+  inversion Hran as [Heqr _].
+  inversion Hdom as [Heqd _].
+  rewrite <-Heqr in Hran, Hrel.
+  rewrite Heqd in Hdom, Hrel. clear Heqr. clear Heqd.
+  apply itr_cup in Hrel.
+  destruct_disjunction Hrel.
+  - exists y; auto.
+    exists x; auto.
+    incl_rel_kat Hrel.
+  - exists y; auto.
+    exists x; auto.
+    assert (([I (ran r)]⋅s^+⋅[I (dom r)]) x y) as H'.
+    { exists y; auto. exists x; auto. }
+    incl_rel_kat H'.
+  - exists y; auto.
+    exists x; auto.
+    destruct Hrel as [z H1 H2].
+    apply tc_trans with z.
+    + apply tc_incl_itself.
+      assert (([I (ran r)]⋅s^+⋅[I (dom r)]) x z) as H'.
+      { exists z. exists x; auto.
+        rewrite tc_inv_dcmp2 in H2. destruct H2 as [z3 H2 _].
+        split; auto. exists z3; auto. }
+      incl_rel_kat H'.
+    + incl_rel_kat H2.
+  - exists y; auto.
+    exists x; auto.
+    assert (([I (ran r)]⋅(r^+⋅s^+)^+⋅[I (dom r)]) x y) as Hrel'.
+    { exists y; auto. exists x; auto. }
+    rewrite tc_of_dot_dcmp in Hrel'.
+    rewrite (add_ran_tc r) in Hrel'.
+    rewrite (add_dom_tc r) in Hrel'.
+    incl_rel_kat Hrel'.
+  - exists y; auto.
+    exists x; auto.
+    assert (([I (ran r)]⋅(s^+⋅(r^+⋅s^+)^+⋅r^+)⋅[I (dom r)]) x y) as Hrel'.
+    { exists y; auto. exists x; auto. }
+    rewrite tc_of_dot_dcmp in Hrel'.
+    rewrite (add_ran_tc r) in Hrel'.
+    rewrite (add_dom_tc r) in Hrel'.
+    incl_rel_kat Hrel'.
+  - exists y; auto.
+    exists x; auto.
+    assert (([I (ran r)]⋅((r^+⋅s^+)^+⋅r^+)⋅[I (dom r)]) x y) as Hrel'.
+    { exists y; auto. exists x; auto. }
+    rewrite tc_of_dot_dcmp in Hrel'.
+    rewrite (add_ran_tc r) in Hrel'.
+    rewrite (add_dom_tc r) in Hrel'.
+    incl_rel_kat Hrel'.
+  - exists y; auto.
+    exists x; auto.
+    assert (([I (ran r)]⋅(s^+⋅(r^+⋅s^+)^+)⋅[I (dom r)]) x y) as Hrel'.
+    { exists y; auto. exists x; auto. }
+    rewrite tc_of_dot_dcmp in Hrel'.
+    rewrite (add_ran_tc r) in Hrel'.
+    rewrite (add_dom_tc r) in Hrel'.
+    incl_rel_kat Hrel'.
+Qed.
+
+Lemma test_aux3 {A:Type} (r1 r2: rlt A):
+  (forall w1 w2 w3 w4,
+      r1^+ w1 w2 ->
+      r2 w2 w3 ->
+      r1^+ w3 w4 ->
+      r1^+ w2 w3) <-> [I (ran r1)] ⋅ r2 ⋅ [I (dom r1)] ≦ r1^+.
+Proof.
+  split.
+  - intros H b c [c' [b' [<- [a ab]] bc] [-> [d cd]]].
+    eapply H; eauto; apply tc_incl_itself; eauto.
+  - intros H a b c d ab bc cd. apply H.
+    exists c. exists b; auto.
+    + rewrite (add_ran_tc r1) in ab.
+      destruct ab as [z _ [Heq Hran]].
+      rewrite Heq in Hran. split; auto.
+    + rewrite (add_dom_tc r1) in cd.
+      destruct cd as [z [Heq Hdom] _].
+      split; auto.
+Qed.
+
+Lemma test_aux {A:Type} (r1 r2: rlt A):
+  (forall w1 w2 w3 w4, 
+                       r1^+ w1 w2 ->
+                       r2^+ w2 w3 ->
+                       r1^+ w3 w4 ->
+                       r1^+ w2 w3) ->
+  (forall w1 w2 w3 w4, 
+                       r1^+ w1 w2 ->
+                       (r1 ⊔ r2)^+ w2 w3 ->
+                       r1^+ w3 w4 ->
+                       r1^+ w2 w3).
+Proof.
+  intros Hclo.
+  apply test_aux3 in Hclo.
+  apply test_aux3.
+  rewrite range_domain_cup.
+  rewrite Hclo. kat.
+Qed.
+
+Lemma test {A:Type} (r1 r2: rlt A):
+  (forall w1 w2 w3 w4, r1^+ w1 w2 ->
+                       r2^+ w2 w3 ->
+                       r1^+ w3 w4 ->
+                       r1^+ w2 w3) ->
+  acyclic r2 ->
+  cyclic (r1 ⊔ r2) ->
+  cyclic r1.
+Proof.
+  intros Htrans Hac H.
+  specialize (test_aux _ _ Htrans).
+  clear Htrans. intros Htrans.
+  apply test_aux2 in H as Hcyc.
+  destruct Hcyc as [Hcyc|[w1 [w2 Hbeg Hend]]].
+  { destruct Hcyc as [x Hcyc]. destruct (Hac x). auto. }
+  assert (r1^+ w2 w1) as Hend2.
+  { eapply Htrans.
+    - incl_rel_kat Hbeg.
+    - auto.
+    - incl_rel_kat Hbeg.
+  }
+  exists w1. apply tc_trans with w2.
+  - incl_rel_kat Hbeg.
+  - auto.
+Qed.
+
+(** The transitive closure of a transitive relation is itself *)
+
+Lemma tc_of_trans {A:Type} (r: rlt A):
+  r⋅r ≦ r ->
+  r^+ = r.
+Proof.
+  intros H. apply ext_rel, antisym.
+  - intros x y Htrans.
+    generalize x, y, Htrans.
+    apply tc_ind.
+    + intros w z Hrel. auto.
+    + intros w z v _ H2 _ H4.
+      apply H. exists z; auto.
+  - kat.
+Qed.
+
+
+
+
+

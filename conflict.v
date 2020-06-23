@@ -473,8 +473,8 @@ Lemma sb_sc_eco_sc_ac_impl_sb_eco_sc_ac ex:
            (res_mode Sc (mo ex)) ⊔
            (res_mode Sc (rb ex))).
 Proof.
-  intros Hval H.
-  byabsurd.
+  intros Hval Hac.
+  byabsurd. exfalso.
   rewrite (dcmp_in_res_neq_res Sc (sb ex)) in Hcontr.
   rewrite <- union_assoc in Hcontr.
   assert (acyclic (res_neq_mode Sc (sb ex))) as Hprob.
@@ -484,17 +484,25 @@ Proof.
     - auto.
     - apply res_neq_incl. }
   apply not_acyclic_is_cyclic in Hcontr.
-  destruct Hcontr as [w Hcontr].
-  apply (ac_union w) with (r1 := (res_mode Sc (rf ex) ⊔ res_mode Sc (mo ex) ⊔ res_mode Sc (rb ex)) ⊔ res_mode Sc (sb ex)) in Hprob.
-  - admit.
-  - admit.
-  - rewrite <- union_assoc. rewrite union_comm in Hcontr.
-    rewrite <- union_assoc in Hcontr. rewrite union_comm in Hcontr.
-    rewrite (union_comm (res_mode Sc (sb ex)) _). 
-    rewrite <- union_assoc in Hcontr. rewrite <- union_assoc in Hcontr.
-    rewrite <- union_assoc. rewrite <- union_assoc. auto.
-    rewrite <- union_assoc in Hcontr. auto.
-Admitted.
+  rewrite <-not_cyclic_is_acyclic in Hac.
+  apply Hac.
+  eapply (test _ (res_neq_mode Sc (sb ex))).
+  - intros w x y z H1 H2 H3.
+    assert ((res_mode Sc (sb ex))^+ x y) as H.
+    + unfold res_mode. apply tc_incl_itself.
+      simpl_trt.
+      * rewrite tc_inv_dcmp in H1. destruct H1 as [w2 _ [[[H1|H1]|H1]|H1]];
+        apply res_mode_snd_mode in H1; unfold M; auto.
+      * apply (tc_incl _ _ (res_neq_incl Sc (sb ex))) in H2.
+        erewrite tc_of_trans in H2. auto.
+        apply sb_trans; auto.
+      * rewrite tc_inv_dcmp2 in H3. destruct H3 as [w2 [[[H3|H3]|H3]|H3] _];
+        apply res_mode_fst_mode in H3; unfold M; auto.
+    + incl_rel_kat H.
+  - eauto.
+  - destruct Hcontr as [w Hcontr].
+    exists w. incl_rel_kat Hcontr.
+Qed.
 
 Lemma sb_eco_sc_acyclic ex:
   complete_exec ex ->
