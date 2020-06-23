@@ -486,7 +486,7 @@ Proof.
   apply not_acyclic_is_cyclic in Hcontr.
   rewrite <-not_cyclic_is_acyclic in Hac.
   apply Hac.
-  eapply (test _ (res_neq_mode Sc (sb ex))).
+  eapply (cycle_of_u_ac _ (res_neq_mode Sc (sb ex))).
   - intros w x y z H1 H2 H3.
     assert ((res_mode Sc (sb ex))^+ x y) as H.
     + unfold res_mode. apply tc_incl_itself.

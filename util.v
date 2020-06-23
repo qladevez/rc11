@@ -1818,7 +1818,7 @@ Lemma exists_cyc {A:Type} (r: rlt A) (x: A):
   exists x, r x x.
 Proof. intros H. exists x. auto. Qed.
 
-Lemma test_aux2 {A:Type} (r1 r2: rlt A): 
+Lemma cycle_of_u_ac2 {A:Type} (r1 r2: rlt A): 
   cyclic (r1 ⊔ r2) ->
   cyclic r2 \/
   exists w, (r1⋅(r1 ⊔ r2)^+) w w.
@@ -1976,7 +1976,7 @@ Proof.
     incl_rel_kat Hrel'.
 Qed.
 
-Lemma test_aux3 {A:Type} (r1 r2: rlt A):
+Lemma cycle_of_u_ac3 {A:Type} (r1 r2: rlt A):
   (forall w1 w2 w3 w4,
       r1^+ w1 w2 ->
       r2 w2 w3 ->
@@ -1996,7 +1996,7 @@ Proof.
       split; auto.
 Qed.
 
-Lemma test_aux {A:Type} (r1 r2: rlt A):
+Lemma cycle_of_u_ac_aux {A:Type} (r1 r2: rlt A):
   (forall w1 w2 w3 w4, 
                        r1^+ w1 w2 ->
                        r2^+ w2 w3 ->
@@ -2009,13 +2009,13 @@ Lemma test_aux {A:Type} (r1 r2: rlt A):
                        r1^+ w2 w3).
 Proof.
   intros Hclo.
-  apply test_aux3 in Hclo.
-  apply test_aux3.
+  apply cycle_of_u_ac3 in Hclo.
+  apply cycle_of_u_ac3.
   rewrite range_domain_cup.
   rewrite Hclo. kat.
 Qed.
 
-Lemma test {A:Type} (r1 r2: rlt A):
+Lemma cycle_of_u_ac {A:Type} (r1 r2: rlt A):
   (forall w1 w2 w3 w4, r1^+ w1 w2 ->
                        r2^+ w2 w3 ->
                        r1^+ w3 w4 ->
@@ -2025,9 +2025,9 @@ Lemma test {A:Type} (r1 r2: rlt A):
   cyclic r1.
 Proof.
   intros Htrans Hac H.
-  specialize (test_aux _ _ Htrans).
+  specialize (cycle_of_u_ac_aux _ _ Htrans).
   clear Htrans. intros Htrans.
-  apply test_aux2 in H as Hcyc.
+  apply cycle_of_u_ac2 in H as Hcyc.
   destruct Hcyc as [Hcyc|[w1 [w2 Hbeg Hend]]].
   { destruct Hcyc as [x Hcyc]. destruct (Hac x). auto. }
   assert (r1^+ w2 w1) as Hend2.
