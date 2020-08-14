@@ -526,6 +526,17 @@ Definition minimal_conflicting_pair (ex: Execution) (bound: nat) (j k: Event) :=
   (smallest_conflicting_bounding ex bound) /\
   (pi (bounded_exec ex bound) j k).
 
+(** Two events forming a minimal conflicting pair can be equal *)
+
+Lemma mcp_irr (ex: Execution) (bound: nat) (k: Event):
+  ~(minimal_conflicting_pair ex bound k k).
+Proof.
+  intros Hnot.
+  destruct Hnot as [_ Hnot].
+  apply pi_diff in Hnot.
+  intuition auto.
+Qed.
+
 (** The minimal conflicting pair of given execution and bound is a symmetric
 relation *)
 
@@ -660,6 +671,26 @@ Proof.
   destruct Hsmallest as [[j [k Hpreconf]] Hsmallest].
   exists j, k. split; [split|]; auto.
   exists j, k. auto.
+Qed.
+
+(** Every execution containing pi-conflicting events has a minimal conflicting
+pair with one of the events having the biggest numbering *)
+
+Lemma mcp_exists_ord (ex: Execution):
+  expi ex ->
+  (exists bound j k, minimal_conflicting_pair ex bound j k /\
+                     (numbering ex j) < (numbering ex k)).
+Proof.
+  intros Hexpi.
+  destruct (mcp_exists _ Hexpi) as [b [j [k Hmcp]]].
+  destruct (Compare_dec.lt_eq_lt_dec (numbering ex j) (numbering ex k)) as
+  [[Hcomp|Hcomp]|Hcomp].
+  - exists b, j, k. intuition auto.
+  - exfalso. eapply mcp_irr.
+    apply numbering_injective_eq in Hcomp.
+    rewrite Hcomp in Hmcp. eauto.
+  - exists b, k, j. intuition auto.
+    eapply mcp_is_sym. auto.
 Qed.
 
 (** In a minimal conflicting pair, at least one of the two events is not SC *)

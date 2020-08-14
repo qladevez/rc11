@@ -19,10 +19,6 @@ Open Scope rel_notations.
 Section RC11.
 
 Variable ex: Execution.
-Variable Hcomp: complete_exec ex.
-
-Lemma Hval: valid_exec ex.
-Proof. destruct Hcomp; auto. Qed.
 
 (** * Derived relations *)
 
@@ -32,28 +28,115 @@ Proof. destruct Hcomp; auto. Qed.
 event sequenced before [w] by the modification order. It corresponds to the
 from-read relation in some other works on axiomatic memory models. *)
 
-
 Definition rb :=
   (rf ex) ° ⋅ (mo ex).
+
+Lemma rf_wr:
+  valid_exec ex ->
+  (rf ex) ≡ [W] ⋅ (rf ex) ⋅ [R].
+Proof.
+  intros Hval.
+  destruct_val_exec Hval.
+  destruct Hrf_v as [_ [_ [Hwr _]]].
+  fold rf in Hwr. rewrite Hwr. unfold rf; intuition.
+Qed.
+
+Lemma mo_ww:
+  valid_exec ex ->
+  (mo ex) ≡ [W] ⋅ (mo ex) ⋅ [W].
+Proof.
+  intros Hval.
+  destruct_val_exec Hval.
+  destruct Hmo_v as [Hmo _].
+  fold mo in Hmo. rewrite Hmo. unfold mo; intuition.
+Qed.
+
+Lemma rb_rw:
+  valid_exec ex ->
+  rb ≡ [R] ⋅ rb ⋅ [W].
+Proof.
+  intros Hval.
+  unfold rb.
+  rewrite (mo_ww Hval).
+  rewrite (rf_wr Hval).
+  ra_normalise.
+  rewrite 2injcnv.
+  kat.
+Qed.
+
+(** In a valid execution, the sequenced-before relation is irreflexive *)
+
+Lemma sb_irr:
+  valid_exec ex ->
+  irreflexive (sb ex).
+Proof.
+  intros Hval.
+  apply irreflexive_is_irreflexive.
+  destruct_val_exec Hval.
+  destruct_sb_v Hsb_v.
+  destruct Hsb_lso as [[_ [_ Hsbirr]] _].
+  intros x. apply Hsbirr.
+Qed.
+
+(** In a valid execution, the read-from relation is irreflexive *)
+
+Lemma rf_irr:
+  valid_exec ex ->
+  irreflexive (rf ex).
+Proof.
+  intros Hval.
+  unfold irreflexive.
+  rewrite (rf_wr Hval), refl_double, capone.
+  mrewrite rw_0. ra.
+Qed.
+
+(** In a valid execution, the modification order is irreflexive *)
+
+Lemma mo_irr:
+  valid_exec ex ->
+  irreflexive (mo ex).
+Proof.
+  intros Hval.
+  apply irreflexive_is_irreflexive.
+  intros x Hnot.
+  destruct_val_exec Hval.
+  destruct_mo_v Hmo_v.
+  destruct Hmopo as [_ [_ ?]].
+  apply (H x). auto.
+Qed.
+
+(** In a valid execution, the reads-before relation is irreflexive *)
+
+Lemma rb_irr:
+  valid_exec ex ->
+  irreflexive rb.
+Proof.
+  intros Hval.
+  unfold irreflexive.
+  rewrite (rb_rw Hval), refl_double, capone.
+  mrewrite wr_0. ra.
+Qed.
 
 (** In a valid_execution, two events related by read-before belong to the set of
 events of the execution *)
 
 Lemma rb_orig_evts (x y : Event):
+  valid_exec ex ->
   rb x y ->
   In _ (evts ex) x.
 Proof.
-  intros Hrb.
+  intros Hval Hrb.
   destruct Hrb as [z Hrf Hmo].
   simp_cnv Hrf.
   eapply rf_dest_evts; eauto using Hval.
 Qed.
 
 Lemma rb_dest_evts (x y : Event):
+  valid_exec ex ->
   rb x y ->
   In _ (evts ex) y.
 Proof.
-  intros Hrb.
+  intros Hval Hrb.
   destruct Hrb as [z Hrf Hmo].
   eapply mo_dest_evts; eauto using Hval.
 Qed.
@@ -62,10 +145,11 @@ Qed.
 event *)
 
 Lemma rb_orig_read (x y : Event):
+  valid_exec ex ->
   rb x y ->
   is_read x.
 Proof.
-  intros Hrb.
+  intros Hval Hrb.
   destruct Hrb as [z Hrf Hmo].
   simp_cnv Hrf.
   eapply rf_dest_read; eauto using Hval.
@@ -75,10 +159,11 @@ Qed.
 write event *)
 
 Lemma rb_dest_write (x y : Event):
+  valid_exec ex ->
   rb x y ->
   is_write y.
 Proof.
-  intros Hrb.
+  intros Hval Hrb.
   destruct Hrb as [z Hrf Hmo].
   eapply mo_dest_write; eauto using Hval.
 Qed.
@@ -87,10 +172,11 @@ Qed.
 location *)
 
 Lemma rb_same_loc (x y : Event):
+  valid_exec ex ->
   rb x y ->
   (get_loc x) = (get_loc y).
 Proof.
-  intros Hrb.
+  intros Hval Hrb.
   destruct Hrb as [z Hrf Hmo].
   simp_cnv Hrf.
   apply rf_same_loc in Hrf.
@@ -98,6 +184,11 @@ Proof.
   congruence.
   all: eauto using Hval.
 Qed.
+
+Variable Hcomp: complete_exec ex.
+
+Lemma Hval: valid_exec ex.
+Proof. destruct Hcomp; auto. Qed.
 
 (** ** Extended coherence order *)
 
@@ -107,44 +198,17 @@ communication relation in some other works on axiomatic memory models *)
 
 Definition eco := ((rf ex) ⊔ (mo ex) ⊔ rb)^+.
 
-Lemma rf_wr:
-  (rf ex) ≡ [W] ⋅ (rf ex) ⋅ [R].
-Proof.
-  destruct_val_exec Hval.
-  destruct Hrf_v as [_ [_ [Hwr _]]].
-  fold rf in Hwr. rewrite Hwr. unfold rf; intuition.
-Qed.
-
-Lemma mo_ww:
-  (mo ex) ≡ [W] ⋅ (mo ex) ⋅ [W].
-Proof.
-  destruct_val_exec Hval.
-  destruct Hmo_v as [Hmo _].
-  fold mo in Hmo. rewrite Hmo. unfold mo; intuition.
-Qed.
-
-Lemma rb_rw:
-  rb ≡ [R] ⋅ rb ⋅ [W].
-Proof.
-  unfold rb.
-  rewrite mo_ww.
-  rewrite rf_wr.
-  ra_normalise.
-  rewrite 2injcnv.
-  kat.
-Qed.
-
 (** We can rewrite [eco] as the union of read-from, modification-order and read-
 before sequenced before the reflexive closure of read-from *)
 
 Open Scope rel_notations.
 
 Ltac elim_conflicting_rw :=
-  rewrite rf_wr, mo_ww, rb_rw;
+  rewrite (rf_wr Hval), (mo_ww Hval), (rb_rw Hval);
   mrewrite rw_0; kat.
 
 Ltac elim_conflicting_wr :=
-  rewrite rf_wr, mo_ww, rb_rw;
+  rewrite (rf_wr Hval), (mo_ww Hval), (rb_rw Hval);
   mrewrite wr_0; kat.
 
 (** We can reformulation the [eco] relation as a relation that is not a 
@@ -177,50 +241,6 @@ Proof.
   - kat.
 Qed.
 
-(** In a valid execution, the sequenced-before relation is irreflexive *)
-
-Lemma sb_irr:
-  irreflexive (sb ex).
-Proof.
-  apply irreflexive_is_irreflexive.
-  destruct_val_exec Hval.
-  destruct_sb_v Hsb_v.
-  destruct Hsb_lso as [[_ [_ Hsbirr]] _].
-  intros x. apply Hsbirr.
-Qed.
-
-(** In a valid execution, the read-from relation is irreflexive *)
-
-Lemma rf_irr:
-  irreflexive (rf ex).
-Proof.
-  unfold irreflexive.
-  rewrite rf_wr, refl_double, capone.
-  mrewrite rw_0. ra.
-Qed.
-
-(** In a valid execution, the modification order is irreflexive *)
-
-Lemma mo_irr:
-  irreflexive (mo ex).
-Proof.
-  apply irreflexive_is_irreflexive.
-  intros x Hnot.
-  destruct_val_exec Hval.
-  destruct_mo_v Hmo_v.
-  destruct Hmopo as [_ [_ ?]].
-  apply (H x). auto.
-Qed.
-
-(** In a valid execution, the reads-before relation is irreflexive *)
-
-Lemma rb_irr:
-  irreflexive rb.
-Proof.
-  unfold irreflexive.
-  rewrite rb_rw, refl_double, capone.
-  mrewrite wr_0. ra.
-Qed.
 
 (** In a valid execution, the union of sequenced-before, reads-from, 
 modification order and reads-before is irreflexive *)
@@ -231,10 +251,10 @@ Proof.
   apply irreflexive_union.
   apply irreflexive_union.
   apply irreflexive_union.
-  apply sb_irr.
-  apply rf_irr.
-  apply mo_irr.
-  apply rb_irr.
+  apply (sb_irr Hval).
+  apply (rf_irr Hval).
+  apply (mo_irr Hval).
+  apply (rb_irr Hval).
 Qed.
 
 (** We can deduce from this that [eco] is acyclic *)
@@ -250,8 +270,8 @@ Proof.
   ra_normalise.
   repeat (rewrite union_inter).
   repeat (apply leq_cupx).
-  - apply rf_irr.
-  - rewrite rb_rw.
+  - apply (rf_irr Hval).
+  - rewrite (rb_rw Hval).
     rewrite refl_double.
     rewrite capone.
     mrewrite wr_0. ra.
@@ -267,7 +287,7 @@ Proof.
     destruct_mo_v Hmo_v. destruct Hmopo as [_ [_ Hmoirr]].
     rewrite irreflexive_is_irreflexive in Hmoirr.
     auto.
-  - rewrite rf_wr, mo_ww.
+  - rewrite (rf_wr Hval), (mo_ww Hval).
     rewrite refl_shift. auto.
     mrewrite rw_0. ra_normalise.
     auto.
@@ -548,7 +568,7 @@ Definition no_thin_air :=
 defined *)
 
 Definition rc11_consistent :=
-  coherence /\atomicity /\ SC /\ no_thin_air.
+  coherence /\ atomicity /\ SC /\ no_thin_air.
 
 (** Coherence implies that [rmw] is included in [rb] *)
 
