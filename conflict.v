@@ -72,6 +72,30 @@ Lemma conflicting_same_loc (ex: Execution) (x y: Event):
   get_loc x = get_loc y.
 Proof. compute; intuition auto. Qed.
 
+(** Two conflicting events must each be either a read or a write *)
+
+Lemma conflicting_readwrite_l (ex: Execution) (x y: Event):
+  conflicting ex x y ->
+  (is_write x) \/ (is_read x).
+Proof.
+  intros Hconf. 
+  apply conflicting_same_loc in Hconf as Hlocs.
+  apply conflicting_one_is_write in Hconf as Hw.
+  destruct x; destruct y; compute; intuition auto.
+  inversion Hlocs.
+Qed.
+
+Lemma conflicting_readwrite_r (ex: Execution) (x y: Event):
+  conflicting ex x y ->
+  (is_write y) \/ (is_read y).
+Proof.
+  intros Hconf. 
+  apply conflicting_same_loc in Hconf as Hlocs.
+  apply conflicting_one_is_write in Hconf as Hw.
+  destruct x; destruct y; compute; intuition auto.
+  inversion Hlocs.
+Qed.
+
 (** If two events are conflicting in the prefix of an execution, they are
 conflicting in the execution *)
 
@@ -165,6 +189,23 @@ Lemma pi_not_cnv_sbrfsc (ex: Execution) (x y: Event):
   ~((sb ex ⊔ (res_mode Sc (rf ex)))^+ y x).
 Proof.
   compute; intuition auto.
+Qed.
+
+(** When two events are pi-conflicting, they must each be either a read or a
+write *)
+
+Lemma pi_readwrite_l (ex: Execution) (x y: Event):
+  pi ex x y ->
+  (is_write x) \/ (is_read x).
+Proof.
+  intros Hpi. eapply conflicting_readwrite_l, pi_is_conflicting. eauto.
+Qed.
+
+Lemma pi_readwrite_r (ex: Execution) (x y: Event):
+  pi ex x y ->
+  (is_write y) \/ (is_read y).
+Proof.
+  intros Hpi. eapply conflicting_readwrite_r, pi_is_conflicting. eauto.
 Qed.
 
 (** For any execution, pi is a symmetric relation *)

@@ -1030,6 +1030,54 @@ Proof.
   apply Hmotrans. exists y; auto.
 Qed.
 
+(** Two events related by the reflexive transitive closure of the union of the
+sequenced-before and read-from relations of an execution belong to the events
+of this execution *)
+
+Lemma rtc_sbrf_in_l_aux (x y: Event):
+  ((sb ex) ⊔ (rf ex))^* x y ->
+  (fun z1 z2 => In _ (evts ex) z2 ->
+                In _ (evts ex) z1) x y.
+Proof.
+  apply rtc_ind.
+  - intros z1 z2 [Hsb|Hrf] Hz2.
+    * eapply sb_orig_evts; eauto.
+    * eapply rf_orig_evts; eauto.
+  - intuition auto.
+  - intuition auto.
+Qed.
+
+Lemma rtc_sbrf_in_l (x y: Event):
+  In _ (evts ex) y ->
+  ((sb ex) ⊔ (rf ex))^* x y ->
+  In _ (evts ex) x.
+Proof.
+  intros Hy Hrel.
+  apply (rtc_sbrf_in_l_aux _ _ Hrel Hy).
+Qed.
+
+Lemma rtc_sbrf_in_r_aux (x y: Event):
+  ((sb ex) ⊔ (rf ex))^* x y ->
+  (fun z1 z2 => In _ (evts ex) z1 ->
+                In _ (evts ex) z2) x y.
+Proof.
+  apply rtc_ind.
+  - intros z1 z2 [Hsb|Hrf] Hz2.
+    * eapply sb_dest_evts; eauto.
+    * eapply rf_dest_evts; eauto.
+  - intuition auto.
+  - intuition auto.
+Qed.
+
+Lemma rtc_sbrf_in_r (x y: Event):
+  In _ (evts ex) x ->
+  ((sb ex) ⊔ (rf ex))^* x y ->
+  In _ (evts ex) y.
+Proof.
+  intros Hx Hrel.
+  apply (rtc_sbrf_in_r_aux _ _ Hrel Hx).
+Qed.
+
 End ValidExecs.
 
 (** Atomic events are events that are either in the domain or in the range of

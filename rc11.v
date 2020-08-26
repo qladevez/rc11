@@ -117,6 +117,7 @@ Proof.
   mrewrite wr_0. ra.
 Qed.
 
+
 (** In a valid_execution, two events related by read-before belong to the set of
 events of the execution *)
 
@@ -185,10 +186,123 @@ Proof.
   all: eauto using Hval.
 Qed.
 
-Variable Hcomp: complete_exec ex.
+(** In a valid execution, the union of sequenced-before, reads-from, 
+modification order and reads-before is irreflexive *)
+
+Lemma sbrfmorb_irr:
+  valid_exec ex ->
+  irreflexive (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb).
+Proof.
+  intros Hval.
+  apply irreflexive_union.
+  apply irreflexive_union.
+  apply irreflexive_union.
+  apply (sb_irr Hval).
+  apply (rf_irr Hval).
+  apply (mo_irr Hval).
+  apply (rb_irr Hval).
+Qed.
+
+Lemma rtc_sbrfmorb_in_l_aux (x y: Event):
+  valid_exec ex ->
+  (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb)^* x y ->
+  (fun z1 z2 => In _ (evts ex) z2 -> In _ (evts ex) z1) x y.
+Proof.
+  intros Hval.
+  apply rtc_ind.
+  - intros z1 z2 [[[Hsb|Hrf]|Hmo]|Hrb]; intros Hin.
+    * eapply sb_orig_evts; eauto.
+    * eapply rf_orig_evts; eauto.
+    * eapply mo_orig_evts; eauto.
+    * eapply rb_orig_evts; eauto.
+  - intuition auto.
+  - intuition auto.
+Qed.
+
+Lemma rtc_sbrfmorb_in_l (x y: Event):
+  valid_exec ex ->
+  (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb)^* x y ->
+  In _ (evts ex) y ->
+  In _ (evts ex) x.
+Proof.
+  intros Hval Hrel Hy. eapply rtc_sbrfmorb_in_l_aux; eauto.
+Qed.
+
+Lemma rtc_sbrfmorb_in_r_aux (x y: Event):
+  valid_exec ex ->
+  (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb)^* x y ->
+  (fun z1 z2 => In _ (evts ex) z1 -> In _ (evts ex) z2) x y.
+Proof.
+  intros Hval.
+  apply rtc_ind.
+  - intros z1 z2 [[[Hsb|Hrf]|Hmo]|Hrb]; intros Hin.
+    * eapply sb_dest_evts; eauto.
+    * eapply rf_dest_evts; eauto.
+    * eapply mo_dest_evts; eauto.
+    * eapply rb_dest_evts; eauto.
+  - intuition auto.
+  - intuition auto.
+Qed.
+
+Lemma rtc_sbrfmorb_in_r (x y: Event):
+  valid_exec ex ->
+  (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb)^* x y ->
+  In _ (evts ex) x ->
+  In _ (evts ex) y.
+Proof.
+  intros Hval Hrel Hy. eapply rtc_sbrfmorb_in_r_aux; eauto.
+Qed.
+
+Lemma tc_sbrfmorb_in_l_aux (x y: Event):
+  valid_exec ex ->
+  (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb)^+ x y ->
+  (fun z1 z2 => In _ (evts ex) z1) x y.
+Proof.
+  intros Hval.
+  apply tc_ind.
+  - intros z1 z2 [[[Hsb|Hrf]|Hmo]|Hrb].
+    * eapply sb_orig_evts; eauto.
+    * eapply rf_orig_evts; eauto.
+    * eapply mo_orig_evts; eauto.
+    * eapply rb_orig_evts; eauto.
+  - intuition auto.
+Qed.
+
+Lemma tc_sbrfmorb_in_l (x y: Event):
+  valid_exec ex ->
+  (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb)^+ x y ->
+  In _ (evts ex) x.
+Proof.
+  intros Hval Hrel. eapply tc_sbrfmorb_in_l_aux; eauto.
+Qed.
+
+Lemma tc_sbrfmorb_in_r_aux (x y: Event):
+  valid_exec ex ->
+  (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb)^+ x y ->
+  (fun z1 z2 => In _ (evts ex) z2) x y.
+Proof.
+  intros Hval.
+  apply tc_ind.
+  - intros z1 z2 [[[Hsb|Hrf]|Hmo]|Hrb].
+    * eapply sb_dest_evts; eauto.
+    * eapply rf_dest_evts; eauto.
+    * eapply mo_dest_evts; eauto.
+    * eapply rb_dest_evts; eauto.
+  - intuition auto.
+Qed.
+
+Lemma tc_sbrfmorb_in_r (x y: Event):
+  valid_exec ex ->
+  (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb)^+ x y ->
+  In _ (evts ex) y.
+Proof.
+  intros Hval Hrel. eapply tc_sbrfmorb_in_r_aux; eauto.
+Qed.
+
+(* Variable Hcomp: complete_exec ex.
 
 Lemma Hval: valid_exec ex.
-Proof. destruct Hcomp; auto. Qed.
+Proof. destruct Hcomp; auto. Qed. *)
 
 (** ** Extended coherence order *)
 
@@ -203,11 +317,11 @@ before sequenced before the reflexive closure of read-from *)
 
 Open Scope rel_notations.
 
-Ltac elim_conflicting_rw :=
+Ltac elim_conflicting_rw Hval :=
   rewrite (rf_wr Hval), (mo_ww Hval), (rb_rw Hval);
   mrewrite rw_0; kat.
 
-Ltac elim_conflicting_wr :=
+Ltac elim_conflicting_wr Hval :=
   rewrite (rf_wr Hval), (mo_ww Hval), (rb_rw Hval);
   mrewrite wr_0; kat.
 
@@ -215,8 +329,10 @@ Ltac elim_conflicting_wr :=
 reflexive transitive closure *)
 
 Lemma eco_rfmorb_seq_rfref:
+  valid_exec ex ->
   eco = (rf ex) ⊔ (((mo ex) ⊔ rb) ⋅ (rf ex)?).
 Proof.
+  intros Hval.
   unfold eco.
   apply ext_rel. apply antisym.
   - apply itr_ind_l1.
@@ -229,8 +345,8 @@ Proof.
     repeat (try (apply leq_cupx)).
     1, 5, 7: kat.
     (* all: upgrade_to_kat Event. *)
-    1, 2, 7: elim_conflicting_rw.
-    2, 4, 6, 8: elim_conflicting_wr.
+    1, 2, 7: (elim_conflicting_rw Hval).
+    2, 4, 6, 8: (elim_conflicting_wr Hval).
     all: unfold rb.
     all: destruct_val_exec Hval.
     1, 3: mrewrite (rf_unique _ _ Hrf_v).
@@ -242,30 +358,17 @@ Proof.
 Qed.
 
 
-(** In a valid execution, the union of sequenced-before, reads-from, 
-modification order and reads-before is irreflexive *)
-
-Lemma sbrfmorb_irr:
-  irreflexive (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb).
-Proof.
-  apply irreflexive_union.
-  apply irreflexive_union.
-  apply irreflexive_union.
-  apply (sb_irr Hval).
-  apply (rf_irr Hval).
-  apply (mo_irr Hval).
-  apply (rb_irr Hval).
-Qed.
-
 (** We can deduce from this that [eco] is acyclic *)
 
 Lemma eco_acyclic:
+  valid_exec ex ->
   acyclic eco.
 Proof.
+  intros Hval.
   unfold acyclic.
   assert (eco^+ = eco). { apply ext_rel; unfold eco; kat. }
   rewrite H.
-  rewrite eco_rfmorb_seq_rfref.
+  rewrite (eco_rfmorb_seq_rfref Hval).
   rewrite irreflexive_is_irreflexive.
   ra_normalise.
   repeat (rewrite union_inter).
@@ -315,8 +418,10 @@ Definition sw :=
 union of sequenced-before and reads-from *)
 
 Lemma sw_incl_sbrf:
+  valid_exec ex ->
   sw ≦ ((sb ex) ⊔ (rf ex))^+.
 Proof.
+  intros Hval.
   unfold sw, rs. rewrite rmw_incl_sb. kat. auto using Hval.
 Qed.
   
@@ -334,9 +439,11 @@ Definition hb  :=
 union of sequenced-before and reads-from *)
 
 Lemma hb_incl_sbrf:
+  valid_exec ex ->
   hb ≦ ((sb ex) ⊔ (rf ex))^+.
 Proof.
-  unfold hb. rewrite sw_incl_sbrf. kat.
+  intros Hval.
+  unfold hb. rewrite (sw_incl_sbrf Hval). kat.
 Qed.
   
 (** ** SC-before *)
@@ -508,12 +615,12 @@ Qed.
 memory models *)
 
 Theorem coherence_is_uniproc:
-  coherence -> irreflexive ((sb ex) ⋅ eco).
+  valid_exec ex -> coherence -> irreflexive ((sb ex) ⋅ eco).
 Proof.
-  intros Hco.
+  intros Hval Hco.
   apply seq_refl_incl_left with (r3 := hb).
   - unfold sb, hb. kat.
-  - rewrite eco_rfmorb_seq_rfref.
+  - rewrite (eco_rfmorb_seq_rfref Hval).
     unfold irreflexive.
     ra_normalise.
     repeat (rewrite union_inter).
@@ -573,10 +680,12 @@ Definition rc11_consistent :=
 (** Coherence implies that [rmw] is included in [rb] *)
 
 Lemma rc11_rmw_incl_rb:
+  complete_exec ex ->
   rc11_consistent ->
   rmw ex ≦ rb.
 Proof.
-  intros [Hco _] x y Hrmw.
+  intros Hcomp [Hco _] x y Hrmw.
+  inversion Hcomp as [Hval _].
   unfold coherence in Hco.
   unfold hb, eco in Hco.
   unfold rb. byabsurd.

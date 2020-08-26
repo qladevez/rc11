@@ -28,35 +28,52 @@ of the union of the sequenced-before and read-from relations of the execution,
 then the numbering of the first event is smaller than the numbering of the
 second event *)
 
-Module Type Numbering.
-
-Parameter numbering : Execution -> (Event -> nat).
+Definition numbering event : nat :=
+  match event with
+  | Read eid _ _ _ => eid
+  | Write eid _ _ _ => eid
+  | Fence eid _ => eid
+  end.
 
 (** Two different events can't have the same numbering *)
 
-Axiom numbering_injective: forall ex x y, 
-  x <> y <-> numbering ex x <> numbering ex y.
+Definition numbering_injective (ex: Execution) := forall x y,
+  x <> y <-> numbering x <> numbering y.
 
 (** Two identical events have the same numbering *)
 
 Lemma numbering_injective_eq (ex: Execution) (x y: Event):
-  x = y <-> numbering ex x = numbering ex y.
+  numbering_injective ex ->
+  x = y <-> numbering x = numbering y.
 Proof.
+  intros Hinj.
   split; intros H.
   - rewrite H; auto.
   - destruct (classic (x = y)) as [Hxy | Hxy].
     + auto.
-    + rewrite (numbering_injective ex x y) in Hxy.
+    + rewrite (Hinj _ _) in Hxy.
       destruct (Hxy H).
+Qed.
+
+(** If a numbering of the events of an execution is injective, the numbering of
+the events of its prefixes is also injective *)
+
+Lemma numbering_injective_pre (ex pre: Execution):
+  numbering_injective ex ->
+  prefix pre ex ->
+  numbering_injective pre.
+Proof.
+  intros Hnuminj Hpre. destruct_prefix Hpre.
+  intros x y. apply Hnuminj; apply Hevts; auto.
 Qed.
 
 (** If an first event is related to a second event by the union of the sequenced
 before relation and reads-from relation, the numbering of the first event is
 strictly inferior to the numbering of the second event *)
 
-Axiom numbering_coherent: 
-  forall ex x y, ((sb ex) ⊔ (rf ex)) x y ->
-                 numbering ex x < numbering ex y.
+Definition numbering_coherent ex :=
+  forall x y, ((sb ex) ⊔ (rf ex)) x y ->
+              numbering x < numbering y.
 
 (** If a first event is related to a second event by the reflexive transitive
 closure of the union of the sequenced-before relation and reads-from relation,
@@ -64,15 +81,19 @@ the numbering of the second event is greater or equal to the numbering of the
 first event *)
 
 Lemma numbering_coherent_rtc (ex: Execution) (x y: Event):
+  numbering_coherent ex ->
   ((sb ex) ⊔ (rf ex))^* x y ->
-  numbering ex y >= numbering ex x.
+  numbering y >= numbering x.
 Proof.
+  intros Hnumco.
   generalize dependent y.
   generalize dependent x.
   apply rtc_ind.
-  - intros x y Hstep. apply numbering_coherent in Hstep. lia.
-  - auto.
-  - intros x y z _ IH1 _ IH2. lia.
+  - intros z1 z2 Hstep.
+    apply Hnumco in Hstep. lia.
+  - intuition auto.
+  - intros z1 z2 z3 _ IH1 _ IH2.
+    lia.
 Qed.
 
 (** If a first event is related to a second event by the transitive closure of 
@@ -81,12 +102,13 @@ numbering of the second event is greater than the numbering of the first
 event *)
 
 Lemma numbering_coherent_tc (ex: Execution) (x y: Event):
+  numbering_coherent ex ->
   ((sb ex) ⊔ (rf ex))^+ x y ->
-  numbering ex y > numbering ex x.
+  numbering y > numbering x.
 Proof.
-  intros [z Hstep Hrtc].
-  apply numbering_coherent in Hstep.
-  apply numbering_coherent_rtc in Hrtc.
+  intros Hnumco [z Hstep Hrtc].
+  apply Hnumco in Hstep.
+  apply (numbering_coherent_rtc _ _ _ Hnumco) in Hrtc.
   lia.
 Qed.
 
@@ -95,11 +117,12 @@ event, the numbering of the second event is strictly greater than the numbering
 of the first event *)
 
 Lemma sb_num_ord (ex: Execution) (x y: Event):
+  numbering_coherent ex ->
   sb ex x y ->
-  (numbering ex y) > (numbering ex x).
+  (numbering y) > (numbering x).
 Proof.
-  intros Hsb.
-  apply numbering_coherent_tc, tc_incl_itself.
+  intros Hnumco Hsb.
+  eapply numbering_coherent_tc, tc_incl_itself. eauto.
   left; auto.
 Qed.
 
@@ -108,80 +131,66 @@ the numbering of the second event is strictly greater than the numbering of the
 first event *)
 
 Lemma rf_num_ord (ex: Execution) (x y: Event):
+  numbering_coherent ex ->
   rf ex x y ->
-  (numbering ex y) > (numbering ex x).
+  (numbering y) > (numbering x).
 Proof.
-  intros Hsb.
-  apply numbering_coherent_tc, tc_incl_itself.
+  intros Hnumco Hsb.
+  eapply numbering_coherent_tc, tc_incl_itself; eauto.
   right; auto.
+Qed.
+
+(** If the numbering of the events of an execution is coherent, the numbering of
+the events of its prefixes is also coherent *)
+
+Lemma numbering_coherent_pre (ex pre: Execution):
+  numbering_coherent ex ->
+  prefix pre ex ->
+  numbering_coherent pre.
+Proof.
+  intros Hnumco Hpre. destruct_prefix Hpre.
+  intros x y Hsbrf.
+  apply Hnumco.
+  apply (incl_rel_thm Hsbrf). rewrite Hsb, Hrf. kat.
 Qed.
 
 (** In every execution, there is a last event whose numbering is greater than
 the one of all the other events *)
 
-Axiom numbering_bounded :
-  forall ex, { e | forall x, numbering ex e >= numbering ex x}.
-
-(** If an execution is a prefix of the other, the events that are in the prefix
-have the same numbering in the execution and in the prefix *)
-
-Axiom numbering_pre_stable:
-  forall pre ex, prefix pre ex -> (forall e, numbering pre e = numbering ex e).
-
-End Numbering.
-
-Module NumberingPrefix (Numbering: Numbering).
-
-Import Numbering.
+Axiom numbering_bounded:
+  exists e, forall e', numbering e >= numbering e'.
+      
 
 (** Tests if the numbering of an event is Less or Equal to a bound *)
 
-Definition NLE (ex: Execution) (b: nat) : prop_set Event :=
-  fun e => b >= (numbering ex e).
+Definition NLE (b: nat) : prop_set Event :=
+  fun e => b >= (numbering e).
 
 (** Being in the set of events whose numbering is less or equal to a bound is
 equivalent to satisfying the NLE test with this bound *)
 
-Lemma NLE_I_evts (ex: Execution) (bound: nat):
-  [I (fun x => bound >= numbering ex x)] = [NLE ex bound].
+Lemma NLE_I_evts (bound: nat):
+  [I (fun x => bound >= numbering x)] = [NLE bound].
 Proof. unfold NLE. kat_eq. Qed.
 
 (** If an event's numbering is less or equal to a bound minus one, it is less
 or equal to the bound *)
 
-Lemma NLE_bound_min_one (ex: Execution) (bound: nat):
-  [NLE ex (bound-1)] ≦ [NLE ex bound].
+Lemma NLE_bound_min_one (bound: nat):
+  [NLE (bound-1)] ≦ [NLE bound].
 Proof.
   intros x y [H1 H2].
   split; auto.
   unfold NLE in *. lia.
 Qed.
 
-(** All events that have a numbering less or equal to a bound in the prefix of
-an execution have a numbering less or equal to the same bound in the execution *)
-
-Lemma nle_prefix (pre ex: Execution) (bound: nat):
-  prefix pre ex ->
-  [NLE pre bound] = [NLE ex bound].
-Proof.
-  intros Hpre. apply ext_rel, antisym.
-  - intros x y [Heq Hnum].
-    split; auto.
-    unfold NLE in *. 
-    erewrite numbering_pre_stable in Hnum; eauto.
-  - intros x y [Heq Hnum].
-    split; auto.
-    unfold NLE in *.
-    erewrite numbering_pre_stable; eauto.
-Qed.
-
 (** If we test that an event's numbering is less or equal to two bounds, one of
 which is strictly inferior to the other, we can replace these two tests by the
 test of the event's numbering being less or equal to the smaller bound *)
 
-Lemma nle_double (ex: Execution) (k1 k2: nat):
+Lemma nle_double (k1 k2: nat):
   k1 < k2 ->
-  [NLE ex k1]⋅[NLE ex k2] = [NLE ex k1].
+  [NLE k1]⋅[NLE k2] = [NLE k1].
 Proof.
   intros Hord. apply ext_rel, antisym.
   - intros x y [z [Heq1 Hr1] [Heq2 Hr2]].
@@ -196,37 +205,37 @@ execution to the events whose numbering is less or equal to a given bound. *)
 
 Definition bounded_exec (ex: Execution) (n: nat) : Execution :=
   {|
-    exec.evts := Intersection _ (evts ex) (fun x => n >= numbering ex x);
-    exec.sb := [NLE ex n] ⋅ (sb ex) ⋅ [NLE ex n];
-    exec.rmw := [NLE ex n] ⋅ (rmw ex) ⋅ [NLE ex n];
-    exec.rf := [NLE ex n] ⋅ (rf ex) ⋅ [NLE ex n];
-    exec.mo := [NLE ex n] ⋅  (mo ex) ⋅ [NLE ex n];
+    exec.evts := Intersection _ (evts ex) (fun x => n >= numbering x);
+    exec.sb := [NLE n] ⋅ (sb ex) ⋅ [NLE n];
+    exec.rmw := [NLE n] ⋅ (rmw ex) ⋅ [NLE n];
+    exec.rf := [NLE n] ⋅ (rf ex) ⋅ [NLE n];
+    exec.mo := [NLE n] ⋅  (mo ex) ⋅ [NLE n];
   |}.
 
 (** Simplifications of the different getters applied over bounded executions *)
 
 Lemma simpl_evts_be (ex: Execution) (n:nat):
-  evts (bounded_exec ex n) = Intersection _ (evts ex) (fun x => n >= numbering ex x).
+  evts (bounded_exec ex n) = Intersection _ (evts ex) (fun x => n >= numbering x).
 Proof. compute; auto. Qed.
 
 Lemma simpl_sb_be (ex: Execution) (n:nat):
-  sb (bounded_exec ex n) = [NLE ex n] ⋅ (sb ex) ⋅ [NLE ex n].
+  sb (bounded_exec ex n) = [NLE n] ⋅ (sb ex) ⋅ [NLE n].
 Proof. compute; auto. Qed.
 
 Lemma simpl_rmw_be (ex: Execution) (n:nat):
-  rmw (bounded_exec ex n) = [NLE ex n] ⋅ (rmw ex) ⋅ [NLE ex n].
+  rmw (bounded_exec ex n) = [NLE n] ⋅ (rmw ex) ⋅ [NLE n].
 Proof. compute; auto. Qed.
 
 Lemma simpl_rf_be (ex: Execution) (n:nat):
-  rf (bounded_exec ex n) = [NLE ex n] ⋅ (rf ex) ⋅ [NLE ex n].
+  rf (bounded_exec ex n) = [NLE n] ⋅ (rf ex) ⋅ [NLE n].
 Proof. compute; auto. Qed.
 
 Lemma simpl_mo_be (ex: Execution) (n:nat):
-  mo (bounded_exec ex n) = [NLE ex n] ⋅ (mo ex) ⋅ [NLE ex n].
+  mo (bounded_exec ex n) = [NLE n] ⋅ (mo ex) ⋅ [NLE n].
 Proof. compute; auto. Qed.
 
 Lemma simpl_rb_be (ex: Execution) (n:nat):
-  rb (bounded_exec ex n) ≦ [NLE ex n] ⋅ (rb ex) ⋅ [NLE ex n].
+  rb (bounded_exec ex n) ≦ [NLE n] ⋅ (rb ex) ⋅ [NLE n].
 Proof. 
   unfold rb. rewrite simpl_mo_be, simpl_rf_be.
   rewrite 2dot_cnv, injcnv.
@@ -239,6 +248,16 @@ Hint Rewrite simpl_sb_be simpl_rmw_be simpl_rf_be simpl_mo_be : bounded_exec_db.
 
 Tactic Notation "rew" "bounded" := autorewrite with bounded_exec_db.
 Tactic Notation "rew" "bounded" "in" hyp(H) := autorewrite with bounded_exec_db in H.
+
+(** An event belonging to the events of a bounded executions belong to the events
+of the execution *)
+
+Lemma bounding_evts_in (ex: Execution) (x: Event) (bound: nat):
+  In _ (evts (bounded_exec ex bound)) x ->
+  In _ (evts ex) x.
+Proof.
+  intros [y Hin _]. auto.
+Qed.
 
 (** Bounding two executions by the same bound maintains the prefix relationship
 between them *)
@@ -254,7 +273,7 @@ Proof.
     apply in_intersection in H as [H1 H2].
     split.
     + apply Hevts in H1. auto.
-    + unfold In in *. rewrite (numbering_pre_stable _ _ Hpre) in H2. auto.
+    + unfold In in *. auto.
   - intros a b Hsbrf Hinb. specialize (Hclosed a b).
     split.
     + apply Hclosed.
@@ -263,25 +282,21 @@ Proof.
         apply simpl_trt_rel in Hsbrf; [left|right]; auto.
       * rewrite simpl_evts_be in Hinb. apply in_intersection in Hinb as [Hinb _].
         auto.
-    + unfold In. rewrite (numbering_pre_stable _ _ Hpre).
+    + unfold In.
       destruct Hsbrf as [Hsbrf|Hsbrf];
       apply simpl_trt_hyp in Hsbrf as [Hsbrf _];
       unfold NLE in Hsbrf; auto.
   - rew bounded. rewrite simpl_evts_be.
     rewrite I_inter. rewrite NLE_I_evts.
-    rewrite (nle_prefix _ _ _ Hpre).
     rewrite Hsb. kat_eq.
   - rew bounded. rewrite simpl_evts_be.
     rewrite I_inter. rewrite NLE_I_evts.
-    rewrite (nle_prefix _ _ _ Hpre).
     rewrite Hrf. kat_eq.
   - rew bounded. rewrite simpl_evts_be.
     rewrite I_inter. rewrite NLE_I_evts.
-    rewrite (nle_prefix _ _ _ Hpre).
     rewrite Hmo. kat_eq.
   - rew bounded. rewrite simpl_evts_be.
     rewrite I_inter. rewrite NLE_I_evts.
-    rewrite (nle_prefix _ _ _ Hpre).
     rewrite Hrmw. kat_eq.
 Qed.
 
@@ -294,11 +309,11 @@ Lemma sc_cycle_be_incl_be_sc_cycle (ex: Execution) (n: nat):
   rf (bounded_exec ex n) ⊔
   mo (bounded_exec ex n) ⊔
   rb (bounded_exec ex n) ≦
-  [NLE ex n] ⋅
+  [NLE n] ⋅
   (sb (bounded_exec ex n) ⊔
    rf (bounded_exec ex n) ⊔
    mo (bounded_exec ex n) ⊔
-   rb (bounded_exec ex n) ) ⋅ [NLE ex n].
+   rb (bounded_exec ex n) ) ⋅ [NLE n].
 Proof.
   unfold rb.
   rew bounded.
@@ -334,7 +349,7 @@ Qed.
 numbering is less or equal to [n] and it belongs to the events of the execution *)
 
 Lemma I_evts_bounded_le_bnd (ex: Execution) (n: nat):
-  [I (evts (bounded_exec ex n))] = [NLE ex n] ⋅ [I (evts ex)].
+  [I (evts (bounded_exec ex n))] = [NLE n] ⋅ [I (evts ex)].
 Proof.
   apply ext_rel, antisym. 
   - intros x y [Heq Hinter]. destruct Hinter.
@@ -346,16 +361,17 @@ Qed.
 
 (** Any bounding of a valid execution is a prefix of this execution *)
 
-Lemma bounded_exec_is_prefix (ex: Execution) (n: nat) :
+Lemma bounded_exec_is_prefix (ex: Execution) (n: nat):
   valid_exec ex ->
+  numbering_coherent ex ->
   prefix (bounded_exec ex n) ex.
 Proof.
-  intros Hval.
+  intros Hval Hnumco.
   split; [|split].
   - apply intersection_included_itself.
   - intros x y Hnum.
     generalize (sbrf_in_events _ _ _ Hval Hnum); intros [Hx Hy].
-    apply (numbering_coherent _ _ _) in Hnum.
+    apply (Hnumco _ _) in Hnum.
     intros H. destruct H as [y Hevts Hbound]; split.
     + auto.
     + unfold_in; lia.
@@ -375,12 +391,13 @@ Qed.
 
 Lemma bounded_is_valid (ex: Execution) (bound: nat):
   valid_exec ex ->
+  numbering_coherent ex ->
   valid_exec (bounded_exec ex bound).
 Proof.
-  intros Hval.
+  intros Hval Hnumco.
   eapply prefix_valid.
   eauto.
-  eapply bounded_exec_is_prefix.
+  eapply bounded_exec_is_prefix;
   eauto.
 Qed.
 
@@ -388,12 +405,13 @@ Qed.
 
 Lemma bounded_is_complete (ex: Execution) (bound: nat):
   complete_exec ex ->
+  numbering_coherent ex ->
   complete_exec (bounded_exec ex bound).
 Proof.
-  intros Hcomp.
+  intros Hcomp Hnumco.
   eapply prefix_complete.
   eauto.
-  eapply bounded_exec_is_prefix.
+  eapply bounded_exec_is_prefix; auto.
   destruct Hcomp as [Hval _]. auto.
 Qed.
 
@@ -402,13 +420,14 @@ consistent in the RC11 model *)
 
 Lemma bounded_is_rc11 (ex: Execution) (bound: nat):
   valid_exec ex ->
+  numbering_coherent ex ->
   rc11_consistent ex ->
   rc11_consistent (bounded_exec ex bound).
 Proof.
-  intros Hval Hrc11.
+  intros Hval Hnumco Hrc11.
   eapply prefix_rc11_consistent.
   eauto.
-  eapply bounded_exec_is_prefix.
+  eapply bounded_exec_is_prefix;
   eauto.
 Qed.
 
@@ -417,10 +436,11 @@ smallest bound is a prefix of the bounding bounded by the biggest bound *)
 
 Lemma two_ord_bounds_pre (ex: Execution) (k1 k2: nat):
   valid_exec ex ->
+  numbering_coherent ex ->
   k1 < k2 ->
   prefix (bounded_exec ex k1) (bounded_exec ex k2).
 Proof.
-  intros Hval Hord.
+  intros Hval Hnumco Hord.
   inverse_val_exec Hval.
   repeat (apply conj).
   - destruct ex. apply inter_incl. intros x.
@@ -428,31 +448,31 @@ Proof.
   - intros a b [Hsb|Hrf] Hin; 
     apply in_intersection in Hin as [Hevts Hbord]; unfold_in.
     + rew bounded in Hsb. apply simpl_trt_hyp in Hsb as [_ [Hr _]].
-      apply sb_num_ord in Hr as Habord. split.
+      apply sb_num_ord in Hr as Habord; auto. split.
       * eapply sb_orig_evts; eauto.
       * unfold_in; lia.
     + rew bounded in Hrf. apply simpl_trt_hyp in Hrf as [_ [Hr _]].
-      apply rf_num_ord in Hr as Habord. split.
+      apply rf_num_ord in Hr as Habord; auto. split.
       * eapply rf_orig_evts; eauto.
       * unfold_in; lia.
   - rew bounded. rewrite I_evts_bounded_le_bnd.
-    rewrite <- (nle_double ex _ _ Hord) at 1.
-    rewrite <- (nle_double ex _ _ Hord) at 2.
+    rewrite <- (nle_double _ _ Hord) at 1.
+    rewrite <- (nle_double _ _ Hord) at 2.
     destruct_sb_v Hsb_v.
     destruct Hsb_lso as [[Hsb_in_e _] _].
     rewrite Hsb_in_e. kat_eq.
   - rew bounded. rewrite I_evts_bounded_le_bnd.
-    rewrite <- (nle_double ex _ _ Hord) at 1.
-    rewrite <- (nle_double ex _ _ Hord) at 2.
+    rewrite <- (nle_double _ _ Hord) at 1.
+    rewrite <- (nle_double _ _ Hord) at 2.
     destruct_rf_v Hrf_v. rewrite Hrf_in_e. kat_eq.
   - rew bounded. rewrite I_evts_bounded_le_bnd.
-    rewrite <- (nle_double ex _ _ Hord) at 1.
-    rewrite <- (nle_double ex _ _ Hord) at 2.
+    rewrite <- (nle_double _ _ Hord) at 1.
+    rewrite <- (nle_double _ _ Hord) at 2.
     destruct_mo_v Hmo_v. destruct Hmopo as [Hmo_in_e _].
     rewrite Hmo_in_e. kat_eq.
   - rew bounded. rewrite I_evts_bounded_le_bnd.
-    rewrite <- (nle_double ex _ _ Hord) at 1.
-    rewrite <- (nle_double ex _ _ Hord) at 2.
+    rewrite <- (nle_double _ _ Hord) at 1.
+    rewrite <- (nle_double _ _ Hord) at 2.
     destruct_rmw_v Hrmw_v. rewrite Hrmw_in_e. kat_eq.
 Qed.
 
@@ -463,9 +483,9 @@ Lemma bounded_execution_itself_exists (ex: Execution):
   valid_exec ex ->
   exists k, ex = (bounded_exec ex k).
 Proof.
-  destruct (numbering_bounded ex) as [k Hsup].
+  destruct (numbering_bounded) as [k Hsup].
   intros Hval.
-  exists (numbering ex k).
+  exists (numbering k).
   apply tautology_makes_fullset in Hsup. destruct ex.
   unfold bounded_exec. rew bounded.
   unfold NLE. rewrite Hsup. f_equal.
@@ -504,14 +524,14 @@ Proof.
 Qed.
 
 Theorem smaller_than_smallest_sc (ex: Execution) (bound: nat):
-  complete_exec ex ->
+  valid_exec ex ->
+  numbering_coherent ex ->
   rc11_consistent ex ->
   (smallest_conflicting_bounding ex bound) ->
   forall smaller, smaller < bound ->
                   sc_consistent (bounded_exec ex smaller).
 Proof.
-  intros Hcomp Hrc11 Hscb smaller Hsmaller.
-  inversion Hcomp as [Hval _].
+  intros Hval Hnumco Hrc11 Hscb smaller Hsmaller.
   eapply no_conflict_prefix_sc; eauto.
   - eauto using bounded_exec_is_prefix.
   - eapply smaller_than_smallest_not_conflicting; eauto.
@@ -568,6 +588,21 @@ Lemma mcp_in_evts_right (ex: Execution) (x y: Event) (bound:nat):
   In _ (evts (bounded_exec ex bound)) y.
 Proof. intros. eauto using pi_in_evts_right, mcp_is_pi. Qed.
 
+Lemma mcp_in_evts_left2 (ex: Execution) (x y: Event) (bound: nat):
+  minimal_conflicting_pair ex bound x y ->
+  In _ (evts ex) x.
+Proof.
+  intros Hmcp. apply mcp_in_evts_left in Hmcp.
+  destruct Hmcp; auto.
+Qed.
+
+Lemma mcp_in_evts_right2 (ex: Execution) (x y: Event) (bound: nat):
+  minimal_conflicting_pair ex bound x y ->
+  In _ (evts ex) y.
+Proof.
+  intros Hmcp. apply mcp_in_evts_right in Hmcp.
+  destruct Hmcp; auto.
+Qed.
 (** One of the two events forming a minimal conflicting pair must be a write 
 event *)
 
@@ -598,6 +633,19 @@ Lemma mcp_at_least_one_not_sc (ex: Execution) (x y: Event) (bound:nat):
   at_least_one_not_sc x y.
 Proof. intros. eauto using pi_at_least_one_not_sc, mcp_is_pi. Qed.
 
+(** Two events forming a minimal conflicting pair must each be either a read or
+a write *)
+
+Lemma mcp_readwrite_l (ex: Execution) (x y: Event) (bound: nat):
+  minimal_conflicting_pair ex bound x y ->
+  (is_write x) \/ (is_read x).
+Proof. intros. eauto using pi_readwrite_l, mcp_is_pi. Qed.
+
+Lemma mcp_readwrite_r (ex: Execution) (x y: Event) (bound: nat):
+  minimal_conflicting_pair ex bound x y ->
+  (is_write y) \/ (is_read y).
+Proof. intros. eauto using pi_readwrite_r, mcp_is_pi. Qed.
+
 (** Two events forming a minimal conflicting pair are not ordered by the 
 transitive closure of the union of the sequenced-before relation and of the
 restriction of the reads-from relation to SC events, in the execution bounded
@@ -618,7 +666,7 @@ to the minimal bound *)
 
 Lemma mcp_left_le_bound (ex: Execution) (x y: Event) (bound:nat):
   minimal_conflicting_pair ex bound x y ->
-  (numbering ex x) <= bound.
+  (numbering x) <= bound.
 Proof. 
   intros Hmcp. eapply mcp_in_evts_left in Hmcp.
   destruct Hmcp as [? _ Hxord]. unfold In in Hxord.
@@ -627,7 +675,7 @@ Qed.
 
 Lemma mcp_right_le_bound (ex: Execution) (x y: Event) (bound:nat):
   minimal_conflicting_pair ex bound x y ->
-  (numbering ex y) <= bound.
+  (numbering y) <= bound.
 Proof. 
   intros Hmcp. eapply mcp_in_evts_right in Hmcp.
   destruct Hmcp as [? _ Hxord]. unfold In in Hxord.
@@ -640,20 +688,20 @@ inferior to the minmal bound *)
 
 Lemma mcp_left_eq_lt_bound (ex: Execution) (bound: nat) (x y: Event):
   minimal_conflicting_pair ex bound x y ->
-  (numbering ex x) = bound \/ (numbering ex x) < bound.
+  (numbering x) = bound \/ (numbering x) < bound.
 Proof.
   intros Hmcp.
-  destruct (Compare_dec.lt_eq_lt_dec (numbering ex x) bound) as [[Hord|Hord]|Hord];
+  destruct (Compare_dec.lt_eq_lt_dec (numbering x) bound) as [[Hord|Hord]|Hord];
   [right;auto|left;auto|].
   apply mcp_left_le_bound in Hmcp. lia.
 Qed.
 
 Lemma mcp_right_eq_lt_bound (ex: Execution) (bound: nat) (x y: Event):
   minimal_conflicting_pair ex bound x y ->
-  (numbering ex y) = bound \/ (numbering ex y) < bound.
+  (numbering y) = bound \/ (numbering y) < bound.
 Proof.
   intros Hmcp.
-  destruct (Compare_dec.lt_eq_lt_dec (numbering ex y) bound) as [[Hord|Hord]|Hord];
+  destruct (Compare_dec.lt_eq_lt_dec (numbering y) bound) as [[Hord|Hord]|Hord];
   [right;auto|left;auto|].
   apply mcp_right_le_bound in Hmcp. lia.
 Qed.
@@ -678,16 +726,17 @@ pair with one of the events having the biggest numbering *)
 
 Lemma mcp_exists_ord (ex: Execution):
   expi ex ->
+  numbering_injective ex ->
   (exists bound j k, minimal_conflicting_pair ex bound j k /\
-                     (numbering ex j) < (numbering ex k)).
+                     (numbering j) < (numbering k)).
 Proof.
-  intros Hexpi.
+  intros Hexpi Hnuminj.
   destruct (mcp_exists _ Hexpi) as [b [j [k Hmcp]]].
-  destruct (Compare_dec.lt_eq_lt_dec (numbering ex j) (numbering ex k)) as
+  destruct (Compare_dec.lt_eq_lt_dec (numbering j) (numbering k)) as
   [[Hcomp|Hcomp]|Hcomp].
   - exists b, j, k. intuition auto.
   - exfalso. eapply mcp_irr.
-    apply numbering_injective_eq in Hcomp.
+    eapply numbering_injective_eq in Hcomp; eauto.
     rewrite Hcomp in Hmcp. eauto.
   - exists b, k, j. intuition auto.
     eapply mcp_is_sym. auto.
@@ -703,15 +752,17 @@ Proof.
   auto.
 Qed.
 
+(*
 (** In a valid execution, the set of events whose numbering in an execution 
 bounded by [n] is less or equal to a bound, is the same as the set of events
 whose numbering in the execution is less or equal to the same bound *)
 
 Lemma NLE_set_in_bound_ex_rew (ex: Execution) (b1 b2: nat):
   valid_exec ex ->
-  (fun x => b2 >= (numbering (bounded_exec ex b1) x)) =
-  (fun x => b2 >= (numbering ex x)).
+  (fun x => b2 >= (numbering x)) =
+  (fun x => b2 >= (numbering x)).
 Proof.
+  intuition auto.
   intros Hval.
   pose proof (bounded_exec_is_prefix _ b1 Hval) as Hpre.
   pose proof (numbering_pre_stable _ _ Hpre) as Hnumeq.
@@ -733,6 +784,7 @@ Proof.
   - rewrite Hnumeq in Hord; auto.
   - rewrite Hnumeq; auto.
 Qed.
+*)
 
 (** Bounding an execution already bounded by a smaller bound has no effect *)
 
@@ -743,8 +795,10 @@ Lemma double_bounding_rew (ex: Execution) (b1 b2: nat):
 Proof.
   intros Hval Hord.
   unfold bounded_exec at 1.
+  (*
   rewrite (NLE_in_bound_ex_rew _ b1 b2 Hval).
   rewrite (NLE_set_in_bound_ex_rew _ b1 b2 Hval).
+  *)
   rew bounded. unfold bounded_exec at 2.
   f_equal.
   - apply ext_set. intros x; split; intros H.
@@ -754,17 +808,17 @@ Proof.
     + split.
       * unfold bounded_exec. simpl. unfold In. auto.
       * destruct H as [y _ Hb1]. unfold_in. lia.
-  - rewrite <- (nle_double ex _ _ Hord) at 4.
-    rewrite <- (nle_double ex _ _ Hord) at 3.
+  - rewrite <- (nle_double _ _ Hord) at 4.
+    rewrite <- (nle_double _ _ Hord) at 3.
     kat_eq.
-  - rewrite <- (nle_double ex _ _ Hord) at 4.
-    rewrite <- (nle_double ex _ _ Hord) at 3.
+  - rewrite <- (nle_double _ _ Hord) at 4.
+    rewrite <- (nle_double _ _ Hord) at 3.
     kat_eq.
-  - rewrite <- (nle_double ex _ _ Hord) at 4.
-    rewrite <- (nle_double ex _ _ Hord) at 3.
+  - rewrite <- (nle_double _ _ Hord) at 4.
+    rewrite <- (nle_double _ _ Hord) at 3.
     kat_eq.
-  - rewrite <- (nle_double ex _ _ Hord) at 4.
-    rewrite <- (nle_double ex _ _ Hord) at 3.
+  - rewrite <- (nle_double _ _ Hord) at 4.
+    rewrite <- (nle_double _ _ Hord) at 3.
     kat_eq.
 Qed.
 
@@ -778,8 +832,10 @@ Lemma double_bounding_rew' (ex: Execution) (b1 b2: nat):
 Proof.
   intros Hval Hord.
   unfold bounded_exec at 1.
+  (*
   rewrite (NLE_in_bound_ex_rew _ b2 b1 Hval).
   rewrite (NLE_set_in_bound_ex_rew _ b2 b1 Hval).
+  *)
   rew bounded. unfold bounded_exec at 2.
   f_equal.
   - apply ext_set. intros x; split; intros H.
@@ -790,17 +846,17 @@ Proof.
       split; auto.
       split; auto.
       unfold_in; lia.
-  - rewrite <- (nle_double ex _ _ Hord) at 4.
-    rewrite <- (nle_double ex _ _ Hord) at 3.
+  - rewrite <- (nle_double _ _ Hord) at 4.
+    rewrite <- (nle_double _ _ Hord) at 3.
     kat_eq.
-  - rewrite <- (nle_double ex _ _ Hord) at 4.
-    rewrite <- (nle_double ex _ _ Hord) at 3.
+  - rewrite <- (nle_double _ _ Hord) at 4.
+    rewrite <- (nle_double _ _ Hord) at 3.
     kat_eq.
-  - rewrite <- (nle_double ex _ _ Hord) at 4.
-    rewrite <- (nle_double ex _ _ Hord) at 3.
+  - rewrite <- (nle_double _ _ Hord) at 4.
+    rewrite <- (nle_double _ _ Hord) at 3.
     kat_eq.
-  - rewrite <- (nle_double ex _ _ Hord) at 4.
-    rewrite <- (nle_double ex _ _ Hord) at 3.
+  - rewrite <- (nle_double _ _ Hord) at 4.
+    rewrite <- (nle_double _ _ Hord) at 3.
     kat_eq.
 Qed.
 
@@ -820,16 +876,10 @@ Proof.
     apply ext_set. intros x; split.
     + intros [y [H1 H2] H3]. split; unfold_in; auto.
     + intros [y H1 H2]. split; [split|]; unfold_in; auto.
-      erewrite numbering_pre_stable. eauto.
-      apply bounded_exec_is_prefix. auto.
-  - erewrite NLE_in_bound_ex_rew.
-    rew bounded. kat_eq. auto.
-  - erewrite NLE_in_bound_ex_rew.
-    rew bounded. kat_eq. auto.
-  - erewrite NLE_in_bound_ex_rew.
-    rew bounded. kat_eq. auto.
-  - erewrite NLE_in_bound_ex_rew.
-    rew bounded. kat_eq. auto.
+  - rew bounded. kat_eq.
+  - rew bounded. kat_eq.
+  - rew bounded. kat_eq.
+  - rew bounded. kat_eq.
 Qed.
 
 (** If a bound is the smallest conflicting bounding of an execution, it is the
@@ -868,12 +918,13 @@ two events *)
 
 Lemma bound_to_c_events (ex: Execution) (b:nat) (j k: Event):
   valid_exec ex ->
-  numbering ex j <= numbering ex k ->
-  numbering ex k < b ->
+  numbering_coherent ex ->
+  numbering j <= numbering k ->
+  numbering k < b ->
   pi (bounded_exec ex b) j k ->
-  pi (bounded_exec ex (numbering ex k)) j k.
+  pi (bounded_exec ex (numbering k)) j k.
 Proof.
-  intros Hval Hord Hord' [[[Hinj [Hink [Hw [Hdiff Hloc]]]] Hsc] Hbidir].
+  intros Hval Hnumco Hord Hord' [[[Hinj [Hink [Hw [Hdiff Hloc]]]] Hsc] Hbidir].
   repeat (apply conj); auto.
   - destruct ex. simpl. destruct Hinj as [z Hjevts Hinj]. split.
     + simpl in Hjevts. auto.
@@ -902,26 +953,27 @@ a bound, this bound cannot be the smallest conflicting bounding *)
 
 Lemma smallest_conflicting_bounding_conflict (ex: Execution) (j k: Event) (b: nat):
   valid_exec ex ->
-  numbering ex k < b ->
-  numbering ex j < b ->
+  numbering_coherent ex ->
+  numbering k < b ->
+  numbering j < b ->
   smallest_conflicting_bounding ex b ->
   pi (bounded_exec ex b) j k ->
   False.
 Proof.
-  intros Hval Hord1 Hord2 Hscb Hconf.
-  destruct (Compare_dec.lt_eq_lt_dec (numbering ex j) (numbering ex k)) as [[Hjlt|Hjeq]|Hjgt].
+  intros Hval Hnumco Hord1 Hord2 Hscb Hconf.
+  destruct (Compare_dec.lt_eq_lt_dec (numbering j) (numbering k)) as [[Hjlt|Hjeq]|Hjgt].
   - destruct Hscb as [_ Hsmallest].
-    assert (numbering ex k >= b).
+    assert (numbering k >= b).
     * apply Hsmallest. exists j, k.
       apply bound_to_c_events with b; auto. lia.
     * lia.
   - destruct Hscb as [_ Hsmallest].
-    assert (numbering ex k >= b).
+    assert (numbering k >= b).
     * apply Hsmallest. exists j, k.
       apply bound_to_c_events with b; auto. lia.
     * lia.
   - destruct Hscb as [_ Hsmallest].
-    assert (numbering ex j >= b).
+    assert (numbering j >= b).
     * apply Hsmallest. exists j, k.
       rewrite pi_sym. rewrite pi_sym in Hconf.
       apply bound_to_c_events with b; auto. lia.
@@ -933,19 +985,20 @@ conflicting events *)
 
 Theorem mcp_num_snd_evt (ex: Execution) (bound: nat) (j k: Event):
   valid_exec ex ->
+  numbering_coherent ex ->
   (minimal_conflicting_pair ex bound j k) ->
-  (max (numbering ex k) (numbering ex j) = bound).
+  (max (numbering k) (numbering j) = bound).
 Proof.
-  intros Hval [Hscb Hconf].
-  destruct (Compare_dec.lt_eq_lt_dec bound (numbering ex k)) as [[Hklt|Hkeq]|Hkgt].
+  intros Hval Hnumco [Hscb Hconf].
+  destruct (Compare_dec.lt_eq_lt_dec bound (numbering k)) as [[Hklt|Hkeq]|Hkgt].
   - destruct Hconf as [[[_ [? _]] _] _]. destruct ex. simpl in H.
     destruct H as [? ?]. unfold In in *. lia.
-  - destruct (Compare_dec.lt_eq_lt_dec (numbering ex j) (numbering ex k)) as [[Hjlt|Hjeq]|Hjgt].
+  - destruct (Compare_dec.lt_eq_lt_dec (numbering j) (numbering k)) as [[Hjlt|Hjeq]|Hjgt].
     + rewrite (max_rewrite _ _ Hjlt). auto.
     + rewrite Hjeq, PeanoNat.Nat.max_id. auto.
     + destruct Hconf as [[[? _] _] _].
       destruct ex. simpl in H. destruct H as [? ?]. unfold In in *. lia.
-  - destruct (Compare_dec.lt_eq_lt_dec (numbering ex j) (numbering ex k)) as [[Hjlt|Hjeq]|Hjgt].
+  - destruct (Compare_dec.lt_eq_lt_dec (numbering j) (numbering k)) as [[Hjlt|Hjeq]|Hjgt].
     + exfalso. 
       apply (smallest_conflicting_bounding_conflict ex j k bound); auto.
       lia.
@@ -953,7 +1006,7 @@ Proof.
       apply (smallest_conflicting_bounding_conflict ex j k bound); auto.
       lia.
     + rewrite (max_rewrite' _ _ Hjgt).
-      destruct (Compare_dec.lt_eq_lt_dec (numbering ex j) bound) as [[Hblt|Hbeq]|Hbgt].
+      destruct (Compare_dec.lt_eq_lt_dec (numbering j) bound) as [[Hblt|Hbeq]|Hbgt].
       * exfalso.
         apply (smallest_conflicting_bounding_conflict ex j k bound); auto.
       * auto.
@@ -963,13 +1016,12 @@ Qed.
 
 Lemma mcp_num_snd_evt_ord (ex: Execution) (bound: nat) (j k: Event):
   valid_exec ex ->
+  numbering_coherent ex ->
   (minimal_conflicting_pair ex bound j k) ->
-  (numbering ex k) > (numbering ex j) ->
-  numbering ex k = bound.
+  (numbering k) > (numbering j) ->
+  numbering k = bound.
 Proof.
-  intros Hval Hmcp Hord.
-  pose proof (mcp_num_snd_evt _ _ _ _ Hval Hmcp) as Hmax.
+  intros Hval Hnumco Hmcp Hord.
+  pose proof (mcp_num_snd_evt _ _ _ _ Hval Hnumco Hmcp) as Hmax.
   rewrite (max_rewrite _ _ Hord) in Hmax. auto.
 Qed.
-
-End NumberingPrefix.
