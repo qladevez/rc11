@@ -40,6 +40,12 @@ Ltac destruct_disjunction H :=
 
 Ltac splitall := (split;(try splitall)).
 
+(** ** Logic *)
+
+Lemma diff_inv {A:Type} (x y: A):
+  x <> y <-> y <> x.
+Proof. intuition auto. Qed.
+
 (** ** Natural numbers *)
 
 (** The greater or equal to relation is transitive *)
@@ -311,6 +317,11 @@ Ltac simp_cnv H := simpl in H; unfold hrel_cnv in H.
 
 (** ** Basic Lemmas *)
 
+Lemma in_id {A:Type} (x y: A):
+  In _ (id x) y -> x = y.
+Proof.
+  unfold In, id. auto.
+Qed.
 
 (** If not all elements are not related by a relation, two elements exists such
 that they are related by the relation *)
@@ -838,6 +849,10 @@ Lemma rtc_inv_dcmp6 {A:Type} (r: rlt A):
   r^* = 1 ⊔ r^+.
 Proof. kat_eq. Qed.
 
+Lemma rtc_inv_dcmp7 {A:Type} (r: rlt A):
+  r^+ = r⋅r^*.
+Proof. kat_eq. Qed.
+
 (** The transitive closure of a relation is included in the reflexive transitive
 closure of this relation *)
 
@@ -939,7 +954,25 @@ Lemma incl_rel_thm {A:Type} {r r' : rlt A} {x y: A}:
   r' x y.
 Proof.
   intros H1 H2.
-  apply H2 in H1; auto.
+  apply H2, H1.
+Qed.
+
+Lemma incl_not_rel_thm {A:Type} {r r': rlt A} {x y: A}:
+  ~(r' x y) ->
+  r ≦ r' ->
+  ~(r x y).
+Proof.
+  intros H Hincl Hnot.
+  apply H, Hincl, Hnot.
+Qed.
+
+Lemma not_rel_tc {A:Type} {r: rlt A} {x y: A}:
+  (forall s, ~(r x s)) ->
+  ~(r^+ x y).
+Proof.
+  intros H Hnot. rewrite tc_inv_dcmp2 in Hnot.
+  destruct Hnot as [z Hnot _].
+  eapply H. eauto.
 Qed.
 
 Ltac incl_rel_kat H := apply (incl_rel_thm H); kat.
@@ -1308,6 +1341,12 @@ Proof.
   repeat (apply conj); auto.
 Qed.
 
+Lemma simpl_trt_tleft {A:Type} (t1 t2: prop_set A) (r: rlt A) (x y: A):
+  ([t1] ⋅ r ⋅ [t2]) x y -> t1 x.
+Proof.
+  intros H. apply simpl_trt_hyp in H as [H _]. auto.
+Qed.
+
 Lemma simpl_trt_rel {A:Type} (t1 t2: prop_set A) (r: rlt A) (x y: A):
   ([t1] ⋅ r ⋅ [t2]) x y -> r x y.
 Proof.
@@ -1414,6 +1453,18 @@ Proof.
 Qed.
 
 End KatTests.
+
+Lemma test_i_union {A:Type} (s1 s2: Ensemble A):
+  [I (Union _ s1 s2)] = [I s1] ⊔ [I s2].
+Proof.
+  apply ext_rel, antisym.
+  - intros x y [Heq H].
+    apply in_union in H as [H|H];[left|right]; 
+    split; auto.
+  - intros x y [[H Heq]|[H Heq]]; 
+    split; auto;
+    [left|right]; auto.
+Qed.
 
 (** The transitive closure of a relation framed by two tests is included in the
 framing of the transitive closure of the relation by the two tests *)

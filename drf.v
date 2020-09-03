@@ -1499,10 +1499,13 @@ Qed.
 
 (** ** The first conflicting event is a read *)
 
-Definition sbrf_before_jk (ex: Execution) (bound: nat) (j k: Event) :=
-  fun e => (sb ex ⊔ rf (bounded_exec ex bound))^* e j \/ 
-           (sb ex ⊔ rf (bounded_exec ex bound))^* e k.
 
+
+(* I approched the sb-closed restriction and the addition of a new rf edge in 
+the second part of the proof seperatly, but it does not make sense. Keeping this
+for reference *)
+
+(*
 Definition sb_closed_restriction (ex res: Execution) (e: Ensemble Event) :=
   Included _ e (evts ex) /\
   (forall a b, In _ e b -> (sb ex) a b -> In _ e a) /\
@@ -1531,6 +1534,24 @@ Ltac inversion_res H :=
   let H6 := fresh "Hmo" in
   let H7 := fresh "Hrmw" in
   inversion H as [H1 [H2 [H3 [H4 [H5 [H6 H7]]]]]].
+
+Lemma numbering_coherent_sbres (ex res: Execution) (e: Ensemble Event):
+  numbering_coherent ex ->
+  sb_closed_restriction ex res e ->
+  numbering_coherent res.
+Proof.
+  intros Hnumco Hres. destruct_res Hres.
+  intros x y [Hxy|Hxy]; [rewrite Hsb in Hxy|rewrite Hrf in Hxy];
+  apply simpl_trt_rel in Hxy; apply Hnumco; [left|right]; auto.
+Qed.
+
+Lemma numbering_injective_sbres (ex res: Execution) (e: Ensemble Event):
+  numbering_injective ex ->
+  sb_closed_restriction ex res e ->
+  numbering_injective res.
+Proof.
+  intros Hnuminj Hres. split; intros H; apply Hnuminj; auto.
+Qed.
 
 Lemma num_in_sbrf_before_jk (ex: Execution) (bound: nat) (j k x: Event):
   numbering_coherent ex ->
@@ -1770,6 +1791,39 @@ Proof.
   - eauto.
 Qed.
 
+Lemma sb_res_exists (ex: Execution) (bound: nat) (j k: Event):
+  valid_exec ex ->
+  minimal_conflicting_pair ex bound j k ->
+  exists res, sb_closed_restriction ex res (sbrf_before_jk ex bound j k).
+Proof.
+  intros Hval Hmcp.
+  pose (sbrf_before_jk ex bound j k) as e.
+  exists (mkex e
+               ([I e]⋅sb ex⋅[I e])
+               ([I e]⋅rmw ex⋅[I e])
+               ([I e]⋅rf ex⋅[I e])
+               ([I e]⋅mo ex⋅[I e])).
+  unfold sb_closed_restriction.
+  repeat (apply conj); auto.
+  - intros x [H|H].
+    + eapply rtc_sbrf_in_l.
+      * auto.
+      * eapply mcp_in_evts_left2. eauto.
+      * apply (incl_rel_thm H). rew bounded. kat.
+    + eapply rtc_sbrf_in_l.
+      * auto.
+      * eapply mcp_in_evts_right2. eauto.
+      * apply (incl_rel_thm H). rew bounded. kat.
+  - intros a b [Hb|Hb] Hsb;[left|right].
+    + apply rtc_inv_dcmp2. exists b.
+      * incl_rel_kat Hsb.
+      * auto.
+    + apply rtc_inv_dcmp2. exists b.
+      * incl_rel_kat Hsb.
+      * auto.
+Qed.
+
+(*
 Lemma prefix_res_ex (ex res: Execution) (bound: nat) (j k: Event):
   complete_exec ex ->
   rc11_consistent ex ->
@@ -1789,7 +1843,7 @@ Proof.
     destruct Hb as [Hb|Hb].
     + left. apply rtc_inv_dcmp2. exists b; auto.
       destruct Hsbrf; [left|right]; auto.
-      assert ((sb ex ⊔ rf (bounded_exec ex bound))^* ≦ (sb ex ⊔ rf ex)^*) as Hgen.
+      assert ((sb ex ⊔ rf (bounded_exec ex bound))^* ≦ (sb ex ⊔ rf ex)^* ) as Hgen.
       { rew bounded. kat. }
       apply Hgen in Hb. apply (numbering_coherent_rtc _ _ _ Hnumco) in Hb.
       rew bounded. apply mcp_left_le_bound in Hmcp as Hj.
@@ -1797,7 +1851,7 @@ Proof.
       apply (rf_num_ord _ _ _ Hnumco) in H as Hrford. solve_trt_bounds.
     + right. apply rtc_inv_dcmp2. exists b; auto.
       destruct Hsbrf; [left|right]; auto.
-      assert ((sb ex ⊔ rf (bounded_exec ex bound))^* ≦ (sb ex ⊔ rf ex)^*) as Hgen.
+      assert ((sb ex ⊔ rf (bounded_exec ex bound))^* ≦ (sb ex ⊔ rf ex)^* ) as Hgen.
       { rew bounded. kat. }
       apply Hgen in Hb. apply (numbering_coherent_rtc _ _ _ Hnumco) in Hb.
       rew bounded. apply mcp_right_le_bound in Hmcp.
@@ -1807,6 +1861,7 @@ Proof.
   - rewrite Hmo, Hevts. auto.
   - rewrite Hrmw, Hevts. auto.
 Qed.
+*)
 
 Lemma pi_in_res (ex res: Execution) (bound: nat) (j k: Event):
   pi (bounded_exec ex bound) j k ->
@@ -1855,6 +1910,7 @@ Proof.
   apply (pi_in_res _ _ _ _ _ Hpi Hres Hpre).
 Qed.
 
+(*
 Lemma mcp_in_res (ex res: Execution) (bound: nat) (j k: Event):
   complete_exec ex ->
   rc11_consistent ex ->
@@ -1873,7 +1929,51 @@ Proof.
     apply bounding_of_prefix. eapply prefix_res_ex; eauto.
   - eapply pi_in_res; eauto. eapply prefix_res_ex; eauto.
 Qed.
+*)
 
+(*
+Lemma res_reads_ranrf (ex res: Execution) (bound: nat) (j k: Event):
+  complete_exec ex ->
+  numbering_coherent ex ->
+  minimal_conflicting_pair ex bound j k ->
+  numbering k > numbering j ->
+  sb_closed_restriction ex res (sbrf_before_jk ex bound j k) ->
+  Included _ (reads (evts res)) (ran (rf res)).
+Proof.
+  intros Hcomp Hnumco Hmcp Hord Hres. inversion Hcomp as [Hval _]. destruct_res Hres.
+  rewrite Hevts, Hrf. intros x [H Hxr].
+  assert (In _ (ran (rf ex)) x) as [y Hrel].
+  { destruct Hcomp as [_ Hcomp].
+    apply Hcomp. apply conj; auto. }
+  assert (numbering y < numbering x) as Hord2.
+  { eapply Hnumco. right. auto. }
+  destruct H as [H|H].
+  - exists y, x.
+    + exists y; auto. split; auto.
+      left.
+      assert ((sb ex ⊔ rf ex)^* x j) as Hxj.
+      { rew bounded in H; incl_rel_kat H. }
+      eapply (numbering_coherent_rtc _ _ _ Hnumco) in Hxj.
+      rewrite (mcp_num_snd_evt_ord _ _ _ _ Hval Hnumco Hmcp Hord) in Hord.
+      eapply rtc_inv_dcmp2. exists x; auto.
+      rew bounded. right. solve_trt_bounds.
+    + split; auto. left; auto.
+  - 
+  exists y, x.
+  - assert (numbering y < numbering x) as Hord2.
+    { eapply Hnumco. right. auto. }
+    exists y; auto. split; auto.
+    destruct H as [H|H]; [left|right].
+    + assert ((sb ex ⊔ rf ex)^* x j) as Hxj.
+      { rew bounded in H; incl_rel_kat H. }
+      eapply (numbering_coherent_rtc _ _ _ Hnumco) in Hxj.
+      rewrite (mcp_num_snd_evt_ord _ _ _ _ Hval Hnumco Hmcp Hord) in Hord.
+      eapply rtc_inv_dcmp2. exists x; auto.
+      rew bounded. right. solve_trt_bounds.
+    + exists x.
+      * rew bounded. right.
+
+  
 Lemma res_complete (ex res: Execution) (bound: nat) (j k: Event):
   complete_exec ex ->
   rc11_consistent ex ->
@@ -1884,10 +1984,12 @@ Lemma res_complete (ex res: Execution) (bound: nat) (j k: Event):
   complete_exec res.
 Proof.
   intros Hcomp Hrc11 Hnumco Hmcp Hord Hres.
-  eapply prefix_complete.
-  - eauto.
-  - eapply prefix_res_ex; eauto.
+  split.
+  - eapply sb_closed_res_valid; destruct Hcomp; eauto.
+  - intros 
 Qed.
+
+*)
 
 Lemma res_of_bound (ex res: Execution) (bound: nat) (e: Ensemble Event):
   numbering_coherent ex ->
@@ -1975,6 +2077,7 @@ Proof.
     split; auto.
 Qed.
 
+(*
 Lemma prefix_res_bminone (ex res: Execution) (bound: nat) (j k: Event):
   complete_exec ex ->
   rc11_consistent ex ->
@@ -2036,6 +2139,7 @@ Proof.
     + kat.
     + rewrite <-(NLE_bound_min_one bound). kat.
 Qed.
+*)
 
 (** We chan the read event [k] to a new read event [n] that now reads its value
 from the write event [c] *)
@@ -2118,6 +2222,15 @@ Proof.
   - rewrite Hrf in Hxy. destruct Hxy as [Hxy|[Hx Hy]].
     * apply simpl_trt_rel in Hxy. apply Hnumco. right. auto.
     * rewrite Hx, Hy, Hn. simpl. lia.
+Qed.
+
+Lemma change_val_numinj (ex1 ex2: Execution) (j k c n: Event) (bound: nat) (l: Loc) (v: Val):
+  numbering_injective ex1 ->
+  change_val_read_k ex1 ex2 k c n l v ->
+  numbering_injective ex2.
+Proof.
+  intros Hnuminj Hchval.
+  split; intros H; apply Hnuminj; auto.
 Qed.
 
 Lemma change_val_valid (ex1 ex2: Execution) (j k c n: Event) (bound: nat) (l: Loc) (v: Val):
@@ -2572,6 +2685,633 @@ Proof.
     + destruct Hcomp. eauto using bounded_is_valid.
 Qed.
 
+Definition sb_closed_restriction (ex res: Execution) (e: Ensemble Event) :=
+  Included _ e (evts ex) /\
+  (forall a b, In _ e b -> (sb ex) a b -> In _ e a) /\
+  evts res = e /\
+  sb res = [I e]⋅sb ex⋅[I e] /\
+  rf res = [I e]⋅rf ex⋅[I e] /\
+  mo res = [I e]⋅mo ex⋅[I e] /\
+  rmw res = [I e]⋅rmw ex⋅[I e].
+
+Ltac destruct_res H :=
+  let H1 := fresh "Hinc" in
+  let H2 := fresh "Hclo" in
+  let H3 := fresh "Hevts" in
+  let H4 := fresh "Hsb" in
+  let H5 := fresh "Hrf" in
+  let H6 := fresh "Hmo" in
+  let H7 := fresh "Hrmw" in
+  destruct H as [H1 [H2 [H3 [H4 [H5 [H6 H7]]]]]].
+
+Ltac inversion_res H :=
+  let H1 := fresh "Hinc" in
+  let H2 := fresh "Hclo" in
+  let H3 := fresh "Hevts" in
+  let H4 := fresh "Hsb" in
+  let H5 := fresh "Hrf" in
+  let H6 := fresh "Hmo" in
+  let H7 := fresh "Hrmw" in
+  inversion H as [H1 [H2 [H3 [H4 [H5 [H6 H7]]]]]].
+
+Definition change_val_read_k (ex1 ex2: Execution) (k c n: Event) (l: Loc) (v: Val) :=
+  is_read k /\
+  is_write c /\
+  In _ (evts ex1) k /\
+  In _ (evts ex1) c /\
+  numbering c < numbering k /\
+  Some l = get_loc k /\
+  Some l = get_loc c /\
+  Some v = get_val c /\
+  n = Read (numbering k) (get_mode k) l v /\
+  evts ex2 = Union _ (evts (bounded_exec ex1 ((numbering k)-1)))
+                     (fun x => x = n) /\
+  sb ex2 = (sb (bounded_exec ex1 ((numbering k)-1))) ⊔
+           (fun x y => (sb ex1) x k /\ y = n) /\
+  rmw ex2 = rmw (bounded_exec ex1 ((numbering k)-1)) /\
+  rf ex2 = (rf (bounded_exec ex1 ((numbering k)-1))) ⊔
+           (fun x y => x = c /\ y = n) /\
+  mo ex2 = mo (bounded_exec ex1 ((numbering k)-1)).
+*)
+
+Definition sbrf_before_jk (ex: Execution) (bound: nat) (j k: Event) :=
+  fun e => (sb ex ⊔ rf (bounded_exec ex (bound-1)))^* e j \/ 
+           (sb ex ⊔ rf (bounded_exec ex (bound-1)))^* e k.
+
+Lemma sbrf_minone_sbrf (ex: Execution) (bound: nat):
+  (sb ex ⊔ rf (bounded_exec ex (bound-1))) ≦ (sb ex ⊔ rf ex).
+Proof. rew bounded. kat. Qed.
+
+Lemma sbrf_minone_sbrf_rtc (ex: Execution) (bound: nat):
+  (sb ex ⊔ rf (bounded_exec ex (bound-1)))^* ≦ (sb ex ⊔ rf ex)^*.
+Proof. rew bounded. kat. Qed.
+
+Lemma sbrf_before_jk_num (ex: Execution) (bound: nat) (x j k: Event):
+  numbering_coherent ex ->
+  minimal_conflicting_pair ex bound j k ->
+  numbering k > numbering j ->
+  In _ (sbrf_before_jk ex bound j k) x ->
+  (numbering x < numbering k) \/ x = k.
+Proof.
+  intros Hnumco Hmcp Hord [Hin|Hin].
+  - apply sbrf_minone_sbrf_rtc in Hin.
+    left. eapply (numbering_coherent_rtc _ _ _ Hnumco) in Hin. lia.
+  - apply sbrf_minone_sbrf_rtc in Hin.
+    rewrite rtc_inv_dcmp6 in Hin. destruct Hin as [Hin|Hin].
+    + simpl in Hin. right. auto.
+    + eapply (numbering_coherent_tc _ _ _ Hnumco) in Hin. lia.
+Qed.
+
+Lemma sbrf_before_jk_bounded (ex: Execution) (bound: nat) (j k x: Event):
+  valid_exec ex ->
+  numbering_coherent ex ->
+  minimal_conflicting_pair ex bound j k -> 
+  numbering k > numbering j ->
+  In _ (sbrf_before_jk ex bound j k) x ->
+  In _ (evts (bounded_exec ex bound)) x.
+Proof.
+  intros Hval Hnumco Hmcp Hord Hin.
+  pose proof (mcp_num_snd_evt_ord _ _ _ _ Hval Hnumco Hmcp Hord) as Hk.
+  destruct Hin as [Hin|Hin].
+  - apply sbrf_minone_sbrf_rtc in Hin.
+    split.
+    + eapply rtc_sbrf_in_l; eauto.
+      eapply mcp_in_evts_left2; eauto.
+    + apply (numbering_coherent_rtc _ _ _ Hnumco) in Hin.
+      unfold In. lia.
+  - apply sbrf_minone_sbrf_rtc in Hin.
+    split.
+    + eapply rtc_sbrf_in_l; eauto.
+      eapply mcp_in_evts_right2; eauto.
+    + apply (numbering_coherent_rtc _ _ _ Hnumco) in Hin.
+      unfold In. lia.
+Qed.
+
+Lemma sbrf_before_jk_evts (ex: Execution) (bound: nat) (j k x: Event):
+  valid_exec ex ->
+  minimal_conflicting_pair ex bound j k ->
+  In _ (sbrf_before_jk ex bound j k) x ->
+  In _ (evts ex) x.
+Proof.
+  intros Hval Hmcp Hin.
+  destruct Hin as [Hin|Hin];
+  rewrite rtc_inv_dcmp6 in Hin;
+  destruct Hin as [Hin|Hin].
+  - simpl in Hin. rewrite Hin. eapply mcp_in_evts_left2. eauto.
+  - rewrite rtc_inv_dcmp7 in Hin. destruct Hin as [z Hrel _].
+    apply sbrf_minone_sbrf in Hrel as [Hrel|Hrel].
+    + eapply sb_orig_evts; eauto.
+    + eapply rf_orig_evts; eauto.
+  - simpl in Hin. rewrite Hin. eapply mcp_in_evts_right2. eauto.
+  - rewrite rtc_inv_dcmp7 in Hin. destruct Hin as [z Hrel _].
+    apply sbrf_minone_sbrf in Hrel as [Hrel|Hrel].
+    + eapply sb_orig_evts; eauto.
+    + eapply rf_orig_evts; eauto.
+Qed.
+
+Lemma sbrf_before_jk_sb (ex: Execution) (bound: nat) (j k e1 e2: Event):
+  (I (sbrf_before_jk ex bound j k)) e2 ->
+  sb ex e1 e2 ->
+  (I (sbrf_before_jk ex bound j k)) e1.
+Proof.
+  intros [Hrel|Hrel] Hsb; [left|right];
+  apply rtc_inv_dcmp2; exists e2.
+  - incl_rel_kat Hsb.
+  - incl_rel_kat Hrel.
+  - incl_rel_kat Hsb.
+  - incl_rel_kat Hrel.
+Qed.
+
+(** When we have a smallest conflicting bounding with [j] and [k] the conflicting 
+events, and k is a read we can:
+
+1. Restrict the events to those before [j] or [k] in [(sb ⊔ (NLE (k-1);rf;(NLE (k-1))))^*]
+2. Add a new rf-edge between an event still in the execution and [k]
+
+This modification preserves the completeness of the execution, and the coherence
+and injectivity of the numbering *)
+
+Definition res_chval_k (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val) :=
+  let n := Read (numbering k) (get_mode k) l v in
+  let evts_int := sbrf_before_jk ex bound j k in
+  let sb_int := [I evts_int]⋅sb ex⋅[I evts_int] in
+  let rf_int := [I evts_int]⋅rf ex⋅[I evts_int] in
+  In _ evts_int c /\
+  is_write c /\
+  is_read k /\
+  evts res = Union _  evts_int (id n) /\
+  sb res = sb_int ⊔ (fun x y => sb_int x k /\ y = n) /\
+  rmw res = [I evts_int]⋅rmw ex⋅[I evts_int]/\
+  rf res =  rf_int ⊔ (fun x y => x = c /\ y = n)/\
+  mo res = [I evts_int]⋅mo ex⋅[I evts_int].
+
+Ltac destruct_res_chval H :=
+  let H1 := fresh "Hinc" in
+  let H2 := fresh "Hcw" in
+  let H3 := fresh "Hkr" in
+  let H4 := fresh "Hevts" in
+  let H5 := fresh "Hsb" in
+  let H6 := fresh "Hrmw" in
+  let H7 := fresh "Hrf" in
+  let H8 := fresh "Hmo" in
+  destruct H as [H1 [H2 [H3 [H4 [H5 [H6 [H7 H8]]]]]]].
+
+Ltac inversion_res_chval H :=
+  let H1 := fresh "Hinc" in
+  let H2 := fresh "Hcw" in
+  let H3 := fresh "Hkr" in
+  let H4 := fresh "Hevts" in
+  let H5 := fresh "Hsb" in
+  let H6 := fresh "Hrmw" in
+  let H7 := fresh "Hrf" in
+  let H8 := fresh "Hmo" in
+  inversion H as [H1 [H2 [H3 [H4 [H5 [H6 [H7 H8]]]]]]].
+
+Lemma numco_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  numbering_coherent ex ->
+  minimal_conflicting_pair ex bound j k ->
+  numbering k > numbering j ->
+  res_chval_k ex res bound j k c n l v ->
+  numbering_coherent res.
+Proof.
+  intros Hnumco Hmcp Hord Hres. destruct_res_chval Hres.
+  intros x y [Hxy|Hxy];[rewrite Hsb in Hxy|rewrite Hrf in Hxy];
+  destruct Hxy as [Hxy|Hxy].
+  - apply simpl_trt_rel in Hxy. apply Hnumco. left. auto.
+  - destruct Hxy as [Hxk Hy]. rewrite Hy. simpl.
+    apply simpl_trt_rel in Hxk. apply Hnumco. left. auto.
+  - apply simpl_trt_rel in Hxy. apply Hnumco. right. auto.
+  - destruct Hxy as [Hxc Hy]. rewrite Hy. simpl.
+    apply (sbrf_before_jk_num _ _ _ _ _ Hnumco Hmcp Hord) in Hinc.
+    destruct Hinc as [Hinc|Hinc].
+    + rewrite Hxc. lia.
+    + rewrite Hinc in Hcw.
+      destruct k; unfold is_write in Hcw; unfold is_read in Hkr; intuition auto.
+Qed.
+
+Lemma numinj_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  numbering_injective ex ->
+  res_chval_k ex res bound j k c n l v ->
+  numbering_injective res.
+Proof.
+  intros Hnuminj Hres. split; apply Hnuminj; auto.
+Qed.
+
+Lemma evts_v_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  valid_exec ex ->
+  numbering_injective ex ->
+  minimal_conflicting_pair ex bound j k ->
+  res_chval_k ex res bound j k c n l v ->
+  valid_evts (evts res).
+Proof.
+  intros Hval Hnuminj Hmcp Hres. destruct_res_chval Hres.
+  split.
+  - inverse_val_exec Hval. destruct Hevts_v as [H _].
+    intros e1 e2 Hine1 Hine2. rewrite Hevts in Hine1, Hine2.
+    apply in_union in Hine1 as [Hine1|Hine1];
+    apply in_union in Hine2 as [Hine2|Hine2].
+    + apply (sbrf_before_jk_evts _ _ _ _ _ Hval Hmcp) in Hine1.
+      apply (sbrf_before_jk_evts _ _ _ _ _ Hval Hmcp) in Hine2.
+      apply H; auto.
+    + apply (sbrf_before_jk_evts _ _ _ _ _ Hval Hmcp) in Hine1.
+      apply in_id in Hine2.
+      pose proof (mcp_in_evts_right2 _ _ _ _ Hmcp) as Hink.
+      specialize (H _ _ Hine1 Hink). destruct H as [H|H].
+      * left. rewrite <-Hine2. simpl. apply H.
+      * assert (e2 = k) as He2k. 
+        { eapply (numbering_injective_eq _ _ _ Hnuminj).
+          rewrite <-Hine2. simpl; auto. }
+        right. congruence.
+    + apply in_id in Hine1.
+      apply (sbrf_before_jk_evts _ _ _ _ _ Hval Hmcp) in Hine2.
+      pose proof (mcp_in_evts_right2 _ _ _ _ Hmcp) as Hink.
+      specialize (H _ _ Hine2 Hink). destruct H as [H|H].
+      * left. rewrite <-Hine1. simpl. intros ?. auto.
+      * assert (e1 = k) as He1k.
+        { eapply (numbering_injective_eq _ _ _ Hnuminj).
+          rewrite <-Hine1. simpl; auto. }
+        right. congruence.
+    + apply in_id in Hine1. apply in_id in Hine2.
+      right. eapply (numbering_injective_eq _ _ _ Hnuminj).
+      rewrite <-Hine1, <-Hine2. congruence.
+  - inverse_val_exec Hval. destruct Hevts_v as [_ H].
+    intros e Hin. rewrite Hevts in Hin.
+    apply in_union in Hin as [Hin|Hin].
+    + apply (sbrf_before_jk_evts _ _ _ _ _ Hval Hmcp) in Hin.
+      apply H. auto.
+    + apply in_id in Hin. rewrite <-Hin. simpl.
+      pose proof (mcp_in_evts_right2 _ _ _ _ Hmcp) as Hink.
+      apply H in Hink. destruct k; auto;
+      unfold is_read in Hkr; intuition auto.
+Qed.
+
+Lemma sb_po_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  partial_order (sb ex) (evts ex) ->
+  numbering_injective ex ->
+  res_chval_k ex res bound j k c n l v ->
+  partial_order (sb res) (evts res).
+Proof.
+  intros [Hsbin [Hsbt Hsbirr]] Hnuminj Hres.
+  destruct_res_chval Hres.
+  split;[|split].
+  - rewrite Hevts, Hsb. apply ext_rel, antisym.
+    + intros x y [H|[H Heq]].
+      * rewrite test_i_union. incl_rel_kat H.
+      * { exists y.
+          - exists x.
+            + split; auto. left. apply simpl_trt_tleft in H. auto.
+            + right; split; auto.
+          - split. auto. right. rewrite Heq. unfold In, id. simpl. auto.
+        }
+    + intros x y H. incl_rel_kat H.
+  - intros x y [z Hsb1 Hsb2]. rewrite Hsb in Hsb1, Hsb2. rewrite Hsb.
+    destruct Hsb1 as [Hsb1|[Hsb1 Heq1]]; destruct Hsb2 as [Hsb2|[Hsb2 Heq2]].
+    + left. simpl_trt.
+      * apply simpl_trt_tleft in Hsb1. auto.
+      * apply simpl_trt_rel in Hsb1. apply simpl_trt_rel in Hsb2.
+        apply Hsbt. exists z; auto.
+      * apply simpl_trt_tright in Hsb2. auto.
+    + right. split; auto. simpl_trt.
+      * apply simpl_trt_tleft in Hsb1. auto.
+      * apply simpl_trt_rel in Hsb1. apply simpl_trt_rel in Hsb2.
+        apply Hsbt. exists z; auto.
+      * apply simpl_trt_tright in Hsb2. auto.
+    + assert (z = k) as Hzk.
+      { apply (numbering_injective_eq _ _ _ Hnuminj). rewrite Heq1. auto. }
+      rewrite <-Hzk in Hsb1 at 3. left. simpl_trt.
+      * apply simpl_trt_tleft in Hsb1. auto.
+      * apply simpl_trt_rel in Hsb1. apply simpl_trt_rel in Hsb2.
+        apply Hsbt. exists z; auto.
+      * apply simpl_trt_tright in Hsb2. auto.
+    + assert (y = k) as Hyk.
+      { apply (numbering_injective_eq _ _ _ Hnuminj). rewrite Heq2. auto. }
+      rewrite <-Hyk in Hsb1 at 3. left. auto.
+  - intros x H. rewrite Hsb in H. destruct H as [H|[H Heq]].
+    + eapply Hsbirr. eapply simpl_trt_rel. eauto.
+    + assert (x = k) as Hxk.
+      { apply (numbering_injective_eq _ _ _ Hnuminj). rewrite Heq. auto. }
+      rewrite Hxk in H. eapply Hsbirr. eapply simpl_trt_rel. eauto.
+Qed.
+
+
+Lemma sb_tot_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  valid_exec ex ->
+  numbering_coherent ex ->
+  numbering_injective ex ->
+  minimal_conflicting_pair ex bound j k ->
+  numbering k > numbering j ->
+  total_rel (sb ex) (evts ex) ->
+  res_chval_k ex res bound j k c n l v ->
+  total_rel (sb res) (evts res).
+Proof.
+  intros Hval Hnumco Hnuminj Hmcp Hord Htot Hres x y Hdiff Hinx Hiny.
+  destruct_res_chval Hres. rewrite Hevts in Hinx, Hiny.
+  apply in_union in Hinx as [Hinx|Hinx];
+  apply in_union in Hiny as [Hiny|Hiny].
+  - eapply (sbrf_before_jk_evts _ _ _ _ _ Hval Hmcp) in Hinx as Hinx2.
+    eapply (sbrf_before_jk_evts _ _ _ _ _ Hval Hmcp) in Hiny as Hiny2.
+    destruct (Htot _ _ Hdiff Hinx2 Hiny2) as [H|H].
+    + left. rewrite Hsb. left. simpl_trt. auto.
+    + right. rewrite Hsb. left. simpl_trt. auto.
+  - eapply (sbrf_before_jk_evts _ _ _ _ _ Hval Hmcp) in Hinx as Hinx2.
+    eapply (mcp_in_evts_right2 _ _ _ _) in Hmcp as Hxevts.
+    apply in_id in Hiny.
+    assert (y = k) as Hyk.
+    { apply (numbering_injective_eq _ _ _ Hnuminj).
+      rewrite <-Hiny. auto. }
+    rewrite Hyk in Hdiff.
+    destruct (Htot _ _ Hdiff Hinx2 Hxevts).
+    + left. rewrite Hsb. right. split; auto. simpl_trt. 
+      * auto.
+      * unfold sbrf_before_jk. right. apply one_incl_rtc; simpl; auto.
+    + apply (sb_num_ord _ _ _ Hnumco) in H.
+      destruct (sbrf_before_jk_num _ _ _ _ _ Hnumco Hmcp Hord Hinx) as [H'|H'].
+      * lia.
+      * destruct Hdiff. auto.
+  - eapply (sbrf_before_jk_evts _ _ _ _ _ Hval Hmcp) in Hiny as Hiny2.
+    eapply (mcp_in_evts_right2 _ _ _ _) in Hmcp as Hxevts.
+    apply in_id in Hinx.
+    assert (x = k) as Hxk.
+    { apply (numbering_injective_eq _ _ _ Hnuminj).
+      rewrite <-Hinx. auto. }
+    rewrite Hxk in Hdiff. apply diff_inv in Hdiff.
+    destruct (Htot _ _ Hdiff Hiny2 Hxevts).
+    + right. rewrite Hsb. right. split; auto. simpl_trt. 
+      * auto.
+      * unfold sbrf_before_jk. right. apply one_incl_rtc; simpl; auto.
+    + apply (sb_num_ord _ _ _ Hnumco) in H.
+      destruct (sbrf_before_jk_num _ _ _ _ _ Hnumco Hmcp Hord Hiny) as [H'|H'].
+      * lia.
+      * destruct Hdiff. auto.
+  - eapply Hnuminj in Hdiff.
+    apply in_id in Hinx. apply in_id in Hiny.
+    rewrite <-Hinx, <-Hiny in Hdiff. simpl in Hdiff. intuition auto.
+Qed.
+
+Lemma sb_lso_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  valid_exec ex ->
+  numbering_coherent ex ->
+  numbering_injective ex ->
+  minimal_conflicting_pair ex bound j k ->
+  numbering k > numbering j ->
+  linear_strict_order (sb ex) (evts ex) ->
+  res_chval_k ex res bound j k c n l v ->
+  linear_strict_order (sb res) (evts res).
+Proof.
+  intros Hval Hnumco Hnuminj Hmcp Hord [Hpo Htot] Hres. apply conj.
+  - eapply sb_po_res_chval; eauto.
+  - eapply sb_tot_res_chval; eauto.
+Qed.
+
+Lemma sb_v_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  valid_exec ex ->
+  numbering_coherent ex ->
+  numbering_injective ex ->
+  minimal_conflicting_pair ex bound j k ->
+  numbering k > numbering j ->
+  res_chval_k ex res bound j k c n l v ->
+  valid_sb (evts res) (sb res).
+Proof.
+  intros Hval Hnumco Hnuminj Hmcp Hord Hres.
+  inversion Hval as [_ [Hsb_v _]].
+  inversion_res_chval Hres.
+  destruct Hsb_v as [Hlso Hsbinit]. split.
+  - eapply sb_lso_res_chval; eauto.
+  - intros l2. destruct (Hsbinit l2) as [e [H1 [H2 [H3 H4]]]]. exists e.
+    split;[|split;[|split]]; auto.
+    + intros Hnot. apply H3. rewrite Hsb in Hnot.
+      destruct Hnot as [z [Hrel|[Hrel Heq]]].
+      * exists z. apply simpl_trt_rel in Hrel. auto.
+      * assert (e = k) as Hek.
+        { apply (numbering_injective_eq _ _ _ Hnuminj).
+          rewrite Heq. auto. }
+        rewrite <-Hek in Hrel. exists z. apply simpl_trt_rel in Hrel.
+        auto.
+    + intros e' Hran. destruct Hran as [z Hran]. rewrite Hsb in Hran.
+      destruct Hran as [Hran|[Hran Heq]].
+      * assert (sb ex e e').
+        { apply H4. exists z. eapply simpl_trt_rel. eauto. }
+        rewrite Hsb. left. 
+        { simpl_trt.
+          - eapply sbrf_before_jk_sb; [|eauto].
+            eapply simpl_trt_tright. eauto.
+          - auto.
+          - eapply simpl_trt_tright. eauto. }
+      * assert (e' = k) as He'k.
+        { apply (numbering_injective_eq _ _ _ Hnuminj).
+          rewrite Heq. auto. }
+        assert (sb ex e e').
+        { apply H4. exists z. rewrite <-He'k in Hran at 3. eapply simpl_trt_rel. eauto. }
+        rewrite Hsb. right. split; auto. 
+        { simpl_trt.
+          - eapply sbrf_before_jk_sb. rewrite <-He'k in Hran at 3. 
+            eapply simpl_trt_tright. eauto. auto.
+          - rewrite <-He'k. eapply H4. rewrite He'k. exists z. 
+            eapply simpl_trt_rel. eauto.
+          - right. eapply one_incl_rtc. simpl; auto. }
+Qed.
+
+Lemma imm_sb_res_chval (ex res: Execution) (bound: nat) (j k c n r w: Event) (l: Loc) (v: Val):
+  imm (sb ex) r w ->
+  numbering_injective ex ->
+  res_chval_k ex res bound j k c n l v ->
+  (I (sbrf_before_jk ex bound j k)) r ->
+  (I (sbrf_before_jk ex bound j k)) w ->
+  imm (sb res) r w.
+Proof.
+  intros [Hrw Himm] Hnuminj Hres Hr Hw. destruct_res_chval Hres.
+  split.
+  - rewrite Hsb. left. simpl_trt. auto.
+  - intros d Hdw. rewrite Hsb in Hdw.
+    destruct Hdw as [Hdw|[Hdw Heq]].
+    + assert (I (sbrf_before_jk ex bound j k) d) as Hd.
+      { eapply sbrf_before_jk_sb; eauto.
+        eapply simpl_trt_rel; eauto. }
+      apply simpl_trt_rel in Hdw as Hrel.
+      apply Himm in Hrel as [H1 H2]. split.
+      * { destruct H1 as [H1|H1].
+          - left. rewrite Hsb. left. simpl_trt. auto.
+          - right. auto. }
+      * intros g Hrg. rewrite Hsb in Hrg.
+        { destruct Hrg as [Hrg|[Hrk Heq]].
+          - apply simpl_trt_hyp in Hrg as [Hleft [Hrel Hright]].
+            generalize (H2 _ Hrel). intros H3.
+            destruct H3 as [H3|H3].
+            + left. rewrite Hsb. left. simpl_trt. auto.
+            + right. auto.
+          - assert (g = k) as Hgk.
+            { eapply (numbering_injective_eq _ _ _ Hnuminj). rewrite Heq. auto. }
+            rewrite Hgk.
+            apply simpl_trt_hyp in Hrk as [Hleft [Hrel Hright]].
+            generalize (H2 _ Hrel). intros H3.
+            destruct H3 as [H3|H3].
+            + left. rewrite Hsb. left. simpl_trt. auto.
+            + right. auto.
+        }
+    + assert (w = k) as Hwk.
+      { eapply (numbering_injective_eq _ _ _ Hnuminj). rewrite Heq. auto. }
+      split.
+      * apply simpl_trt_hyp in Hdw as [Hleft [Hrel Hright]].
+        rewrite <-Hwk in Hrel.
+        apply Himm in Hrel as [H1 _].
+        { destruct H1 as [H1|H1].
+          - left. rewrite Hsb. left. simpl_trt. auto.
+          - right. auto. }
+      * intros g Hrg. rewrite <-Hwk in Hdw at 3.
+        apply simpl_trt_hyp in Hdw as [Hleft [Hrel Hright]].
+        apply Himm in Hrel as [_ H2].
+        rewrite Hsb in Hrg.
+        { destruct Hrg as [Hrg|[Hrg Heq2]].
+          - apply simpl_trt_hyp in Hrg as [H3 [H4 H5]].
+            generalize (H2 _ H4). intros H6.
+            destruct H6 as [H6|H6].
+            + left. rewrite Hsb. left. simpl_trt. auto.
+            + right. auto.
+          - assert (g = k) as Hgk.
+            { eapply (numbering_injective_eq _ _ _ Hnuminj). rewrite Heq2. auto. }
+            rewrite Hgk.
+            apply simpl_trt_hyp in Hrg as [Hleft2 [Hrel2 Hright2]].
+            generalize (H2 _ Hrel2). intros H7.
+            destruct H7 as [H7|H7].
+            + left. rewrite Hsb. left. simpl_trt. auto.
+            + right. auto.
+        }
+Qed.
+
+Lemma rmw_v1_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  valid_exec ex ->
+  numbering_injective ex ->
+  res_chval_k ex res bound j k c n l v ->
+  (forall r w, (rmw res) r w -> valid_rmw_pair (sb res) r w).
+Proof.
+  intros Hval Hnuminj Hres r w Hrel.
+  destruct_val_exec Hval. destruct_rmw_v Hrmw_v.
+  inversion_res_chval Hres. rewrite Hrmw in Hrel.
+  apply simpl_trt_rel in Hrel as Hrw.
+  apply Hrmw_vpairs in Hrw. unfold valid_rmw_pair in *.
+  destruct (get_mode r); destruct (get_mode w); intuition auto;
+  apply simpl_trt_hyp in Hrel as [? [? ?]];
+  eapply imm_sb_res_chval; eauto.
+Qed.
+
+Lemma rmw_v2_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  valid_exec ex ->
+  res_chval_k ex res bound j k c n l v ->
+  rmw res =  [I (evts res)]⋅rmw res⋅[I (evts res)].
+Proof.
+  intros Hval Hres. destruct_val_exec Hval. destruct_rmw_v Hrmw_v.
+  destruct_res_chval Hres.
+  rewrite Hevts, Hrmw. rewrite test_i_union. kat_eq.
+Qed.
+
+Lemma rmw_v_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  valid_exec ex ->
+  numbering_injective ex ->
+  res_chval_k ex res bound j k c n l v ->
+  valid_rmw (evts res) (sb res) (rmw res).
+Proof.
+  intros Hval Hres.
+  split.
+  - eapply rmw_v1_res_chval; eauto.
+  - eapply rmw_v2_res_chval; eauto.
+Qed.
+
+Lemma rf_v1_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  valid_exec ex ->
+  get_loc c = Some l ->
+  get_val c = Some v ->
+  res_chval_k ex res bound j k c n l v ->
+  (forall w r : Event, rf res w r -> get_loc w = get_loc r /\ get_val w = get_val r).
+Proof.
+  intros Hval Hcloc Hcval Hres w r Hwr. destruct_val_exec Hval. destruct_rf_v Hrf_v.
+  destruct_res_chval Hres. rewrite Hrf in Hwr.
+  destruct Hwr as [Hwr|[Hwr Heq]].
+  - apply Hrfco. eapply simpl_trt_rel; eauto.
+  - rewrite Hwr, Heq. split; auto.
+Qed.
+
+Lemma rf_v2_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  valid_exec ex ->
+  res_chval_k ex res bound j k c n l v ->
+  rf res = [I (evts res)]⋅rf res⋅[I (evts res)].
+Proof.
+  intros Hval Hres. destruct_res_chval Hres.
+  rewrite Hrf, Hevts.
+  apply ext_rel, antisym.
+  - intros x y [H|[H1 H2]]; simpl_trt.
+    + left. eapply simpl_trt_tleft; eauto.
+    + left. auto.
+    + left. eapply simpl_trt_tright; eauto.
+    + left. rewrite H1. auto.
+    + right. auto.
+    + right. unfold In, id. simpl. auto.
+  - kat.
+Qed.
+
+Lemma rf_res_chval_wr (c k: Event) (l: Loc) (v: Val):
+  is_write c ->
+  (fun x y : Event => x = c /\ y = Read (numbering k) (get_mode k) l v) =
+  [W]⋅(fun x y : Event => x = c /\ y = Read (numbering k) (get_mode k) l v)⋅[R].
+Proof.
+  intros Hcw.
+  apply ext_rel, antisym.
+  - intros x y [H1 H2]. simpl_trt.
+    + rewrite H1. auto.
+    + intuition auto.
+    + rewrite H2. unfold R. simpl. auto.
+  - kat.
+Qed.
+
+Lemma rf_v3_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  valid_exec ex ->
+  res_chval_k ex res bound j k c n l v ->
+  [W]⋅rf res⋅[R] = rf res.
+Proof.
+  intros Hval Hres. destruct_res_chval Hres. destruct_val_exec Hval.
+  destruct_rf_v Hrf_v.
+  rewrite Hrf. rewrite <-Hrfwr at 2. rewrite (rf_res_chval_wr _ _ _ _ Hcw).
+  kat_eq.
+Qed.
+
+Lemma rf_v4_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  valid_exec ex ->
+  res_chval_k ex res bound j k c n l v ->
+  (forall w1 w2 r : Event, rf res w1 r /\ rf res w2 r -> w1 = w2).
+Proof.
+  intros Hval Hres w1 w2 r [Hw1r Hw2r].
+  destruct_res_chval Hres. rewrite Hrf in Hw1r, Hw2r.
+  destruct_val_exec Hval. destruct_rf_v Hrf_v.
+  destruct Hw1r as [Hw1r|Hw1r]; destruct Hw2r as [Hw2r|Hw2r].
+  - apply simpl_trt_rel in Hw1r. apply simpl_trt_rel in Hw2r.
+    eapply Hrfun; eauto.
+  - eapply
+
+Lemma rf_v_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  valid_exec ex ->
+  res_chval_k ex res bound j k c n l v ->
+  valid_rf (evts res) (rf res).
+Proof.
+  intros Hval Hres.
+  unfold valid_rf.
+
+Lemma valid_res_chval (ex res: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
+  valid_exec ex ->
+  numbering_coherent ex ->
+  numbering_injective ex ->
+  minimal_conflicting_pair ex bound j k ->
+  numbering k > numbering j ->
+  res_chval_k ex res bound j k c n l v ->
+  valid_exec res.
+Proof.
+  intros Hval Hnumco Hnuminj Hmcp Hord Hres.
+  split;[|split;[|split;[|split]]].
+  - eapply evts_v_res_chval; eauto.
+  - eapply sb_v_res_chval; eauto.
+  - eapply rmw_v_res_chval; eauto.
+  - 
+
+(** Last write in the modification order for a given location *)
+
 Definition max_mo (e: Event) (ex: Execution) (l: Loc) :=
   get_loc e = Some l /\
   In _ (writes (evts ex)) e /\
@@ -2579,6 +3319,14 @@ Definition max_mo (e: Event) (ex: Execution) (l: Loc) :=
             get_loc x = Some l ->
             x <> e ->
             (mo ex) x e.
+
+(** If the execution contains at least one write event to a location l, there 
+exists at least on event that is the maximal element in the mo on this location l *)
+
+Axiom exists_max_mo:
+  forall ex l,
+  (exists e, In _ (writes (evts ex)) e /\ get_loc e = Some l) ->
+  exists e, max_mo e ex l.
 
 Lemma change_val_eco_ac (ex1 ex2: Execution) (bound: nat) (j k c n: Event) (l: Loc) (v: Val):
   complete_exec ex1 ->
@@ -3004,6 +3752,14 @@ Proof.
   rewrite Hsb, Hrf in Hsbrf. apply Hnumco. auto.
 Qed.
 
+Lemma eq_mod_mo_numinj (a b: Execution):
+  eq_mod_mo a b ->
+  numbering_injective b ->
+  numbering_injective a.
+Proof.
+  intros Heq Hnuminj. split; intros H; apply Hnuminj; auto.
+Qed.
+
 (** An execution [a] stems from the same program than an execution [b] if:
 
 - [a] is sb-closed restriction of [b]
@@ -3015,8 +3771,15 @@ The same-program relation is transitive *)
 
 
 Inductive sameP (a b: Execution) : Prop :=
-  | sameP_pre : prefix a b -> sameP a b
-  | sameP_chval : forall k c n v l, change_val_read_k b a k c n l v -> sameP a b
+  (*
+  | sameP_pre : 
+    forall j k bound, minimal_conflicting_pair a bound j k ->
+                      sb_closed_restriction a b (sbrf_before_jk b bound j k) -> 
+                      sameP a b
+  *)
+  | sameP_resthenchval : forall j k bound res c n v l,
+      sb_closed_restriction res b (sbrf_before_jk b bound j k) ->
+      change_val_read_k res a k c n l v -> sameP a b
   | sameP_mo : eq_mod_mo a b -> sameP a b
   | sameP_trans : forall c, sameP a c -> sameP c b -> sameP a b.
 
@@ -3030,6 +3793,19 @@ Proof.
   - eapply numbering_coherent_pre; eauto.
   - eapply change_val_numco; eauto.
   - eapply eq_mod_mo_numco; eauto.
+  - intuition auto.
+Qed.
+
+Lemma sameP_numbering_injective (a b: Execution):
+  sameP a b ->
+  numbering_injective b ->
+  numbering_injective a.
+Proof.
+  intros Hsame Hnumco.
+  induction Hsame.
+  - eapply numbering_injective_pre; eauto.
+  - eapply change_val_numinj; eauto.
+  - eapply eq_mod_mo_numinj; eauto.
   - intuition auto.
 Qed.
 
@@ -3113,6 +3889,32 @@ Proof.
     inversion Hcomp; auto.
 Qed.
 
+Lemma res_chval_not_sbrf (e res fex: Execution) (b l v: nat) (j k c n s: Event):
+  rc11_consistent e ->
+  minimal_conflicting_pair e b j k ->
+  sb_closed_restriction e res (sbrf_before_jk e b j k) ->
+  change_val_read_k res fex k c n l v ->
+  ~(sb fex ⊔ rf fex) j s.
+Proof.
+  intros Hrc11 Hmcp Hres Hchval.
+  inversion_chval Hchval. rewrite Hsb, Hrf. intros [[Hnot|Hnot]|[Hnot|Hnot]].
+  - rew bounded in Hnot.
+    destruct Hnot as [z1 [z2 [Heq1 _] Hrel] [Heq2 Hnum2]].
+    destruct_res Hres. rewrite Hsb0 in Hrel.
+    destruct Hrel as [j2 [j1 Ht1 Hrel] Ht2].
+    destruct Ht1 as [Heqt1 _].
+    destruct Ht2 as [Heqt2 Ht2].
+    rewrite <-Heqt1 in Hrel. unfold sbrf_before_jk in Ht2.
+    destruct Ht2 as [Ht2|Ht2].
+    + destruct Hrc11 as [_ [_ [_ Hnothinair]]].
+      apply (Hnothinair j). rewrite tc_inv_dcmp2.
+      exists j2.
+      * rewrite Heq1. incl_rel_kat Hrel.
+      * rew bounded in Ht2. incl_rel_kat Ht2.
+    + admit.
+Admitted.
+    
+
 Lemma drf_sc (e: Execution):
   complete_exec e ->
   numbering_coherent e ->
@@ -3132,6 +3934,8 @@ Lemma drf_sc (e: Execution):
                             get_mode b <> Sc))).
 Proof.
   intros Hcomp Hnumco Hnuminj Hsc [e' [Hsame [Hrc11 Hnotsc]]].
+  inversion Hcomp as [Hval _].
+
   (* An execution that is not SC contains a conflict *)
   pose proof (exec_sc_no_conflict e' (sameP_valid _ _ Hsame (proj1 Hcomp) Hnumco) Hrc11 Hnotsc) as Hexpi.
   (* An execution that contains a conflict must have a minimal conflicting 
@@ -3143,10 +3947,8 @@ Proof.
   { eapply sameP_complete; eauto.
     eapply sameP_trans with e'; eauto.
     eapply sameP_pre, bounded_exec_is_prefix.
-    - eapply sameP_complete in Hcomp.
-      + destruct Hcomp as [Hval _]. eapply Hval.
-      + auto.
-      + auto.
+
+    - eapply sameP_valid; eauto.
     - eapply sameP_numbering_coherent; eauto. }
 
   (* e' is complete *)
@@ -3188,7 +3990,67 @@ Proof.
         intuition auto.
 
   (* If this event is a read *)
-  - admit.
+  - destruct (sb_res_exists _ _ _ _ (sameP_valid _ _ Hsame Hval Hnumco) Hmcp) as [res Hres].
+    assert (is_write j) as Hwj.
+    { destruct (mcp_one_is_write _ _ _ _ Hmcp) as [Hk|Hk]. 
+        + auto.
+        + destruct k; unfold is_write, is_read in Hk, Hkr;
+          intuition auto. }
+    assert (In _ (writes (evts res)) j) as Hjevts.
+    { split; auto. 
+      destruct_res Hres. rewrite Hevts. left. apply one_incl_rtc. split; auto.
+    }
+    destruct (loc_of_write _ Hwj) as [l Hloc].
+    edestruct (exists_max_mo res l) as [c Hcmax].
+    { exists j; intuition auto. }
+    destruct (classic (c = j)) as [Hjc|Hjc].
+    + admit.
+    + inversion Hcmax as [_ [[_ Hcw] _]].
+      destruct (val_of_write _ Hcw) as [v Hv].
+      destruct (change_val_read_exists res k c l v) as [fex [n Hfex]]; auto.
+      * destruct_res Hres. rewrite Hevts. right. apply one_incl_rtc. split; auto.
+      * destruct Hcmax as [_ [[? _] _]]. auto.
+      * pose proof (mcp_same_loc _ _ _ _ Hmcp). congruence.
+      * destruct Hcmax as [? _]. auto. 
+      * { inversion He'comp as [He'val _]. 
+          eapply (mcp_all_smaller_snd_evt _ _ _ _ _ He'val He'numco); eauto.
+          - destruct Hcmax as [_ [[Hcin _] _]]. destruct_res Hres.
+            rewrite Hevts in Hcin.
+            eapply sbrf_before_jk_bounded; eauto.
+          - intros Heq. rewrite Heq in Hcw. destruct k;
+            unfold is_read in Hkr; unfold is_write in Hcw; intuition auto.
+        }
+      * { exists fex. split;[|split].
+          - eapply sameP_trans.
+            + eapply sameP_trans.
+              * eapply sameP_chval. eauto.
+              * eapply sameP_pre. eapply prefix_res_ex; eauto.
+            + auto.
+          - eapply (change_val_in_res_sc e' res fex); eauto.
+          - assert (valid_exec fex) as Hvalfex.
+            { eapply sameP_valid.
+              - eapply sameP_chval; eauto.
+              - eapply sameP_valid.
+                + eapply sameP_pre. eapply prefix_res_ex; eauto.
+                + destruct He'comp. auto.
+                + auto.
+              - eapply sameP_numbering_coherent. 
+                + eapply sameP_pre. eapply prefix_res_ex; eauto.
+                + auto.
+            }
+            exists j, n. split.
+            + split;[|split;[|split;[|split]]].
+              * left. auto.
+              * inversion_chval Hfex. intros Heq. rewrite Heq, Hn in Hwj.
+                unfold is_write in Hwj. inversion Hwj.
+              * inversion_chval Hfex. rewrite Hn. simpl. auto.
+              * unshelve (eapply (incl_not_rel_thm _ (hb_incl_sbrf _ Hvalfex))).
+                eapply not_rel_tc. intros s. inversion_chval Hfex.
+                rewrite Hsb, Hrf. intros [[H|H]|[H|H]].
+                -- destruct_res Hres.
+        }
+
+      
 Admitted.
 
 Lemma drf_sc_final (e: Execution):

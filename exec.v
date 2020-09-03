@@ -200,6 +200,17 @@ Definition get_loc (e: Event) : option Loc :=
   | Fence _ _ => None
   end.
 
+(** A write event must have a location *)
+
+Lemma loc_of_write (e: Event):
+  is_write e ->
+  exists l, get_loc e = Some l.
+Proof.
+  intros Hw.
+  destruct e;[|exists l; auto|];
+  unfold is_write in Hw; intuition auto.
+Qed.
+
 (** Get the value of an event if it has one *)
 
 Definition get_val (e: Event) : option Val :=
@@ -208,6 +219,17 @@ Definition get_val (e: Event) : option Val :=
   | Write _ _ _ v => Some v
   | Fence _ _ => None
   end.
+
+(** A write event must write a value *)
+
+Lemma val_of_write (e: Event):
+  is_write e ->
+  exists v, get_val e = Some v.
+Proof.
+  intros Hw.
+  destruct e;[|exists v; auto|];
+  unfold is_write in Hw; intuition auto.
+Qed.
 
 (** Get the mode of an event *)
 

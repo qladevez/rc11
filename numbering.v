@@ -1025,3 +1025,42 @@ Proof.
   pose proof (mcp_num_snd_evt _ _ _ _ Hval Hnumco Hmcp) as Hmax.
   rewrite (max_rewrite _ _ Hord) in Hmax. auto.
 Qed.
+
+(** All the events of a minimal conflicting pair that are not the second event
+of the pair have a numbering smaller than the second event *)
+
+Lemma mcp_all_smaller_snd_evt (ex: Execution) (bound: nat) (x j k: Event):
+  valid_exec ex ->
+  numbering_coherent ex ->
+  numbering_injective ex ->
+  (minimal_conflicting_pair ex bound j k) ->
+  (numbering k) > (numbering j) ->
+  In _ (evts (bounded_exec ex bound)) x ->
+  x <> k ->
+  numbering x < numbering k.
+Proof.
+  intros Hval Hnumco Hnuminj Hmcp Hord Hxevts Hdiff.
+  pose proof (mcp_num_snd_evt_ord _ _ _ _ Hval Hnumco Hmcp Hord) as Heq.
+  apply in_intersection in Hxevts as [_ Hxbound].
+  unfold In in Hxbound. rewrite Heq.
+  destruct (Compare_dec.lt_eq_lt_dec (numbering x) bound) as [[H|H]|H].
+  - lia.
+  - rewrite <-H in Heq. apply (numbering_injective_eq _ _ _ Hnuminj) in Heq.
+    congruence.
+  - lia.
+Qed.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
