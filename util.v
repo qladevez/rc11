@@ -11,7 +11,6 @@ Require Import Classical_Prop.
 Require Import Relations.
 Require Import Lia.
 From RelationAlgebra Require Import rel prop monoid kat relalg kat_tac.
-From AAC_tactics Require Import AAC.
 From RC11 Require Import proprel_classic.
 
 (** * Utilities *)
@@ -89,6 +88,10 @@ Ltac unfold_in := autounfold with set_db in *.
 
 Definition I {A:Type} (s: Ensemble A) : prop_set A := In A s.
 
+(** KAT test that checks if an element is different from another element *)
+
+Definition D {A:Type} (y: A) : prop_set A := (fun x => x <> y).
+
 (** Axiom of extensionality for relations. If two relations relate the same 
 elements, they are equal *)
 
@@ -120,6 +123,7 @@ Lemma in_union {A:Type} (s1 s2 : Ensemble A) (e: A):
 Proof.
   intros [x H1|x H2]; intuition auto.
 Qed.
+
 
 Lemma in_union_l {A:Type} (s1 s2 : Ensemble A) (e: A):
   In _ s1 e -> In _ (Union _ s1 s2) e.
@@ -362,6 +366,21 @@ Proof.
   - destruct H as [Heq H]. exists x.
     + split; auto. apply Hincl. auto. 
     + rewrite <-Heq. split; auto.
+Qed.
+
+(** Being in the union of two set, is like being in one set or in the other *)
+
+Lemma I_union {A:Type} (s1 s2 : Ensemble A):
+  [I (Union _ s1 s2)] = [(I s1) ⊔ (I s2)].
+Proof.
+  apply ext_rel, antisym; intros x y H.
+  - destruct H as [Heq Ht]. rewrite <-Heq.
+    unfold I in Ht. apply in_union in Ht.
+    destruct Ht as [Ht|Ht]; split; auto;
+    [left|right]; auto.
+  - destruct H as [Heq Ht]. rewrite <-Heq.
+    destruct Ht as [Ht|Ht]; split; auto;
+    [left|right]; auto.
 Qed.
 
 (** A relation being included in another is equivalent to the union of the

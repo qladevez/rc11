@@ -55,6 +55,29 @@ Proof.
       destruct (Hxy H).
 Qed.
 
+(** If an event is equal to a read whose numbering is the numbering of a second
+event, the two events are equal *)
+
+Lemma eq_num_read {ex: Execution} {x y: Event} {m: Mode} {l: Loc} {v: Val}:
+  numbering_injective ex ->
+  Read (numbering y) m l v = x ->
+  x = y.
+Proof.
+  intros Hnuminj Heq.
+  eapply numbering_injective_eq. eauto.
+  rewrite <-Heq. auto.
+Qed.
+
+Lemma eq_num_read2 {ex: Execution} {x y: Event} {m: Mode} {l: Loc} {v: Val}:
+  numbering_injective ex ->
+  x = Read (numbering y) m l v ->
+  x = y.
+Proof.
+  intros Hnuminj Heq.
+  eapply numbering_injective_eq. eauto.
+  rewrite Heq. auto.
+Qed.
+
 (** If a numbering of the events of an execution is injective, the numbering of
 the events of its prefixes is also injective *)
 
