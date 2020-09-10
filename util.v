@@ -823,6 +823,10 @@ Lemma tc_inv_dcmp7 {A:Type} (r: rlt A):
   r^+⋅r ≦ r^+.
 Proof. kat. Qed.
 
+Lemma tc_inv_dcmp8 {A:Type} (r: rlt A):
+  r^+⋅r^+ ≦ r^+.
+Proof. kat. Qed.
+
 (** The sequence of the reflexive transitive closure of a relation with the
 reflexie transitive closure of the same relation is included in the reflexive
 transitive closure of this relation *)
@@ -870,6 +874,10 @@ Proof. kat_eq. Qed.
 
 Lemma rtc_inv_dcmp7 {A:Type} (r: rlt A):
   r^+ = r⋅r^*.
+Proof. kat_eq. Qed.
+
+Lemma rtc_inv_dcmp8 {A:Type} (r: rlt A):
+  r^+ = r^*⋅r.
 Proof. kat_eq. Qed.
 
 (** The transitive closure of a relation is included in the reflexive transitive

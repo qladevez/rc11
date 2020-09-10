@@ -365,6 +365,12 @@ Proof.
   auto.
 Qed.
 
+Lemma sbrfsc_incl_sbrf (ex: Execution):
+  (sb ex ⊔ res_mode Sc (rf ex))^+ ≦ (sb ex ⊔ rf ex)^+.
+Proof.
+  unfold res_mode. kat.
+Qed.
+
 (** When the prefix of an execution doesn't contain any conflicting events, the
 modification order of the prefix is included in the union of transitive closure 
 of the union of the sequenced-before the reads-from restricted to SC events 

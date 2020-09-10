@@ -203,6 +203,16 @@ Proof.
   apply (rb_irr Hval).
 Qed.
 
+Lemma sbrf_irr:
+  valid_exec ex ->
+  irreflexive (sb ex ⊔ rf ex).
+Proof.
+  intros Hval.
+  apply irreflexive_union.
+  - auto using sb_irr.
+  - auto using rf_irr.
+Qed.
+
 Lemma rtc_sbrfmorb_in_l_aux (x y: Event):
   valid_exec ex ->
   (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb)^* x y ->
@@ -424,6 +434,7 @@ Proof.
   intros Hval.
   unfold sw, rs. rewrite rmw_incl_sb. kat. auto using Hval.
 Qed.
+
   
 (** ** Happens-before *)
 
@@ -743,5 +754,51 @@ Qed.
 
 Definition sc_consistent :=
   atomicity /\ acyclic ((sb ex) ⊔ (rf ex) ⊔ (mo ex) ⊔ rb).
+
+(** If the modification order of a valid execution is empty (meaning there is
+one or zero write), the execution is SC-consistent *)
+
+Lemma empty_mo_atomicity:
+  valid_exec ex ->
+  (mo ex) = empty ->
+  atomicity.
+Proof.
+  intros Hval Hmoempty.
+  intros x y [_ [z _ H]].
+  rewrite Hmoempty in H.
+  destruct H.
+Qed.
+
+Lemma empty_mo_ac_eco:
+  valid_exec ex ->
+  no_thin_air ->
+  (mo ex) = empty ->
+  acyclic ((sb ex) ⊔ (rf ex) ⊔ (mo ex) ⊔ rb).
+Proof.
+  intros Hval Hnoota Hmoempty x Hcyc.
+  unfold rb in Hcyc. rewrite Hmoempty in Hcyc.
+  apply (Hnoota x). incl_rel_kat Hcyc.
+Qed.
+
+Lemma empty_mo_sc_consistent:
+  valid_exec ex ->
+  no_thin_air ->
+  (mo ex) = empty ->
+  sc_consistent.
+Proof.
+  intros Hval Hnoota Hmoempty.
+  split.
+  - eapply empty_mo_atomicity; eauto.
+  - eapply empty_mo_ac_eco; eauto.
+Qed.
+
+Lemma not_sc_not_empty_mo:
+  valid_exec ex ->
+  no_thin_air ->
+  ~sc_consistent ->
+  (mo ex) <> empty.
+Proof.
+  intuition auto using empty_mo_sc_consistent.
+Qed.
 
 End RC11.

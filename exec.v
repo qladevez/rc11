@@ -833,6 +833,17 @@ Proof.
   auto.
 Qed.
 
+Lemma rf_diff (x y: Event):
+  (rf ex) x y ->
+  x <> y.
+Proof.
+  intros Hrf Heq.
+  apply rf_orig_write in Hrf as H.
+  apply rf_dest_read in Hrf.
+  rewrite Heq in H.
+  destruct y; unfold is_read in Hrf; unfold is_write in H; auto.
+Qed.
+
 (** In a valid execution, events related by read-modify-write order belong to 
 the set of events of the execution *)
 
@@ -1051,6 +1062,8 @@ Proof.
   destruct Hmopo as [_ [Hmotrans _]].
   apply Hmotrans. exists y; auto.
 Qed.
+
+Lemma mo_no_empty
 
 (** Two events related by the reflexive transitive closure of the union of the
 sequenced-before and read-from relations of an execution belong to the events

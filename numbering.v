@@ -149,6 +149,21 @@ Proof.
   left; auto.
 Qed.
 
+(** If a first event is related by the read-modify-write relation to a second
+event, the numbering of the second event is strictly greater than the numbering
+of the first event *)
+
+Lemma rmw_num_ord (ex: Execution) (x y: Event):
+  valid_exec ex ->
+  numbering_coherent ex ->
+  rmw ex x y ->
+  (numbering y) > (numbering x).
+Proof.
+  intros Hval Hnumco Hrmw.
+  eapply (rmw_incl_sb _ Hval) in Hrmw.
+  eapply sb_num_ord; eauto.
+Qed.
+
 (** If a first event is related by the reads-from relation to a second event, 
 the numbering of the second event is strictly greater than the numbering of the
 first event *)
@@ -773,6 +788,22 @@ Lemma mcp_not_sc (ex: Execution) (bound: nat) (j k: Event):
 Proof.
   intros [_ [[_ H] _]].
   auto.
+Qed.
+
+(** In a minimal conflicting pair, the two conflicting events cannot be related
+by sb *)
+
+Lemma mcp_not_sb_jk (ex: Execution) (bound: nat) (j k: Event):
+  minimal_conflicting_pair ex bound j k ->
+  ~(sb ex j k).
+Proof.
+  intros Hmcp Hsb.
+  inversion Hmcp as [_ [_ Hnot]].
+  apply Hnot. left. apply tc_incl_itself. left.
+  rew bounded. simpl_trt.
+  - eapply mcp_left_le_bound. eauto.
+  - auto.
+  - eapply mcp_right_le_bound. eauto.
 Qed.
 
 (*
