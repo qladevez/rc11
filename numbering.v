@@ -287,6 +287,84 @@ Hint Rewrite simpl_sb_be simpl_rmw_be simpl_rf_be simpl_mo_be : bounded_exec_db.
 Tactic Notation "rew" "bounded" := autorewrite with bounded_exec_db.
 Tactic Notation "rew" "bounded" "in" hyp(H) := autorewrite with bounded_exec_db in H.
 
+(** Extract the information about the numbering of events from relations in
+bounded executions *)
+
+Lemma bounded_sb_l (ex: Execution) (n: nat) (x y: Event):
+  sb (bounded_exec ex n) x y ->
+  numbering x <= n.
+Proof.
+  intros H. rew bounded in H. 
+  apply simpl_trt_hyp in H as [H1 [_ H2]].
+  unfold NLE in *. lia.
+Qed.
+
+Lemma bounded_sb_r (ex: Execution) (n: nat) (x y: Event):
+  sb (bounded_exec ex n) x y ->
+  numbering y <= n.
+Proof.
+  intros H. rew bounded in H. 
+  apply simpl_trt_hyp in H as [H1 [_ H2]].
+  unfold NLE in *. lia.
+Qed.
+
+Lemma bounded_rf_l (ex: Execution) (n: nat) (x y: Event):
+  rf (bounded_exec ex n) x y ->
+  numbering x <= n.
+Proof.
+  intros H. rew bounded in H. 
+  apply simpl_trt_hyp in H as [H1 [_ H2]].
+  unfold NLE in *. lia.
+Qed.
+
+Lemma bounded_rf_r (ex: Execution) (n: nat) (x y: Event):
+  rf (bounded_exec ex n) x y ->
+  numbering y <= n.
+Proof.
+  intros H. rew bounded in H. 
+  apply simpl_trt_hyp in H as [H1 [_ H2]].
+  unfold NLE in *. lia.
+Qed.
+
+Lemma bounded_mo_l (ex: Execution) (n: nat) (x y: Event):
+  mo (bounded_exec ex n) x y ->
+  numbering x <= n.
+Proof.
+  intros H. rew bounded in H. 
+  apply simpl_trt_hyp in H as [H1 [_ H2]].
+  unfold NLE in *. lia.
+Qed.
+
+Lemma bounded_mo_r (ex: Execution) (n: nat) (x y: Event):
+  mo (bounded_exec ex n) x y ->
+  numbering y <= n.
+Proof.
+  intros H. rew bounded in H. 
+  apply simpl_trt_hyp in H as [H1 [_ H2]].
+  unfold NLE in *. lia.
+Qed.
+
+Lemma bounded_rb_l (ex: Execution) (n: nat) (x y: Event):
+  rb (bounded_exec ex n) x y ->
+  numbering x <= n.
+Proof.
+  intros H. unfold rb in H. destruct H as [z H _]. 
+  rewrite <-cnv_rev in H.
+  rew bounded in H. 
+  apply simpl_trt_hyp in H as [H1 [_ H2]].
+  unfold NLE in *. lia.
+Qed.
+
+Lemma bounded_rb_r (ex: Execution) (n: nat) (x y: Event):
+  rb (bounded_exec ex n) x y ->
+  numbering y <= n.
+Proof.
+  intros H. unfold rb in H. destruct H as [z _ H].
+  rew bounded in H. 
+  apply simpl_trt_hyp in H as [H1 [_ H2]].
+  unfold NLE in *. lia.
+Qed.
+
 (** An event belonging to the events of a bounded executions belong to the events
 of the execution *)
 

@@ -168,6 +168,12 @@ Definition is_fence (e: Event) : Prop :=
   | Fence _ _ => True
   end.
 
+Lemma not_wandr (e: Event) :
+  is_write e ->
+  ~(is_read e).
+Proof.
+  destruct e; intuition firstorder.
+Qed.
 
 (** ** Validity conditions *)
 
@@ -1030,6 +1036,19 @@ Proof.
   auto.
 Qed.
 
+(** Two events related by the modification order are different *)
+
+Lemma mo_diff (x y: Event):
+  (mo ex) x y ->
+  x <> y.
+Proof.
+  intros Hmo Heq.
+  destruct_val_exec val_exec.
+  destruct_mo_v Hmo_v.
+  destruct Hmopo as [_ [_ Hmoirr]].
+  apply (Hmoirr y). rewrite Heq in Hmo. auto.
+Qed.
+
 (** If two write events to the same location are different, they must be related
 by mo in a direction or the other *)
 
@@ -1062,8 +1081,6 @@ Proof.
   destruct Hmopo as [_ [Hmotrans _]].
   apply Hmotrans. exists y; auto.
 Qed.
-
-Lemma mo_no_empty
 
 (** Two events related by the reflexive transitive closure of the union of the
 sequenced-before and read-from relations of an execution belong to the events

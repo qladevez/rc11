@@ -608,6 +608,25 @@ Proof.
     auto.
 Qed.
 
+(** The prefix of an execution that respects atomicity, respects atomicity
+itself *)
+
+Theorem prefix_atomicity {pre ex: Execution}:
+  atomicity ex ->
+  prefix pre ex ->
+  atomicity pre.
+Proof.
+  intros Hat Hpre.
+  intros x y Hnot. destruct Hnot as [Hrmw Hrbmo].
+  apply (rmw_prefix_incl Hpre) in Hrmw.
+  destruct Hrbmo as [z Hrb Hmo].
+  apply (rb_prefix_incl Hpre) in Hrb.
+  apply (mo_prefix_incl Hpre) in Hmo.
+  assert ((rmw ex ⊓ (rb ex ⋅ mo ex)) x y) as Hcontr.
+  { split. auto. exists z; auto. }
+  apply Hat in Hcontr. destruct Hcontr.
+Qed.
+
 (** ** RC11-consistency *)
 
 (** If an execution is RC11-consistent, all its prefixes are RC11-consistent *)
@@ -625,14 +644,7 @@ Proof.
     + apply (hb_prefix_incl Hpre). auto.
     + apply (refl_incl _ _ (eco_prefix_incl Hpre)). auto.
   (* Prefixing preserves atomicity *)
-  - intros x y Hnot. destruct Hnot as [Hrmw Hrbmo].
-    apply (rmw_prefix_incl Hpre) in Hrmw.
-    destruct Hrbmo as [z Hrb Hmo].
-    apply (rb_prefix_incl Hpre) in Hrb.
-    apply (mo_prefix_incl Hpre) in Hmo.
-    assert ((rmw ex ⊓ (rb ex ⋅ mo ex)) x y) as Hcontr.
-    { split. auto. exists z; auto. }
-    apply Hat in Hcontr. destruct Hcontr.
+  - eapply prefix_atomicity; eauto.
   (* Prefixing preserves the SC condition *)
   - apply (ac_incl _ _ Hsc (psc_prefix_incl Hpre)).
   (* Prefixing preserves the No-Thin-Air condition *)
@@ -641,4 +653,23 @@ Proof.
       * apply (sb_prefix_incl Hpre).
       * apply (rf_prefix_incl Hpre).
     + apply (ac_incl _ _ Hoota Hincl).
+Qed.
+
+(** ** SC-consistency *)
+
+Theorem prefix_sc_consistent {pre ex: Execution}:
+  sc_consistent ex ->
+  prefix pre ex ->
+  sc_consistent pre.
+Proof.
+  intros [Hat Hsc] Hpre. split.
+  - eapply prefix_atomicity; eauto.
+  - unshelve (eapply (ac_incl _ _ Hsc _)).
+    apply incl_cup.
+    apply incl_cup.
+    apply incl_cup.
+    + eapply sb_prefix_incl; eauto.
+    + eapply rf_prefix_incl; eauto.
+    + eapply mo_prefix_incl; eauto.
+    + eapply rb_prefix_incl; eauto.
 Qed.
