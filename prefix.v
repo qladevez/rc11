@@ -422,22 +422,22 @@ Proof.
   intros Himm Hpre Hrmwpre.
   destruct_prefix Hpre.
   unfold imm in Himm.
-  destruct Himm as [Hsbimm H]. split.
+  destruct Himm as [Hsbimm [H1 H2]]. split;[|split].
   - rewrite Hrmw in Hrmwpre. rewrite Hsb.
     apply simpl_trt_hyp in Hrmwpre as [? [? ?]]; 
     simpl_trt; auto.
   - intros c Hsbpre. rewrite Hsb in Hsbpre. rewrite Hrmw in Hrmwpre.
     apply simpl_trt_hyp in Hsbpre as [? [Hsbex ?]].
     apply simpl_trt_hyp in Hrmwpre as [? [Hrmwpre ?]].
-    destruct (H c Hsbex) as [Href H']. split.
-    + destruct Href.
-      * left. rewrite Hsb. simpl_trt; auto.
-      * right. auto.
-    + intros c' Hsbpre. rewrite Hsb in Hsbpre.
-      apply simpl_trt_hyp in Hsbpre as [? [Hsbrc ?]].
-      pose proof (H' c' Hsbrc) as [Hsbwc' | Href'].
-      * left. rewrite Hsb. simpl_trt. auto.
-      * right. auto.
+    destruct (H1 c Hsbex) as [Href|Href].
+    + left. rewrite Hsb; simpl_trt; auto.
+    + right. auto.
+  - intros c Hsbpre. rewrite Hsb in Hsbpre. rewrite Hrmw in Hrmwpre.
+    apply simpl_trt_hyp in Hsbpre as [? [Hsbex ?]].
+    apply simpl_trt_hyp in Hrmwpre as [? [Hrmwpre ?]].
+    destruct (H2 c Hsbex) as [Href|Href].
+    + left. rewrite Hsb; simpl_trt; auto.
+    + right. auto.
 Qed.
 
 Lemma prefix_rmw_pair_valid {pre ex: Execution} (r w: Event):

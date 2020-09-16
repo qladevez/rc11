@@ -231,8 +231,8 @@ order if :
 Definition imm {A: Type} (r: rlt A) : rlt A :=
   fun a => fun b =>
     r a b /\
-    forall c, r c b -> (r ?) c a /\
-    forall c, r a c -> (r ?) b c.
+    (forall c, r c b -> (r ?) c a) /\
+    (forall c, r a c -> (r ?) b c).
 
 (** A relation is cyclic if its transitive closure is irreflexive *)
 
