@@ -77,7 +77,7 @@ Proof with auto.
     + apply sb_orig_evts with (y:=b); auto.
     + apply rf_orig_evts with (y:=b); auto.
   - destruct_sb_v Hsb_v.
-    destruct Hsb_lso as [[Hsb_lso _] _]...
+    destruct Hsb_lso as [Hsb_lso _]...
   - destruct_rf_v Hrf_v...
   - destruct_mo_v Hmo_v.
     destruct Hmopo as [? _]...
@@ -362,24 +362,18 @@ Qed.
 (** If the sequenced-before relation of an execution is a linear strict order,
 the sequenced-before relation of any of its prefixes is a linear strict order *)
 
-Lemma prefix_lso_valid {pre ex: Execution}:
-  linear_strict_order (sb ex) (evts ex) ->
+Lemma prefix_po_valid {pre ex: Execution}:
+  partial_order (sb ex) (evts ex) ->
   prefix pre ex ->
-  linear_strict_order (sb pre) (evts pre).
+  partial_order (sb pre) (evts pre).
 Proof.
-  intros [[Hincl [Htrans Hirr]] Htot] Hpre.
+  intros [Hincl [Htrans Hirr]] Hpre.
   inverse_prefix Hpre.
   repeat (apply conj).
   - rewrite Hsb. kat_eq.
   - rewrite Hsb. rewrite <- Htrans at 3. kat.
   - intros x Href. apply (Hirr x).
     apply (sb_prefix_incl Hpre) in Href. auto.
-  - intros x y Hdiff Hinx Hiny.
-    rewrite Hsb.
-    apply Hevts in Hinx as Hinxpre.
-    apply Hevts in Hiny as Hinypre.
-    pose proof (Htot _ _ Hdiff Hinxpre Hinypre) as [Hsbex|Hsbex];
-    [left|right]; simpl_trt; auto. 
 Qed.
 
 (** If the sequenced-before relation of an execution is valid, the
@@ -393,7 +387,7 @@ Proof.
   intros Hsb_v Hpre.
   inverse_prefix Hpre. destruct_sb_v Hsb_v.
   split.
-  { eauto using prefix_lso_valid. }
+  { eauto using prefix_po_valid. }
   intros l. destruct (Hsbinit l) as [e [? [? [H H']]]]. exists e.
   splitall; auto.
   - intros Hnot. apply H.

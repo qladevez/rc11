@@ -521,7 +521,7 @@ Proof.
   rewrite <- union_assoc in Hcontr.
   assert (acyclic (res_neq_mode Sc (sb ex))) as Hprob.
   { destruct_val_exec Hval. destruct Hsb_v as [Hlin _].
-    apply lin_strict_ac in Hlin.
+    apply part_order_ac in Hlin.
     apply ac_incl with (r1 := (res_neq_mode Sc (sb ex))) in Hlin.
     - auto.
     - apply res_neq_incl. }

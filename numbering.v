@@ -495,7 +495,7 @@ Proof.
     repeat (apply conj);
     destruct_val_exec Hval.
     + destruct_sb_v Hsb_v.
-      destruct Hsb_lso as [[Hsb_in_e _] _].
+      destruct Hsb_lso as [Hsb_in_e _].
       rewrite Hsb_in_e, I_evts_bounded_le_bnd. kat_eq.
     + destruct_rf_v Hrf_v. rewrite Hrf_in_e, I_evts_bounded_le_bnd. kat_eq.
     + destruct_mo_v Hmo_v. destruct Hmopo as [Hmo_in_e _].
@@ -575,7 +575,7 @@ Proof.
     rewrite <- (nle_double _ _ Hord) at 1.
     rewrite <- (nle_double _ _ Hord) at 2.
     destruct_sb_v Hsb_v.
-    destruct Hsb_lso as [[Hsb_in_e _] _].
+    destruct Hsb_lso as [Hsb_in_e _].
     rewrite Hsb_in_e. kat_eq.
   - rew bounded. rewrite I_evts_bounded_le_bnd.
     rewrite <- (nle_double _ _ Hord) at 1.

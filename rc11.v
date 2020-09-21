@@ -74,7 +74,7 @@ Proof.
   apply irreflexive_is_irreflexive.
   destruct_val_exec Hval.
   destruct_sb_v Hsb_v.
-  destruct Hsb_lso as [[_ [_ Hsbirr]] _].
+  destruct Hsb_lso as [_ [_ Hsbirr]].
   intros x. apply Hsbirr.
 Qed.
 

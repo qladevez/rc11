@@ -510,7 +510,7 @@ if for each location, there is an initialisation event that sets the location
 to 0, is sequenced before all the events of the program and after no events *)
 
 Definition valid_sb (evts: Ensemble Event) (sb : rlt Event) : Prop :=
-  (linear_strict_order sb evts) /\
+  (partial_order sb evts) /\
   (forall (l : Loc),
   exists (e: Event),
     (get_loc e) = Some l /\
@@ -733,7 +733,7 @@ Lemma sb_orig_evts (x y : Event):
 Proof.
   intros Hsb.
   destruct_val_exec val_exec.
-  destruct Hsb_v as [[[Hsb_v _] _] _].
+  destruct Hsb_v as [[Hsb_v _] _].
   rewrite Hsb_v in Hsb.
   destruct Hsb as [z [z' [_ Ht] _] _].
   auto.
@@ -745,7 +745,7 @@ Lemma sb_dest_evts (x y : Event):
 Proof.
   intros Hsb.
   destruct_val_exec val_exec.
-  destruct Hsb_v as [[[Hsb_v _] _] _].
+  destruct Hsb_v as [[Hsb_v _] _].
   rewrite Hsb_v in Hsb.
   destruct Hsb as [z _ [Heq Ht]].
   rewrite Heq in Ht.
@@ -756,7 +756,7 @@ Lemma sb_trans (x y: Event):
   (sb ex)⋅(sb ex) ≦ (sb ex).
 Proof.
   destruct_val_exec val_exec.
-  destruct Hsb_v as [[[_ [Hsb_v _]] _] _].
+  destruct Hsb_v as [[_ [? _]] _].
   auto.
 Qed.
 

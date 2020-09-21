@@ -1314,15 +1314,25 @@ Proof.
   intros [Hr _]. auto.
 Qed.
 
-(** The transitive closure of a strict linear order is itself *)
+(** The transitive closure of a transitive relation is equal to itself *)
 
-Lemma lso_is_tc {A:Type} (so:rlt A) (s: Ensemble A):
-  linear_strict_order so s -> so^+ = so.
+Lemma tc_trans_itself {A:Type} (r: rlt A):
+  (r⋅r) ≦ r ->
+  r^+ = r.
 Proof.
-  intros [[H1 [H2 H6]] H3]; apply ext_rel.
-  apply antisym.
-  - apply itr_ind_l1; auto.
-  - kat.
+  intros Htrans. apply ext_rel, antisym; [|kat].
+  apply itr_ind_l1; auto.
+Qed.
+
+(** A partial order is acyclic *)
+
+Lemma part_order_ac {A:Type} (s:Ensemble A) (r : rlt A):
+  partial_order r s ->
+  acyclic r.
+Proof.
+  intros [_ [Htrans Hirr]] x Hcyc.
+  rewrite (tc_trans_itself _ Htrans) in Hcyc.
+  intuition eauto.
 Qed.
 
 (** A strict linear order is acyclic *)
@@ -1331,11 +1341,7 @@ Lemma lin_strict_ac {A:Type} (s:Ensemble A) (r : rlt A):
   linear_strict_order r s ->
   acyclic r.
 Proof.
-  intros Hlin.
-  generalize (lso_is_tc _ _ Hlin); intro Heq.
-  unfold acyclic; rewrite Heq.
-  destruct Hlin as [[Hdr [Htrans Hac]] Htot];
-  apply Hac.
+  intros [Hpo _]. eapply part_order_ac; eauto.
 Qed.
 
 (** If a relation is acyclic, its transitive closure is acyclic *)
