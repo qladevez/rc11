@@ -1551,6 +1551,23 @@ Proof.
   auto.
 Qed.
 
+(** A test is included in the sequence of two tests if it is included in both
+tests *)
+
+Lemma incl_dot_test {A:Type} (t t1 t2: prop_set A):
+  [t] ≦ [t1] ->
+  [t] ≦ [t2] ->
+  [t] ≦ [t1]⋅[t2].
+Proof.
+  intros H1 H2. intros x y H. 
+  apply H1 in H as H1'.
+  apply H2 in H as H2'.
+  exists x; auto.
+  split; auto.
+  destruct H1'. congruence.
+Qed.
+
+
 (** The reflexive transitive closure defined as a positive or null number of 
 sequence of a relation with itself is equivalent to its inductive definition,
 i.e. the reflexive transitive closure of a relation is either the relation 

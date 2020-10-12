@@ -53,8 +53,6 @@ Lemma race_sym (ex: Execution) (x y: Event):
   race ex x y <-> race ex y x.
 Proof. compute; intuition. Qed.
 
-Module DRF.
-
 (** If a bound gives the minimal conflicting pair of an execution, it is greater
 than 0 *)
 
@@ -290,6 +288,7 @@ Proof.
   - eauto using mcp_diff.
   - eauto using mcp_same_loc.
   - intros Hnot. unfold hb in Hnot.
+    (* TODO: on peut réécrire tout ça plus simplement avec hb_incl_sbrf *)
     rewrite tc_inv_dcmp2 in Hnot.
     destruct Hnot as [z [Hsb|Hsw] _].
     { eapply mcp_sb_last; eauto. }
@@ -300,7 +299,7 @@ Proof.
     apply simpl_rt_hyp in Hsw as [Hsw _].
     destruct Hsw as [w2 Hsw Hrf].
     destruct Hsw as [w3 Hsw Hrs].
-    destruct Hsw as [w4 [Heq _] [[w5 [Heq2 _] Hsb] |Href]].
+    destruct Hsw as [w4 [Heq _] [[w5 [Heq2 _] Hsb] | Href]].
     { rewrite <- Heq in Heq2. rewrite <- Heq2 in Hsb. 
       eapply mcp_sb_last; eauto. }
     simpl in Href. rewrite <- Heq in Href. rewrite <- Href in Hrs.
@@ -683,8 +682,8 @@ Proof.
     rewrite <-union_assoc in Hdy. destruct Hdy as [Hdy|Hdy].
 
     + apply (rmw_incl_imm_sb _ Hvalb) in Hrmw as Himm.
-      destruct Himm as [Hr Himm].
-      destruct (Himm d Hdy) as [Hdb _].
+      destruct Himm as [Hr [Himm _]].
+      pose proof (Himm d Hdy) as Hdb.
       assert ((rb (bounded_exec ex (bound-1))) b c) as Hbc.
       { eapply rc11_rmw_incl_rb in Hrmw.
         - destruct Hrmw as [z Hrfinv Hmo].
@@ -1497,6 +1496,8 @@ Proof.
     kat.
 Qed.
 
+(** ** The first conflicting event is a read event *)
+
 Definition sbrf_before_jk (ex: Execution) (bound: nat) (j k: Event) :=
   fun e => (sb ex ⊔ rf (bounded_exec ex (bound-1)))^* e j \/ 
            (sb ex ⊔ rf (bounded_exec ex (bound-1)))^* e k.
@@ -1894,7 +1895,7 @@ Proof.
   inversion Hval as [_ [Hsb_v _]].
   inversion_res_chval Hres.
   destruct Hsb_v as [Hlso Hsbinit]. split.
-  - eapply sb_lso_res_chval; eauto.
+  - eapply sb_po_res_chval; eauto.
   - intros l2. destruct (Hsbinit l2) as [e [H1 [H2 [H3 H4]]]]. exists e.
     split;[|split;[|split]]; auto.
     + intros Hnot. apply H3. rewrite Hsb in Hnot.
@@ -1933,60 +1934,33 @@ Lemma imm_sb_res_chval (ex res: Execution) (bound: nat) (j k c r w: Event) (l: L
   (I (sbrf_before_jk ex bound j k)) w ->
   imm (sb res) r w.
 Proof.
-  intros [Hrw Himm] Hnuminj Hres Hr Hw. destruct_res_chval Hres.
-  split.
+  intros [Hrw [Himm1 Himm2]] Hnuminj Hres Hr Hw. destruct_res_chval Hres.
+  split;[|split].
   - rewrite Hsb. left. simpl_trt. auto.
-  - intros d Hdw. rewrite Hsb in Hdw.
-    destruct Hdw as [Hdw|[Hdw Heq]].
-    + assert (I (sbrf_before_jk ex bound j k) d) as Hd.
-      { eapply sbrf_before_jk_sb; eauto.
-        eapply simpl_trt_rel; eauto. }
-      apply simpl_trt_rel in Hdw as Hrel.
-      apply Himm in Hrel as [H1 H2]. split.
-      * { destruct H1 as [H1|H1].
-          - left. rewrite Hsb. left. simpl_trt. auto.
-          - right. auto. }
-      * intros g Hrg. rewrite Hsb in Hrg.
-        { destruct Hrg as [Hrg|[Hrk Heq]].
-          - apply simpl_trt_hyp in Hrg as [Hleft [Hrel Hright]].
-            generalize (H2 _ Hrel). intros H3.
-            destruct H3 as [H3|H3].
-            + left. rewrite Hsb. left. simpl_trt. auto.
-            + right. auto.
-          - apply (eq_num_read2 Hnuminj) in Heq as Hgk.
-            rewrite Hgk.
-            apply simpl_trt_hyp in Hrk as [Hleft [Hrel Hright]].
-            generalize (H2 _ Hrel). intros H3.
-            destruct H3 as [H3|H3].
-            + left. rewrite Hsb. left. simpl_trt. auto.
-            + right. auto.
-        }
-    + apply (eq_num_read2 Hnuminj) in Heq as Hwk.
-      split.
-      * apply simpl_trt_hyp in Hdw as [Hleft [Hrel Hright]].
-        rewrite <-Hwk in Hrel.
-        apply Himm in Hrel as [H1 _].
-        { destruct H1 as [H1|H1].
-          - left. rewrite Hsb. left. simpl_trt. auto.
-          - right. auto. }
-      * intros g Hrg. rewrite <-Hwk in Hdw at 3.
-        apply simpl_trt_hyp in Hdw as [Hleft [Hrel Hright]].
-        apply Himm in Hrel as [_ H2].
-        rewrite Hsb in Hrg.
-        { destruct Hrg as [Hrg|[Hrg Heq2]].
-          - apply simpl_trt_hyp in Hrg as [H3 [H4 H5]].
-            generalize (H2 _ H4). intros H6.
-            destruct H6 as [H6|H6].
-            + left. rewrite Hsb. left. simpl_trt. auto.
-            + right. auto.
-          - apply (eq_num_read2 Hnuminj) in Heq2 as Hgk.
-            rewrite Hgk.
-            apply simpl_trt_hyp in Hrg as [Hleft2 [Hrel2 Hright2]].
-            generalize (H2 _ Hrel2). intros H7.
-            destruct H7 as [H7|H7].
-            + left. rewrite Hsb. left. simpl_trt. auto.
-            + right. auto.
-        }
+  - intros x Hsbres. rewrite Hsb in Hsbres.
+    destruct Hsbres as [Hsbres|[Hsbres Hwk]].
+    + apply simpl_trt_hyp in Hsbres as [Ht1 [Hsbres Ht2]].
+      apply Himm1 in Hsbres as [Hsbres|Hsbres].
+      * left. rewrite Hsb. left. simpl_trt; auto.
+      * right. auto.
+    + apply (eq_num_read2 Hnuminj) in Hwk.
+      rewrite <-Hwk in Hsbres at 3.
+      apply simpl_trt_hyp in Hsbres as [Ht1 [Hsbres Ht2]].
+      apply Himm1 in Hsbres as [Hsbres|Hsbres].
+      * left. rewrite Hsb. left. simpl_trt; auto.
+      * right. auto.
+  - intros x Hsbres. rewrite Hsb in Hsbres.
+    destruct Hsbres as [Hsbres|[Hsbres Hwk]].
+    + apply simpl_trt_hyp in Hsbres as [Ht1 [Hsbres Ht2]].
+      apply Himm2 in Hsbres as [Hsbres|Hsbres].
+      * left. rewrite Hsb. left. simpl_trt; auto.
+      * right. auto.
+    + apply (eq_num_read2 Hnuminj) in Hwk.
+      rewrite <-Hwk in Hsbres at 3.
+      apply simpl_trt_hyp in Hsbres as [Ht1 [Hsbres Ht2]].
+      apply Himm2 in Hsbres as [Hsbres|Hsbres].
+      * left. rewrite Hsb. left. simpl_trt; auto.
+      * right. auto.
 Qed.
 
 Lemma rmw_v1_res_chval (ex res: Execution) (bound: nat) (j k c: Event) (l: Loc) (v: Val):
@@ -2658,7 +2632,7 @@ Proof.
     destruct Hmid as [[[Hmid1 Hmid2]|[Hmid1 Hmid2]]|[z3 [Hmid11 Hmid12] Hmid2]];
     [ | | rewrite Hmid11 in Hmid2; eapply (nothing_after_max_mo ex res); eauto];
 
-    destruct Hend as [Hend|[[[Hend1 Hend2]|[Hend1 Hend2]]|[z5 [Hend11 Hend12] Hend2]]].
+    destruct Hend as [Hend|[[[Hend1 Hend2]|[Hend1 Hend2]]|[z5 [Hend11 Hend12] Hend2]]]. 
     + rewrite (eq_num_read2 Hnuminj Hmid2) in Hend. apply bounded_ecorb_l in Hend. lia.
     + rewrite <-Hend1, Hmid2 in Hcw. inversion Hcw.
     + apply (eq_num_read2 Hnuminj) in Hmid2. rewrite Hmid2 in Hend1.
@@ -2708,7 +2682,7 @@ Proof.
     + rewrite Hend11 in Hend2. eapply (nothing_after_max_mo ex res); eauto.
 Qed.
 
-Lemma change_val_eco_ac_aux (ex res: Execution) (bound: nat) (j k c d: Event) (l: Loc) (v: Val):
+Lemma change_val_eco_ac_aux1 (ex res: Execution) (bound: nat) (j k c d: Event) (l: Loc) (v: Val):
   complete_exec ex ->
   max_mo_for_loc c (sbrf_before_jk ex bound j k) (mo_res ex bound j k) l ->
   imm (mo ex) d c ->
@@ -2737,6 +2711,22 @@ Proof.
     eapply (mo_irr _ Hval x x). split; [|simpl; auto].
     eapply (mo_trans _ Hval _ c); eauto.
 Qed.
+
+
+(*
+Lemma change_val_eco_notsbceco_jx (ex res: Execution) (bound: nat) (j k d x: Event) (l: Loc) (v: Val):
+  complete_exec ex ->
+  max_mo_for_loc j (sbrf_before_jk ex bound j k) (mo_res ex bound j k) l ->
+  res_chval_k ex res bound j k d l v ->
+  ~((sb (bounded_exec res (numbering k - 1))
+         ⊔ rf (bounded_exec res (numbering k - 1))
+         ⊔ mo (bounded_exec res (numbering k - 1))
+         ⊔ rb (bounded_exec res (numbering k - 1))) j x).
+Proof.
+  intros Hcomp Hmaxmo Hres [[Hsbrf|Hmo]|Hrb].
+  Search res_chval_k.
+  - Search (
+*)
 
 Lemma change_val_eco_ac2 (ex res: Execution) (bound: nat) (j k c d: Event) (l: Loc) (v: Val):
   complete_exec ex ->
@@ -2810,7 +2800,7 @@ Proof.
         apply simpl_trt_rel in Hend1. eapply (sb_irr _ Hval); eauto. 
         split; eauto. simpl. auto.
       * rewrite Hend11 in Hend2.
-        apply (change_val_eco_ac_aux _ _ _ _ _ _ _ _ _ Hcomp Hmax Himmmo Hres) in Hend2.
+        apply (change_val_eco_ac_aux1 _ _ _ _ _ _ _ _ _ Hcomp Hmax Himmmo Hres) in Hend2.
         rewrite <-Hbeg, <-Hend', Hend2, Heq in Hmid1.
         apply (mcp_not_sb_jk _ _ _ _ Hmcp). apply simpl_trt_rel in Hmid1. auto.
       * rewrite (eq_num_read2 Hnuminj Hmid12) in Hbeg.
@@ -2818,40 +2808,28 @@ Proof.
       * rewrite Hmid11, Hend1 in Hmid2.
         eapply (mo_irr _ Hbresval). split; eauto; simpl. auto.
       * rewrite Hmid11 in Hmid2.
-        apply (change_val_eco_ac_aux _ _ _ _ _ _ _ _ _ Hcomp Hmax Himmmo Hres) in Hmid2.
+        apply (change_val_eco_ac_aux1 _ _ _ _ _ _ _ _ _ Hcomp Hmax Himmmo Hres) in Hmid2.
         rewrite Hmid2, Heq in Hend1.
         apply (mcp_not_sb_jk _ _ _ _ Hmcp). apply simpl_trt_rel in Hend1. auto.
       * apply (mo_dest_write _ Hbresval) in Hend2.
         rewrite Hend', Hbeg, Hmid12 in Hend2. intuition auto.
     + destruct Hmid as [[[Hmid1 Hmid2]|[Hmid1 Hmid2]]|[z3 [Hmid11 Hmid12] Hmid2]];
       destruct Hend as [Hend|[[[Hend1 Hend2]|[Hend1 Hend2]]|[z5 [Hend11 Hend12] Hend2]]];
-      destruct Hend' as [Hend'|[[[Hend'1 Hend'2]|[Hend'1 Hend'2]]|[z8 [Hend'11 Hend'12] Hend'2]]].
-      * rewrite (eq_num_read2 Hnuminj Hmid2) in Hend.
-        apply bounded_ecorb_l in Hend. lia.
-      * rewrite (eq_num_read2 Hnuminj Hmid2) in Hend.
-        apply bounded_ecorb_l in Hend. lia.
-      * rewrite (eq_num_read2 Hnuminj Hmid2) in Hend.
-        apply bounded_ecorb_l in Hend. lia.
-      * rewrite (eq_num_read2 Hnuminj Hmid2) in Hend.
-        apply bounded_ecorb_l in Hend. lia.
-      * rewrite (eq_num_read2 Hnuminj Hend2) in Hend'.
-        apply bounded_ecorb_l in Hend'. lia.
-      * rewrite <-Hend1, Hmid2 in Hcw. intuition auto.
-      * rewrite <-Hend1, Hmid2 in Hcw. intuition auto.
-      * rewrite <-Hend1, Hmid2 in Hcw. intuition auto.
-      * rewrite (eq_num_read2 Hnuminj Hmid2) in Hend1.
-        apply simpl_trt_rel in Hend1. eapply (sb_irr _ Hval); eauto. 
-        split; eauto. simpl. auto.
-      * rewrite (eq_num_read2 Hnuminj Hmid2) in Hend1.
-        apply simpl_trt_rel in Hend1. eapply (sb_irr _ Hval); eauto. 
-        split; eauto. simpl. auto.
-      * rewrite (eq_num_read2 Hnuminj Hmid2) in Hend1.
-        apply simpl_trt_rel in Hend1. eapply (sb_irr _ Hval); eauto. 
-        split; eauto. simpl. auto.
-      * rewrite (eq_num_read2 Hnuminj Hmid2) in Hend1.
-        apply simpl_trt_rel in Hend1. eapply (sb_irr _ Hval); eauto. 
-        split; eauto. simpl. auto.
+      destruct Hend' as [Hend'|[[[Hend'1 Hend'2]|[Hend'1 Hend'2]]|[z8 [Hend'11 Hend'12] Hend'2]]];
+      try (rewrite <-Hend1, Hmid2 in Hcw; intuition auto);
+      try (rewrite (eq_num_read2 Hnuminj Hmid2) in Hend;
+        apply bounded_ecorb_l in Hend; lia);
+      try (rewrite (eq_num_read2 Hnuminj Hmid2) in Hend1;
+        apply simpl_trt_rel in Hend1; eapply (sb_irr _ Hval); eauto; 
+        split; eauto; simpl; auto).
+      * rewrite Hend11 in Hend2.
+        apply (change_val_eco_ac_aux1 _ _ _ _ _ _ _ _ _ Hcomp Hmax Himmmo Hres) in Hend2.
+        rewrite Heq in Hend2. rewrite Hend2 in Hend'.
+      * admit. (* mo_irr *)
+      * admit. (* Hend'1 *)
+      * admit. (* imm succ of d in mo is c, which is j : z4 is j, which is <> k *)
       * 
+
 Qed.
 
 
@@ -3112,7 +3090,7 @@ Proof.
           - rew bounded in Hs'k. apply simpl_trt_tright in Hs'k.
             unfold NLE in Hs'k. lia.
         }
-  - destruct Hnot as [Hnot _].
+  - destruct Hnot as [Hnot _]. 
     apply simpl_trt_rel in Hnot. eapply mcp_not_sb_jk; eauto.
   - apply simpl_trt_hyp in Hnot as [Hinj [Hrel [[Hsj|Hsk] Hdiff]]].
     + eapply (rtc_incl _ _ (sbrf_minone_sbrf _ _)) in Hsj.
@@ -3360,8 +3338,6 @@ Proof.
   specialize (H e'' Hsame' Hsc' a b Hrace).
   intuition auto.
 Qed.
-
-End DRF.
 
 
 
