@@ -236,32 +236,13 @@ Lemma nt_rfsc_incl_hb {ex: Execution}:
   [M Sc] ⋅ rf ex ⋅ [M Sc] ≦  sw ex.
 Proof.
   intros Hval.
-  unfold sw.
-  rewrite <- (one_incl_refl ([F]⋅sb ex)).
-  rewrite <- (one_incl_refl (sb ex⋅[F])).
-  rewrite !dot_one.
-  apply incl_dot_test_right.
-  solve_test_ineq.
-  apply incl_dot_test_right.
-  solve_test_ineq.
-  rewrite <- !dotA.
-  apply incl_dot_test_left.
-  solve_test_ineq.
-  rewrite 2dotA.
-  unfold rs.
-  rewrite <- (one_incl_refl (sb ex)).
-  rewrite <- (one_incl_rtc (rf ex⋅rmw ex)).
-  rewrite !dot_one, dtest.
-  rewrite (rf_wr _ Hval) at 1.
-  mrewrite (test_dot_comm _ R).
-  apply incl_dot_test_right. auto.
-  rewrite (test_in_one _ (M Sc)) at 2.
-  rewrite (test_in_one _ R).
-  rewrite !dot_one.
-  apply incl_dot; auto.
-  rewrite test_dot_comm.
-  apply incl_dot; auto.
-  solve_test_ineq.
+  assert ([M Sc] ≦ [Mse Acq]⋅[Mse Rlx]) as H1. 
+  { apply incl_dot_test; solve_test_ineq. }
+  assert ([M Sc] ≦ [Mse Rlx]⋅[Mse Rel]) as H2. 
+  { apply incl_dot_test; solve_test_ineq. }
+  rewrite H1 at 1. rewrite H2.
+  rewrite (rf_wr _ Hval).
+  unfold sw, rs. kat. 
 Qed.
 
 (** In a complete execution, the transitive closure of the union of the 
@@ -290,14 +271,9 @@ Lemma sbrfsc_incl_pre (pre ex: Execution):
   (sb ex ⊔ ([M Sc] ⋅ (rf ex) ⋅ [M Sc]))^+.
 Proof.
   intros Hval Hpre.
-  apply tc_incl.
-  apply incl_cup.
-  apply sb_prefix_incl; auto.
-  apply incl_dot.
-  apply incl_dot.
-  solve_test_ineq.
-  apply rf_prefix_incl; auto.
-  solve_test_ineq.
+  rewrite (rf_prefix_incl Hpre).
+  rewrite (sb_prefix_incl Hpre).
+  kat.
 Qed.
 
 (** When the prefix of an execution doesn't contain any conflicting events, the
