@@ -936,11 +936,15 @@ relation *)
 Lemma tc_incl {A : Type}  (r1 r2 : rlt A):
   r1 ≦ r2 -> r1^+ ≦  r2^+.
 Proof.
-intros H.
-rewrite -> inclusion_as_eq in *.
-apply ext_rel in H. rewrite <- H.
-kat.
+intros H. rewrite H. auto.
 Qed.
+
+Lemma tc_incl_2 {A:Type} (r1 r2: rlt A):
+  r1 ≦ r2^+ -> r1^+ ≦ r2^+.
+Proof.
+  intros H. rewrite H. kat.
+Qed.
+
 
 (** The transitive closure of the transitive closure of a relation is the
 transitive closure of this relation *)
@@ -2140,6 +2144,19 @@ Proof.
       apply H. exists z; auto.
   - kat.
 Qed.
+
+(** The transitive closure of the union of two relations is the same as the
+transitive closure of the union of the first relation and of the transitive
+closure of the second relation *)
+
+Lemma tc_of_union_is_tc_of_union_tc_right {A:Type} (r1 r2: rlt A):
+  (r1 ⊔ r2)^+ = (r1 ⊔ r2^+)^+.
+Proof.
+  apply ext_rel, antisym; kat.
+Qed.
+
+
+
 
 
 

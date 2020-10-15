@@ -348,17 +348,14 @@ Qed.
 the same location *)
 
 Definition res_eq_loc (r: rlt Event) : rlt Event :=
-  fun x => fun y =>
-    r x y /\
-    (get_loc x) = (get_loc y).
+  r ⊓ (fun x => fun y => (get_loc x) = (get_loc y)).
+
 
 (** [res_neq_loc r] restricts a relation [r] to the pairs of events that affect 
 a different location *)
 
 Definition res_neq_loc (r: rlt Event) : rlt Event :=
-  fun x => fun y =>
-    r x y /\
-    (get_loc x) <> (get_loc y).
+  r ⊓ (fun x => fun y => (get_loc x) <> (get_loc y)).
 
 (** Restricting relations to the event that affect the same location, or that
 affect a different location preserve inclusion of relations *)

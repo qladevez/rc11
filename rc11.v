@@ -309,6 +309,32 @@ Proof.
   intros Hval Hrel. eapply tc_sbrfmorb_in_r_aux; eauto.
 Qed.
 
+Lemma sbrfmorb_in_l (x y: Event):
+  valid_exec ex ->
+  (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb) x y ->
+  In _ (evts ex) x.
+Proof.
+  intros Hval Hrel.
+  destruct Hrel as [[[Hrel|Hrel]|Hrel]|Hrel].
+  - eapply sb_orig_evts in Hrel; eauto.
+  - eapply rf_orig_evts in Hrel; eauto.
+  - eapply mo_orig_evts in Hrel; eauto.
+  - eapply rb_orig_evts in Hrel; eauto.
+Qed.
+
+Lemma sbrfmorb_in_r (x y: Event):
+  valid_exec ex ->
+  (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb) x y ->
+  In _ (evts ex) y.
+Proof.
+  intros Hval Hrel.
+  destruct Hrel as [[[Hrel|Hrel]|Hrel]|Hrel].
+  - eapply sb_dest_evts in Hrel; eauto.
+  - eapply rf_dest_evts in Hrel; eauto.
+  - eapply mo_dest_evts in Hrel; eauto.
+  - eapply rb_dest_evts in Hrel; eauto.
+Qed.
+
 (* Variable Hcomp: complete_exec ex.
 
 Lemma Hval: valid_exec ex.
@@ -754,6 +780,106 @@ Qed.
 
 Definition sc_consistent :=
   atomicity /\ acyclic ((sb ex) ⊔ (rf ex) ⊔ (mo ex) ⊔ rb).
+
+Lemma sc_is_rc11:
+  valid_exec ex ->
+  sc_consistent ->
+  rc11_consistent.
+Proof.
+  intros Hval [Hato Hsc]. split;[|split;[|split]].
+  - intros x Hcyc. apply (Hsc x).
+    eapply (incl_rel_thm Hcyc).
+    unfold hb, eco, sw, rs.
+    rewrite (rmw_incl_sb _ Hval). kat.
+  - auto.
+  - intros x Hcyc. apply (Hsc x).
+    eapply (incl_rel_thm Hcyc).
+    eapply tc_incl_2. unfold psc. eapply union_incl.
+    + unfold psc_base, scb, res_eq_loc, res_neq_loc.
+      rewrite leq_cap_l. rewrite leq_cap_l.
+      unfold hb, eco, sw, rs.
+      rewrite (rmw_incl_sb _ Hval). kat.
+    + unfold psc_fence, hb, sw, rs, eco.
+      rewrite (rmw_incl_sb _ Hval). kat.
+  - intros x Hcyc. apply (Hsc x).
+    eapply (incl_rel_thm Hcyc).
+    kat.
+Qed.
+
+Lemma rc11_is_sc_rf_incl_hbloc:
+  valid_exec ex ->
+  (forall e, In _ (evts ex) e -> (get_mode e = Sc)) ->
+  rf ex ≦ res_eq_loc hb.
+Proof.
+  intros Hval Hallsc x y.
+  split;[|auto using (rf_same_loc _ Hval)].
+  apply tc_incl_itself. right.
+  apply (rf_orig_evts _ Hval) in H as Hxevts.
+  apply (rf_dest_evts _ Hval) in H as Hyevts.
+  apply Hallsc in Hxevts. apply Hallsc in Hyevts.
+  exists y. exists y. exists y. exists y.
+  exists x. exists x. exists x.
+  + split; auto. 
+    destruct x; destruct m; compute in Hxevts;
+    compute; intuition auto; congruence.
+  + right. simpl; auto.
+  + exists x. exists x. exists x. exists x.
+    * split; auto. eapply rf_orig_write; eauto.
+    * right. simpl. auto.
+    * split; auto. eapply rf_orig_write; eauto.
+    * split; auto. destruct x; destruct m; compute in Hxevts;
+      compute; intuition auto; congruence.
+    * rewrite rtc_inv_dcmp6. left. simpl. auto.
+  + auto.
+  + split; auto. eapply rf_dest_read; eauto.
+  + destruct y; destruct m; compute in Hyevts;
+    compute; intuition auto; congruence.
+  + right. simpl; auto.
+  + destruct y; destruct m; compute in Hyevts;
+    compute; intuition auto; congruence.
+Qed.
+
+Lemma rc11_is_sc_aux:
+  valid_exec ex ->
+  (forall e, In _ (evts ex) e -> (get_mode e = Sc)) ->
+  (sb ex ⊔ eco) ≦ (hb ? ⋅ scb ⋅ hb ?)^+.
+Proof.
+  intros Hval Hallsc.
+  apply union_incl.
+  { unfold scb. kat. }
+  eapply tc_incl_2.
+  apply union_incl;[apply union_incl|].
+  - intros x y H. apply tc_incl_itself.
+    exists y; [|right;simpl;auto].
+    exists x; [right;simpl;auto|].
+    left; left; right. eapply rc11_is_sc_rf_incl_hbloc; eauto.
+  - unfold scb. kat.
+  - unfold scb. kat.
+Qed.
+
+Lemma rc11_is_sc:
+  valid_exec ex ->
+  (forall e, In _ (evts ex) e -> (get_mode e = Sc)) ->
+  rc11_consistent ->
+  sc_consistent.
+Proof.
+  intros Hval Hallsc [_ [Hato [Hpsc _]]].
+  split. auto.
+  intros x Hcyc. apply (Hpsc x).
+  eapply (incl_rel_thm Hcyc).
+  eapply tc_incl. eapply incl_union_left.
+  intros y z Hrel. exists z. exists y.
+  - left. split; auto. unfold M. eapply Hallsc.
+    eapply sbrfmorb_in_l; eauto.
+  - destruct Hrel as [[[Hrel|Hrel]|Hrel]|Hrel]; eapply (incl_rel_thm Hrel).
+    + unfold scb. kat.
+    + erewrite rc11_is_sc_rf_incl_hbloc; eauto.
+      unfold scb. kat.
+    + unfold scb. kat.
+    + unfold scb. kat.
+  - left. split; auto. unfold M. eapply Hallsc.
+    eapply sbrfmorb_in_r; eauto.
+Qed.
 
 (** If the modification order of a valid execution is empty (meaning there is
 one or zero write), the execution is SC-consistent *)

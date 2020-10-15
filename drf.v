@@ -683,8 +683,8 @@ Proof.
     rewrite <-union_assoc in Hdy. destruct Hdy as [Hdy|Hdy].
 
     + apply (rmw_incl_imm_sb _ Hvalb) in Hrmw as Himm.
-      destruct Himm as [Hr Himm].
-      destruct (Himm d Hdy) as [Hdb _].
+      destruct Himm as [Hr [Himm _]].
+      pose proof (Himm d Hdy) as Hdb.
       assert ((rb (bounded_exec ex (bound-1))) b c) as Hbc.
       { eapply rc11_rmw_incl_rb in Hrmw.
         - destruct Hrmw as [z Hrfinv Hmo].
