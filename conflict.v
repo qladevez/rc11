@@ -121,6 +121,12 @@ is not SC and they are not related by [(sb ⊔ rf_sc)⁺] in any direction *)
 Definition at_least_one_not_sc: rlt Event :=
   fun x y => ~(get_mode x = Sc /\ get_mode y = Sc).
 
+(** Two events are [race_nbsc] (in a race and not both sc) if they form a race
+and if at least one of them is not SC *)
+
+Definition race_nbsc (ex: Execution) : rlt Event :=
+  (race ex) ⊓ at_least_one_not_sc.
+
 Definition pi (ex: Execution) : rlt Event :=
   (conflicting ex) ⊓
   at_least_one_not_sc ⊓
@@ -258,6 +264,23 @@ Proof.
   apply tc_incl.
   apply incl_cup; auto.
   apply (nt_rfsc_incl_hb Hval).
+Qed.
+
+(** If two events form a race and at least one of them is not SC, they are
+pi-conflicting *)
+
+Lemma race_nbsc_incl_pi (ex: Execution):
+  valid_exec ex ->
+  (race_nbsc ex) ≦ (pi ex).
+Proof.
+  intros Hval x y [[Hconf Hnhb] Hnbsc].
+  split;[split|]; auto.
+  intros [H|H]; apply Hnhb;[left|right].
+  - eapply (incl_rel_thm H).
+    eapply sbrfsc_incl_hb. eauto.
+  - eapply (incl_rel_thm H).
+    eapply cnv_leq_iff.
+    eapply sbrfsc_incl_hb. eauto.
 Qed.
 
 (** In a complete execution, the transitive closure of the union of the
@@ -680,3 +703,5 @@ Proof.
   apply (no_conflict_prefix_sc ex ex); auto.
   apply prefix_itself. auto.
 Qed.
+
+

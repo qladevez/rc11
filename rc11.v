@@ -186,6 +186,18 @@ Proof.
   all: eauto using Hval.
 Qed.
 
+(** In a valid execution, two events related by read-before are different *)
+
+Lemma rb_diff (x y : Event):
+  valid_exec ex ->
+  rb x y ->
+  x <> y.
+Proof.
+  intros Hval Hrb Heq.
+  eapply rb_irr. auto.
+  split; eauto.
+Qed.
+
 (** In a valid execution, the union of sequenced-before, reads-from, 
 modification order and reads-before is irreflexive *)
 
@@ -482,7 +494,15 @@ Proof.
   intros Hval.
   unfold hb. rewrite (sw_incl_sbrf Hval). kat.
 Qed.
-  
+
+(** sequenced-before is included in happens-before *)
+
+Lemma sb_incl_hb:
+  sb ex ≦ hb.
+Proof.
+  unfold hb. kat.
+Qed.
+
 (** ** SC-before *)
 
 Definition scb :=

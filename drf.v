@@ -47,6 +47,69 @@ Definition race (ex: Execution) : rlt Event :=
     ~((hb ex) x y) /\
     ~((hb ex) y x).
 
+(** ** Race-free implies consistency with SC *)
+
+(** Let's proove first that in a race-free execution, (rf U mo U rb) ≦ (sb U sw) *)
+
+Lemma rf_rfmorb_incl_sb (ex: Execution):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  ~(exists x y, (race ex) x y) ->
+  (rf ex ⊔ mo ex ⊔ rb ex) ≦ hb ex.
+Proof.
+  intros Hval Hrc11 Hnorace x y.
+  destruct Hrc11 as [Hcoh _].
+  intros [[Hrf|Hmo]|Hrb].
+  - destruct (classic (hb ex x y)) as [Hxy|Hxy]; auto.
+    destruct (classic (hb ex y x)) as [Hyx|Hyx].
+    + exfalso. eapply coherence_no_future_read. eauto.
+      exists y; eauto.
+    + exfalso. apply Hnorace. exists x, y.
+      repeat split; auto.
+      * apply rf_orig_write in Hrf; auto.
+      * apply rf_diff in Hrf; auto.
+      * apply rf_same_loc in Hrf; auto.
+  - destruct (classic (hb ex x y)) as [Hxy|Hxy]; auto.
+    destruct (classic (hb ex y x)) as [Hyx|Hyx].
+    + exfalso. eapply coherence_coherence_ww. eauto.
+      exists y; eauto.
+    + exfalso. apply Hnorace. exists x, y.
+      repeat split; auto.
+      * apply mo_orig_write in Hmo; auto.
+      * apply mo_diff in Hmo; auto.
+      * apply mo_same_loc in Hmo; auto.
+  - destruct (classic (hb ex x y)) as [Hxy|Hxy]; auto.
+    destruct (classic (hb ex y x)) as [Hyx|Hyx].
+    + exfalso.
+      destruct Hrb as [z H1 H2]. eapply coherence_coherence_wr. eauto.
+      exists x. exists y.
+      all: eauto.
+    + exfalso. apply Hnorace. exists x, y.
+      repeat split; auto.
+      * apply rb_dest_write in Hrb; auto.
+      * apply rb_diff in Hrb; auto.
+      * apply rb_same_loc in Hrb; auto.
+Qed.
+
+Lemma no_race_implies_sc (ex: Execution):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  ~(exists x y, (race ex) x y) ->
+  sc_consistent ex.
+Proof.
+  intros Hval Hrc11 Hnorace.
+  split.
+  - unfold rc11_consistent in Hrc11. intuition auto.
+  - intros x Hcyc.
+    assert (((rf ex ⊔ mo ex ⊔ rb ex) ⊔ hb ex)^+ x x) as Hcyc'.
+    { apply (incl_rel_thm Hcyc). unfold hb. kat. }
+    eapply coherence_irr_hb. { destruct Hrc11 as [? _]. eauto. }
+    eapply cycle_incl_union.
+    + eapply rf_rfmorb_incl_sb; eauto.
+    + apply (incl_rel_thm Hcyc'). unfold hb. kat.
+Qed.
+
+
 (** For any execution, race is a symmetric relation *)
 
 Lemma race_sym (ex: Execution) (x y: Event):
@@ -495,11 +558,6 @@ Lemma mcp_write_1 (ex: Execution) (bound: nat) (k j: Event):
   minimal_conflicting_pair ex bound j k ->
   (numbering k) > (numbering j) ->
   is_write k ->
-  (* This condition is here, because this lemma will be applied in a context
-  where we assume a program whose SC-executions contain only races relating two
-  SC-events. But here, (bounded_exec ex bound) is an execution of the program 
-  and it contains a race between events who are not both SC, so it can't be
-  an SC-execution *)
   ~(sc_consistent (bounded_exec ex bound)) ->
   exists c, (mo (bounded_exec ex bound)) k c /\ 
             (sb (bounded_exec ex bound) ⊔ rf (bounded_exec ex bound) ⊔ 
@@ -2888,6 +2946,7 @@ Proof.
       + eapply numco_res_chval; eauto.
 Qed.
 
+
 Lemma change_val_eco_ac2 (ex res: Execution) (bound: nat) (j k c d: Event) (l: Loc) (v: Val):
   complete_exec ex ->
   rc11_consistent ex ->
@@ -3203,31 +3262,6 @@ Proof.
         rewrite Hmid2, Heq in Hend1.
         eapply mcp_not_sb_jk; eauto; incl_rel_kat Hend1.
 Qed.
-
-(*
-Lemma change_val_sc (ex res: Execution) (bound: nat) (j k c d: Event) (l: Loc) (v: Val):
-  complete_exec ex ->
-  rc11_consistent ex ->
-  numbering_coherent ex ->
-  numbering_injective ex ->
-  minimal_conflicting_pair ex bound j k ->
-  numbering k > numbering j ->
-  max_mo_for_loc c (sbrf_before_jk ex bound j k) (mo_res ex bound j k) l ->
-  res_chval_k ex res bound j k c l v ->
-  sc_consistent res.
-Proof.
-  intros Hcomp Hrc11 Hnumco Hnuminj Hmcp Hord Hmaxmo Hres.
-  split.
-  - eapply change_val_atomicity; eauto.
-  - 
-
-eapply change_val_eco_ac; eauto.
-Qed.
-*)
-
-(** the max mo is different from j *)
-
-(** the max mo is j *)
 
 (** The final proof *)
  

@@ -2172,6 +2172,18 @@ Proof.
   apply ext_rel, antisym; kat.
 Qed.
 
+(** When a first relation is included in a second relation, a cycle in the union
+of the two relations is a cycle in the second relation *)
+
+Lemma cycle_incl_union {A:Type} (r1 r2: rlt A) (x:A):
+  r1 ≦ r2^+ ->
+  (r1 ⊔ r2)^+ x x ->
+  r2^+ x x.
+Proof.
+  intros Hincl Hrel.
+  apply (incl_rel_thm Hrel).
+  rewrite Hincl. kat.
+Qed.
 
 
 
