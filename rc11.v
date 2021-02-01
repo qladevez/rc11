@@ -508,6 +508,96 @@ Qed.
 Definition scb :=
  (sb ex) ⊔  ((res_neq_loc (sb ex)) ⋅ hb ⋅ (res_neq_loc (sb ex))) ⊔ (res_eq_loc hb) ⊔ (mo ex) ⊔  rb.
 
+(** happens-before can be decomposed in a subset of happens-before included in
+SC-before, and the rest of happens-before *)
+
+Lemma hb_dcmp:
+  valid_exec ex ->
+  hb = ((sb ex) ⊔  ((res_neq_loc (sb ex)) ⋅ hb ⋅ (res_neq_loc (sb ex))) ⊔ (res_eq_loc hb)) ⊔
+       ((res_eq_loc (sb ex) ⋅ hb) ⊔
+        (hb ⋅ res_eq_loc (sb ex)) ⊔
+        (sw ⋅ hb) ⊔
+        (hb ⋅ sw) ⊔
+        sw).
+Proof.
+  intros Hval. apply ext_rel, antisym.
+  - intros x y Hrel.
+    unfold hb in Hrel. rewrite tc_inv_dcmp2 in Hrel.
+    destruct Hrel as [z Hxz Hhb].
+    rewrite rtc_inv_dcmp6 in Hhb.
+    destruct Hhb as [Hzy|Hhb].
+    { simpl in Hzy. rewrite Hzy in Hxz. destruct Hxz as [Hxz|Hxz].
+      - left; left; left. auto.
+      - right; right. auto.
+    }
+    rewrite tc_inv_dcmp in Hhb. destruct Hhb as [w Hhb Hwy].
+    rewrite rtc_inv_dcmp6 in Hhb. destruct Hhb as [Hzw|Hzw].
+    + simpl in Hzw. rewrite <-Hzw in Hwy.
+      destruct Hxz as [Hxz|Hxz]; destruct Hwy as [Hwy|Hwy].
+      * left; left; left. apply (sb_trans _ Hval). exists z; auto.
+      * right; left; right. exists z; auto.
+        unfold hb. incl_rel_kat Hxz.
+      * right; left; left; right. exists z; auto.
+        unfold hb. incl_rel_kat Hwy.
+      * right; left; right. exists z; auto.
+        unfold hb. incl_rel_kat Hxz.
+    + destruct Hxz as [Hxz|Hxz]; destruct Hwy as [Hwy|Hwy].
+      * destruct (classic (get_loc x = get_loc z)) as [Heqxz|Hneqxz].
+        { right; left; left; left; left. exists z.
+          - split; auto.
+          - unfold hb. rewrite tc_inv_dcmp. exists w.
+            + incl_rel_kat Hzw.
+            + incl_rel_kat Hwy.
+        }
+        destruct (classic (get_loc w = get_loc y)).
+        { right; left; left; left; right. exists w.
+          - unfold hb. rewrite tc_inv_dcmp2. exists z.
+            + incl_rel_kat Hxz.
+            + incl_rel_kat Hzw.
+          - split; auto.
+        } 
+        left; left; right.
+        { exists w. exists z.
+          - split; auto.
+          - unfold hb. auto.
+          - split; auto.
+        }
+      * right; left; right.
+        exists w; auto.
+        unfold hb. rewrite tc_inv_dcmp2. exists z.
+        -- incl_rel_kat Hxz.
+        -- incl_rel_kat Hzw.
+      * right; left; left; right.
+        exists z; auto.
+        unfold hb. rewrite tc_inv_dcmp. exists w.
+        -- incl_rel_kat Hzw.
+        -- incl_rel_kat Hwy.
+      * right; left; left; right.
+        exists z; auto.
+        unfold hb. rewrite tc_inv_dcmp. exists w.
+        -- incl_rel_kat Hzw.
+        -- incl_rel_kat Hwy.
+  - unfold hb. intros x y [[[Hrel|Hrel]|Hrel]|
+                           [[[[Hrel|Hrel]|Hrel]|Hrel]|Hrel]];
+    try (incl_rel_kat Hrel).
+    + destruct Hrel as [z [w [Hr1 _] Hr2] [Hr3 _]].
+      rewrite tc_inv_dcmp2. exists w.
+      { incl_rel_kat Hr1. }
+      rewrite rtc_inv_dcmp6. right.
+      rewrite tc_inv_dcmp. exists z.
+      * incl_rel_kat Hr2.
+      * incl_rel_kat Hr3.
+    + destruct Hrel as [Hrel _]. auto.
+    + destruct Hrel as [z [Hr1 _] Hr2].
+      rewrite tc_inv_dcmp2. exists z.
+      * incl_rel_kat Hr1.
+      * incl_rel_kat Hr2.
+    + destruct Hrel as [z Hr1 [Hr2 _]].
+      rewrite tc_inv_dcmp. exists z.
+      * incl_rel_kat Hr1.
+      * incl_rel_kat Hr2.
+Qed.
+
 (** ** Partial-SC base *)
 
 (** We give a semantic to SC atomics by enforcing the order in which they should

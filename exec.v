@@ -376,6 +376,12 @@ Proof.
   apply H; auto.
 Qed.
 
+Lemma res_eq_loc_incl_itself (r: rlt Event):
+  res_eq_loc r ≦ r.
+Proof.
+  intros ? ? [? ?]. auto.
+Qed.
+
 (** [res_mode m r] restricts a relation [r] to the pairs of events that have mode
 [m] *)
 
@@ -749,7 +755,7 @@ Proof.
   auto.
 Qed.
 
-Lemma sb_trans (x y: Event):
+Lemma sb_trans:
   (sb ex)⋅(sb ex) ≦ (sb ex).
 Proof.
   destruct_val_exec val_exec.
