@@ -1063,7 +1063,7 @@ Qed.
 
 (** If a relation is included in an acyclic relation, it is also acyclic *)
 
-Lemma ac_incl {A : Set}  (r1 r2 : rlt A) :
+Lemma ac_incl {A : Type}  (r1 r2 : rlt A) :
   acyclic r2 -> r1 ≦ r2 -> acyclic r1.
 Proof.
 intros Hac Hinc x Hnot. apply (Hac x).
@@ -2161,6 +2161,8 @@ Proof.
       apply H. exists z; auto.
   - kat.
 Qed.
+  
+
 
 (** The transitive closure of the union of two relations is the same as the
 transitive closure of the union of the first relation and of the transitive
@@ -2185,9 +2187,12 @@ Proof.
   rewrite Hincl. kat.
 Qed.
 
-
-
-
-
-
-
+Lemma cyc_u_of_ac_implies_cyc_seq {A:Type} (r1 r2: rlt A) (x: A):
+  acyclic r1 ->
+  (r1⋅r1 ≦ r1) ->
+  acyclic r2 ->
+  (r1 ⊔ r2)^+ x x ->
+  (exists y, (r1⋅r2^+)^+ y y).
+Proof.
+  intros Hac1 Hac2 Htrans2 Hcyc.
+Admitted.
