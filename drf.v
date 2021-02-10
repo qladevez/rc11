@@ -109,6 +109,159 @@ Proof.
     + apply (incl_rel_thm Hcyc'). unfold hb. kat.
 Qed.
 
+(** The above lemma proves that race-free implies SC, only if we consider 
+conflicting SC events to be racy pairs. We now prove that it still holds, even
+when conflicting SC events are not considered to be racy *)
+
+
+Lemma rfmorb_incl_hbmoscrbsc (ex: Execution):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  ~(exists x y, ((get_mode x <> Sc \/ get_mode y <> Sc) /\
+                 (race ex) x y)) ->
+  (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb ex) ≦ (hb ex) ⊔ 
+                            (res_mode Sc (mo ex) \ (hb ex) ⊔
+                             res_mode Sc (rb ex) \ (hb ex)).
+Proof.
+  intros Hval Hrc11 Hnorace x y.
+  destruct Hrc11 as [Hcoh _].
+  intros [[[Hsb|Hrf]|Hmo]|Hrb].
+  - left. unfold hb.
+    incl_rel_kat Hsb.
+  - left.
+    destruct (classic (get_mode x = Sc /\ get_mode y = Sc)) as [[Hmx Hmy]|Hbothsc].
+    + unfold hb. apply tc_incl_itself. right.
+      unfold sw. exists y. exists y. exists y. exists y.
+      exists x. exists x. exists x.
+      * split; auto. unfold Mse. rewrite Hmx. simpl; auto.
+      * right. simpl. auto.
+      * unfold rs.
+        { exists x. exists x. exists x. exists x.
+          - split; auto. eapply rf_orig_write; eauto.
+          - right. simpl. auto.
+          - split; auto. eapply rf_orig_write; eauto.
+          - split; auto. unfold Mse. rewrite Hmx. simpl. auto.
+          - rewrite rtc_inv_dcmp6. left. simpl. auto.
+         }
+      * auto.
+      * split; auto. eapply rf_dest_read; eauto.
+      * split; auto. unfold Mse. rewrite Hmy. simpl. auto.
+      * right. simpl. auto.
+      * split; auto. unfold Mse. rewrite Hmy. simpl. auto.
+    + destruct (classic (hb ex x y)) as [Hxy|Hxy]; auto.
+      destruct (classic (hb ex y x)) as [Hyx|Hyx]; exfalso.
+      * exfalso. eapply coherence_no_future_read. eauto.
+        exists y; eauto.
+      * eapply Hnorace. exists x, y.
+        { repeat split; auto.
+          - apply not_and_or in Hbothsc. auto.
+          - left. eapply rf_orig_write; eauto.
+          - eapply rf_diff; eauto.
+          - eapply rf_same_loc; eauto.
+        }
+  - destruct (classic (get_mode x = Sc /\ get_mode y = Sc)) as [Hbothsc|Hbothsc].
+    + destruct (classic (hb ex x y)) as [Hhb|Hhb].
+      * left. auto.
+      * right. left. split; auto.
+        exists y; try (exists x); auto; split; auto;
+        unfold M; intuition auto.
+    + left.
+      destruct (classic (hb ex x y)) as [Hxy|Hxy]; auto.
+      destruct (classic (hb ex y x)) as [Hyx|Hyx]; exfalso.
+      * exfalso. eapply coherence_coherence_ww. eauto.
+        exists y; eauto.
+      * exfalso. apply Hnorace. exists x, y.
+        { repeat split; auto.
+          - apply not_and_or in Hbothsc. auto.
+          - apply mo_orig_write in Hmo; auto.
+          - apply mo_diff in Hmo; auto.
+          - apply mo_same_loc in Hmo; auto.
+        }
+  - destruct (classic (get_mode x = Sc /\ get_mode y = Sc)) as [Hbothsc|Hbothsc].
+    + destruct (classic (hb ex x y)) as [Hhb|Hhb].
+      * left. auto.
+      * right. right. split; auto.
+        exists y; try (exists x); auto; split; auto;
+        unfold M; intuition auto.
+    + left.
+      destruct (classic (hb ex x y)) as [Hxy|Hxy]; auto.
+      destruct (classic (hb ex y x)) as [Hyx|Hyx].
+      * exfalso.
+        destruct Hrb as [z H1 H2]. eapply coherence_coherence_wr. eauto.
+        exists x. exists y.
+        all: eauto.
+      * exfalso. apply Hnorace. exists x, y.
+        { repeat split; auto.
+          - apply not_and_or in Hbothsc. auto.
+          - apply rb_dest_write in Hrb; auto.
+          - apply rb_diff in Hrb; auto.
+          - apply rb_same_loc in Hrb; auto.
+        }
+Qed.
+
+
+Lemma sc_cyc_implies_hb_seq_morb_cyc (ex: Execution):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  ~(exists x y, ((get_mode x <> Sc \/ get_mode y <> Sc) /\
+                 (race ex) x y)) ->
+  (exists x, (sb ex ⊔ rf ex ⊔ mo ex ⊔ rb ex)^+ x x) ->
+  (exists x, ((hb ex) ⋅ (((res_mode Sc (mo ex)) \ (hb ex)) ⊔
+                         ((res_mode Sc (rb ex)) \ (hb ex)))^+)^+ x x).
+Proof.
+  intros Hval Hrc11 Hnorace [y Hcyc].
+  eapply cyc_u_of_ac_implies_cyc_seq.
+  - intros x H. eapply coherence_irr_hb.
+    { destruct Hrc11. intuition eauto. }
+    eapply (incl_rel_thm H). unfold hb. kat.
+  - unfold hb. kat.
+  - intros x H.
+    rewrite union_comm in H.
+    unshelve (eapply (cyc_u_of_ac_implies_cyc_seq _ _ _ _ _ _) in H).
+    + eapply ac_incl.
+      * unfold acyclic. intros z.
+        eapply rb_ac. eauto.
+      * intros z1 z2 [Hrel _].
+        unfold res_mode in Hrel. incl_rel_kat Hrel.
+    + intros z1 z2 [z3 [Hrel1 _] [Hrel2 _]].
+      eapply res_mode_rel in Hrel1.
+      eapply res_mode_rel in Hrel2.
+      apply (rb_rw _ Hval) in Hrel1.
+      apply (rb_rw _ Hval) in Hrel2.
+      apply simpl_trt_tright in Hrel1.
+      apply simpl_trt_tleft in Hrel2.
+      destruct z3; simpl in Hrel1, Hrel2; intuition auto.
+    + eapply ac_incl.
+      * unfold acyclic. intros z.
+        eapply mo_ac. eauto.
+      * intros z1 z2 [Hrel _].
+        unfold res_mode in Hrel. incl_rel_kat Hrel.
+    + destruct H as [z H].
+      rewrite tc_inv_dcmp2 in H.
+      destruct H as [z1 H1 H2].
+      rewrite rtc_inv_dcmp6 in H2.
+      destruct H2 as [H2|H2].
+      { simpl in H2. rewrite H2 in H1.
+        destruct H1 as [z2 H11 H12].
+        rewrite tc_inv_dcmp in H12.
+        destruct H12 as [z3 _ H12].
+        destruct H11 as [H11 _]. destruct H12 as [H12 _].
+        apply res_mode_rel in H11. apply res_mode_rel in H12.
+        apply (rb_rw _ Hval) in H11. apply (mo_ww _ Hval) in H12.
+        apply simpl_trt_tleft in H11. apply simpl_trt_tright in H12.
+        destruct z; simpl in H11,H12; intuition auto. }
+      destruct H1 as [z2 _ H1].
+      rewrite tc_inv_dcmp in H1. destruct H1 as [z3 _ H1].
+      rewrite tc_inv_dcmp2 in H2. destruct H2 as [z4 H2 _].
+      rewrite tc_inv_dcmp2 in H2. destruct H2 as [z5 H2 _].
+      destruct H1 as [H1 _]. destruct H2 as [H2 _].
+      apply res_mode_rel in H1. apply res_mode_rel in H2.
+      apply (mo_ww _ Hval) in H1. apply (rb_rw _ Hval) in H2.
+      apply simpl_trt_tright in H1. apply simpl_trt_tleft in H2.
+      destruct z1; simpl in H1; intuition auto. 
+  - eapply (incl_rel_thm Hcyc).
+    apply tc_incl. eapply rfmorb_incl_hbmoscrbsc; eauto.
+Qed.
 
 (** For any execution, race is a symmetric relation *)
 
