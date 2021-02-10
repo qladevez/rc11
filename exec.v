@@ -1085,6 +1085,15 @@ Proof.
   apply Hmotrans. exists y; auto.
 Qed.
 
+Lemma mo_ac:
+  forall x, ~(mo ex)^+ x x.
+Proof.
+  destruct_val_exec val_exec.
+  destruct_mo_v Hmo_v.
+  destruct Hmopo.
+  intros x. erewrite tc_of_trans; intuition eauto.
+Qed.
+
 (** Two events related by the reflexive transitive closure of the union of the
 sequenced-before and read-from relations of an execution belong to the events
 of this execution *)

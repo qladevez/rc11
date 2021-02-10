@@ -198,6 +198,54 @@ Proof.
   split; eauto.
 Qed.
 
+(** In a valid execution, reads-before is acyclic *)
+
+Lemma rb_ac:
+  valid_exec ex ->
+  acyclic rb.
+Proof.
+  intros Hval x Hcyc.
+  rewrite tc_inv_dcmp2 in Hcyc.
+  destruct Hcyc as [y Hfirst Hcyc].
+  rewrite rtc_inv_dcmp6 in Hcyc.
+  destruct Hcyc as [Hcyc|Hcyc].
+  { simpl in Hcyc. rewrite Hcyc in Hfirst.
+    eapply (rb_irr Hval x x); try (split; simpl); intuition eauto. }
+  rewrite tc_inv_dcmp2 in Hcyc.
+  destruct Hcyc as [z Hsecond Hcyc].
+  rewrite (rb_rw Hval) in Hfirst, Hsecond.
+  apply simpl_trt_tright in Hfirst.
+  apply simpl_trt_tleft in Hsecond.
+  destruct y; intuition auto.
+Qed.
+
+(** In a valid execution the union of modification-order and reads-before is
+acyclic *)
+
+Lemma rbmo_ac:
+  valid_exec ex ->
+  acyclic (rb ⊔ (mo ex)).
+Proof.
+  intros Hval x Hcyc.
+  rewrite union_comm in Hcyc.
+  unshelve (eapply (cyc_u_of_ac_implies_cyc_seq _ _ _ _ _ _) in Hcyc).
+  - unfold acyclic. apply mo_ac. eauto.
+  - intros z1 z2 [z3 H1 H2].
+    eapply mo_trans; eauto.
+  - apply rb_ac. auto.
+  - destruct Hcyc as [y Hcyc].
+    rewrite tc_inv_dcmp2 in Hcyc.
+    destruct Hcyc as [z1 [z2 Hmo Hrb] _].
+    rewrite tc_inv_dcmp2 in Hrb.
+    destruct Hrb as [z3 Hrb _].
+    rewrite (rb_rw Hval) in Hrb.
+    apply (mo_ww Hval) in Hmo.
+    apply simpl_trt_tright in Hmo.
+    apply simpl_trt_tleft in Hrb.
+    destruct z2; simpl in Hmo, Hrb; intuition auto.
+Qed.
+
+
 (** In a valid execution, the union of sequenced-before, reads-from, 
 modification order and reads-before is irreflexive *)
 
