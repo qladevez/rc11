@@ -208,6 +208,7 @@ Proof.
   apply incl_dot.
   - do 3 (apply incl_dot; auto).
     apply refl_incl.
+    apply res_loc_incl.
     apply (sb_prefix_incl Hpre).
   - apply rtc_incl.
     apply incl_dot.

@@ -27,7 +27,57 @@ atomic) and all later atomic writes to the same location in the same thread, as
 well as all read-modify-write that recursively read from such writes. *)
 
 Definition rs  :=
-  [W] ⋅ (sb ex) ? ⋅ [W] ⋅ [Mse Rlx] ⋅ ((rf ex) ⋅ (rmw ex)) ^*.
+  [W] ⋅ (res_eq_loc (sb ex)) ? ⋅ [W] ⋅ [Mse Rlx] ⋅ ((rf ex) ⋅ (rmw ex)) ^*.
+
+Lemma rfrmw_rtc_same_loc (x y: Event):
+  valid_exec ex ->
+  (rf ex⋅rmw ex)^* x y ->
+  get_loc x = get_loc y.
+Proof.
+  intros Hval. generalize x y. eapply rtc_ind.
+  - intros z1 z2 [z3 Hrf Hrmw].
+    apply (rf_same_loc _ Hval) in Hrf.
+    apply (rmw_same_loc _ Hval) in Hrmw.
+    congruence.
+  - intuition auto.
+  - intuition congruence.
+Qed.
+
+Lemma rfrmw_rtc_rf_same_loc (x y: Event):
+  valid_exec ex ->
+  ((rf ex⋅rmw ex)^*⋅(rf ex)) x y ->
+  get_loc x = get_loc y.
+Proof.
+  intros Hval [z Hrel Hrf].
+  apply (rfrmw_rtc_same_loc _ _ Hval) in Hrel.
+  apply (rf_same_loc _ Hval) in Hrf.
+  congruence.
+Qed.
+
+Lemma rs_same_loc (x y: Event):
+  valid_exec ex ->
+  rs x y ->
+  get_loc x = get_loc y.
+Proof.
+  intros Hval Hrs.
+  destruct Hrs as [z Hsbloc Hrfrmw].
+  destruct Hsbloc as [z2 Hsbloc [Heq1 _]]; rewrite Heq1 in Hsbloc.
+  destruct Hsbloc as [z3 Hsbloc [Heq2 _]]; rewrite Heq2 in Hsbloc.
+  destruct Hsbloc as [z4 [Heq3 _] Hsbloc]; rewrite <-Heq3 in Hsbloc.
+  destruct Hsbloc as [[_ Heq4]|Heq4];
+  apply (rfrmw_rtc_same_loc _ _ Hval) in Hrfrmw; congruence.
+Qed.
+
+Lemma rsrf_same_loc (x y: Event):
+  valid_exec ex ->
+  (rs⋅rf ex) x y ->
+  get_loc x = get_loc y.
+Proof.
+  intros Hval [z Hrs Hrf].
+  apply (rs_same_loc _ _ Hval) in Hrs.
+  apply (rf_same_loc _ Hval) in Hrf.
+  congruence.
+Qed.
 
 (** ** Synchronises with *)
 
@@ -46,9 +96,9 @@ Lemma sw_incl_sbrf:
   sw ≦ ((sb ex) ⊔ (rf ex))^+.
 Proof.
   intros Hval.
-  unfold sw, rs. rewrite rmw_incl_sb. kat. auto using Hval.
+  unfold sw, rs. rewrite rmw_incl_sb.
+  rewrite res_eq_loc_incl_itself. kat. auto using Hval.
 Qed.
-
   
 (** ** Happens-before *)
 
@@ -400,6 +450,42 @@ defined *)
 Definition rc11_consistent :=
   coherence /\ atomicity /\ SC /\ no_thin_air.
 
+(** Coherence implies that [rf;rmw] is included in [mo] *)
+
+Lemma coherence_rfrmw_incl_mo:
+  valid_exec ex ->
+  rc11_consistent ->
+  (rf ex⋅rmw ex) ≦ mo ex.
+Proof.
+  intros Hval Hrc11 x y [z Hrf Hrmw].
+  apply (rf_orig_write _ Hval) in Hrf as Hxw.
+  apply (rmw_dest_write _ Hval) in Hrmw as Hyw.
+  apply (rf_same_loc _ Hval) in Hrf as Hxzloc.
+  apply (rmw_same_loc _ Hval) in Hrmw as Hzyloc.
+  assert (x <> y).
+  { intros Heq. rewrite Heq in Hrf.
+    apply (rmw_incl_sb _ Hval) in Hrmw.
+    destruct Hrc11 as [_ [_ [_ Hnoota]]]. eapply Hnoota.
+    eapply tc_trans; [incl_rel_kat Hrf|incl_rel_kat Hrmw]. }
+  destruct (loc_of_write _ Hxw) as [l Heqloc].
+  inverse_val_exec Hval. destruct_mo_v Hmo_v.
+  edestruct (Hmotot l x y) as [[Hmo _]|[Hmo _]].
+  - auto.
+  - repeat (apply conj); auto.
+    eapply rf_orig_evts; eauto.
+  - repeat (apply conj); auto.
+    + eapply rmw_dest_evts; eauto.
+    + congruence.
+  - auto.
+  - apply (rmw_incl_sb _ Hval) in Hrmw.
+    destruct Hrc11 as [Hco _]. exfalso. apply (Hco z).
+    exists y. 
+    + unfold hb. incl_rel_kat Hrmw.
+    + left. eapply tc_trans.
+      * incl_rel_kat Hmo.
+      * incl_rel_kat Hrf.
+Qed.
+
 (** Coherence implies that [rmw] is included in [rb] *)
 
 Lemma rc11_rmw_incl_rb:
@@ -456,6 +542,62 @@ Proof.
       * apply (incl_rel_thm Hmo). kat.
 Qed.
 
+Lemma rfrmw_rtc_rf_diff (x y: Event):
+  valid_exec ex ->
+  rc11_consistent ->
+  ((rf ex⋅rmw ex)^*⋅rf ex) x y ->
+  x <> y.
+Proof.
+  intros Hval Hrc11 Hrel Heq.
+  destruct Hrc11 as [_ [_ [_ Hnoota]]].
+  rewrite <-Heq in Hrel.
+  eapply Hnoota. apply (incl_rel_thm Hrel).
+  rewrite (rmw_incl_imm_sb _ Hval).
+  rewrite imm_rel_incl_rel.
+  kat.
+Qed.
+
+Lemma rsrf_diff (x y: Event):
+  valid_exec ex ->
+  rc11_consistent ->
+  (rs⋅rf ex) x y ->
+  x <> y.
+Proof.
+  intros Hval Hrc11 Hrsrf Heq.
+  destruct Hrc11 as [_ [_ [_ Hnoota]]].
+  rewrite <-Heq in Hrsrf.
+  eapply Hnoota. apply (incl_rel_thm Hrsrf).
+  unfold rs.
+  rewrite res_eq_loc_incl_itself.
+  rewrite (rmw_incl_imm_sb _ Hval).
+  rewrite imm_rel_incl_rel.
+  kat.
+Qed.
+
+Lemma rsrf_left_write (x y: Event):
+  (rs⋅rf ex) x y ->
+  is_write x.
+Proof.
+  intros Hrel.
+  unfold rs in Hrel.
+  repeat (rewrite seq_assoc in Hrel).
+  destruct Hrel as [_ [_ Hw] _]. auto.
+Qed.
+
+Lemma rfrmw_rtc_rf_left_write (x y: Event):
+  valid_exec ex ->
+  ((rf ex⋅rmw ex)^*⋅rf ex) x y ->
+  is_write x.
+Proof.
+  intros Hval [z Hrel Hrf].
+  rewrite rtc_inv_dcmp6 in Hrel. destruct Hrel as [Hrel|Hrel].
+  - simpl in Hrel. rewrite <-Hrel in Hrf.
+    eapply rf_orig_write; eauto.
+  - rewrite tc_inv_dcmp2 in Hrel. destruct Hrel as [z2 Hrel _].
+    destruct Hrel as [? Hrf2 _].
+    eapply rf_orig_write; eauto.
+Qed.
+
 (** * SC-consistent executions *)
 
 (** An execution is SC-consistent if:
@@ -476,7 +618,8 @@ Proof.
   - intros x Hcyc. apply (Hsc x).
     eapply (incl_rel_thm Hcyc).
     unfold hb, eco, sw, rs.
-    rewrite (rmw_incl_sb _ Hval). kat.
+    rewrite (rmw_incl_sb _ Hval).
+    rewrite res_eq_loc_incl_itself. kat.
   - auto.
   - intros x Hcyc. apply (Hsc x).
     eapply (incl_rel_thm Hcyc).
@@ -484,9 +627,11 @@ Proof.
     + unfold psc_base, scb, res_eq_loc, res_neq_loc.
       rewrite leq_cap_l. rewrite leq_cap_l.
       unfold hb, eco, sw, rs.
-      rewrite (rmw_incl_sb _ Hval). kat.
+      rewrite (rmw_incl_sb _ Hval).
+      rewrite res_eq_loc_incl_itself. kat.
     + unfold psc_fence, hb, sw, rs, eco.
-      rewrite (rmw_incl_sb _ Hval). kat.
+      rewrite (rmw_incl_sb _ Hval).
+      rewrite res_eq_loc_incl_itself. kat.
   - intros x Hcyc. apply (Hsc x).
     eapply (incl_rel_thm Hcyc).
     kat.

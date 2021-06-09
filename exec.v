@@ -93,6 +93,16 @@ Definition weaker_mode (m1 m2 : Mode) : bool :=
 Definition stronger_or_eq_mode (m1 m2 : Mode) : bool :=
   negb (weaker_mode m1 m2).
 
+Definition soe_mode_trans (m1 m2 m3: Mode):
+  stronger_or_eq_mode m1 m2 ->
+  stronger_or_eq_mode m2 m3 ->
+  stronger_or_eq_mode m1 m3.
+Proof.
+  intros H1 H2.
+  destruct m1; destruct m2; destruct m3; compute in *;
+  destruct H1; destruct H2; intuition auto.
+Qed.
+
 Hint Unfold stronger_or_eq_mode : exec.
 
 (** *** Read mode *)
@@ -322,6 +332,22 @@ Definition Mse (m: Mode) : prop_set Event :=
   fun e =>
     if (stronger_or_eq_mode (get_mode e) m) then top else bot.
 
+(** A Mse test for a mode is included in the Mse test of a weaker mode *)
+
+Lemma mse_incl (m1 m2: Mode):
+  stronger_or_eq_mode m1 m2 ->
+  [Mse m1] ≦ [Mse m2].
+Proof.
+  intros Hsoem x y [Heq Hmse].
+  split; auto.
+  unfold Mse. unfold Mse in Hmse.
+  destruct (classic (stronger_or_eq_mode (get_mode x) m1)) as [H|H].
+  - eapply (soe_mode_trans _ _ _ H) in Hsoem.
+    rewrite Hsoem. simpl. auto.
+  - exfalso. apply H. destruct (get_mode x); destruct m1; simpl in *;
+    compute; intuition auto.
+Qed.
+
 (** No event can be both a write event an read event *)
 
 Lemma rw_0: [R] ⋅ [W] ≦ empty.
@@ -380,6 +406,16 @@ Lemma res_eq_loc_incl_itself (r: rlt Event):
   res_eq_loc r ≦ r.
 Proof.
   intros ? ? [? ?]. auto.
+Qed.
+
+Lemma res_eq_loc_trt (r: rlt Event) (t1 t2: prop_set Event):
+  [t1]⋅(res_eq_loc r)⋅[t2] = res_eq_loc ([t1]⋅r⋅[t2]).
+Proof.
+  apply ext_rel; intros x y; split; intros H.
+  - apply simpl_trt_hyp in H as [Ht1 [[Heq Hrel] Ht2]].
+    split; auto. exists y; [exists x|]; repeat split; auto.
+  - destruct H as [Hrel Heq]. apply simpl_trt_hyp in Hrel as [Ht1 [Hrel Ht2]].
+    exists y; [exists x|]; repeat split; auto.
 Qed.
 
 (** [res_mode m r] restricts a relation [r] to the pairs of events that have mode
@@ -853,6 +889,13 @@ Proof.
   destruct y; unfold is_read in Hrf; unfold is_write in H; auto.
 Qed.
 
+Lemma rfrfinv:
+  (rf ex⋅(rf ex)°) ≦ 1.
+Proof.
+  destruct_val_exec val_exec.
+  eapply rf_unique; eauto.
+Qed.
+
 (** In a valid execution, events related by read-modify-write order belong to 
 the set of events of the execution *)
 
@@ -1083,6 +1126,13 @@ Proof.
   destruct_mo_v Hmo_v.
   destruct Hmopo as [_ [Hmotrans _]].
   apply Hmotrans. exists y; auto.
+Qed.
+
+Lemma mo_trans2:
+  (mo ex⋅mo ex) ≦ mo ex.
+Proof.
+  destruct_val_exec val_exec; destruct_mo_v Hmo_v; 
+  destruct Hmopo; intuition auto.
 Qed.
 
 Lemma mo_ac:
@@ -1568,33 +1618,20 @@ reflexive transitive closure *)
 
 Lemma eco_rfmorb_seq_rfref:
   valid_exec ex ->
-  eco = (rf ex) ⊔ (((mo ex) ⊔ rb) ⋅ (rf ex)?).
+  eco = (rf ex) + (((mo ex) ⊔ rb) ⋅ (rf ex)?).
 Proof.
-  intros Hval.
-  unfold eco.
-  apply ext_rel. apply antisym.
-  - apply itr_ind_l1.
-    + kat.
-    + assert ((mo ex)⋅(mo ex) ≦ (mo ex)) as Hmo_trans.
-      { destruct_val_exec Hval. destruct_mo_v Hmo_v.
-        destruct Hmopo as [_ [Hmotrans _]].
-        unfold "⋅" in Hmotrans. rewrite Hmotrans. ra_normalise. auto. }
-    ra_normalise. rewrite Hmo_trans. ra_normalise.
-    repeat (try (apply leq_cupx)).
-    1, 5, 7: kat.
-    (* all: upgrade_to_kat Event. *)
-    1, 2, 7: (elim_conflicting_rw Hval).
-    2, 4, 6, 8: (elim_conflicting_wr Hval).
-    all: unfold rb.
-    all: destruct_val_exec Hval.
-    1, 3: mrewrite (rf_unique _ _ Hrf_v).
-    3, 4: destruct_mo_v Hmo_v;
-          destruct Hmopo as [_ [Hmotrans _]];
-          mrewrite Hmotrans.
-    all: kat.
-  - kat.
+  intros Hval. unfold eco.
+  apply ext_rel. apply antisym; [|kat].
+  apply itr_ind_l1; [kat|].
+  ra_normalise; rewrite (mo_trans2 ex Hval); ra_normalise.
+  repeat (try (apply leq_cupx));
+  try (elim_conflicting_rw Hval);
+  try (elim_conflicting_wr Hval);
+  unfold rb;
+  try (mrewrite (mo_trans2 ex Hval));
+  try (mrewrite (rfrfinv ex Hval));
+  kat.
 Qed.
-
 
 (** We can deduce from this that [eco] is acyclic *)
 

@@ -633,14 +633,6 @@ Proof.
   intuition (exists y; auto).
 Qed.
 
-Lemma cmp_minus {A:Type} {x y: A} {r1 r2: rlt A}:
-  r1 x y ->
-  !r2 x y ->
-  (r1 \ r2) x y.
-Proof.
-  intuition (split; auto).
-Qed.
-
 (** The sequence of two relations is included in any relation that consists in
 extending any of the two relations that are in sequence *)
 
@@ -1913,6 +1905,44 @@ Proof.
   - rewrite (minus_incl r1 r2). kat.
 Qed.
 
+(*
+Lemma test_aux {A:Type} (r1 r2: rlt A):
+  (forall w1 w2 w3 w4, r1^+ w1 w2 ->
+                       (r1 ⊔ r2)^+ w2 w3 ->
+                       r1^+ w3 w4 ->
+                       r1^+ w2 w3) ->
+  forall x y , (r1 ⊔ r2)^+ x y ->
+              (fun w1 w2 => ~(r2^+ w1 w2) ->
+                            (forall z1 z2, r1 z1 w1 ->
+                                           r1 w2 z2 ->
+                                           r1^+ w1 w2)) x y.
+Proof.
+  intros H.
+  apply tc_ind_right.
+  - intros x y [Hrel|Hrel] Hnot _ _ _ _.
+    + apply tc_incl_itself. auto.
+    + destruct Hnot. apply tc_incl_itself. auto.
+  - intros x z y [Hzy|Hzy] Hxz IHxz Hnot w1 w2 Hw1x Hyw2.
+    + destruct (classic (r2^+ x z)) as [H1|H1].
+      * apply (tc_trans _ _ z).
+        -- eapply H; auto.
+          ++ apply tc_incl_itself. eauto.
+          ++ apply tc_incl_itself. eauto.
+        -- incl_rel_kat Hzy.
+      * apply (tc_trans _ _ z).
+        -- eapply IHxz; eauto.
+        -- incl_rel_kat Hzy.
+    + destruct (classic (r2^+ x z)) as [H1|H1].
+      * destruct Hnot. apply (tc_trans _ _ z). auto.
+        incl_rel_kat Hzy.
+      * apply (H w1 _ _ w2).
+        -- incl_rel_kat Hw1x.
+        -- apply (tc_trans _ _ z). auto.
+           incl_rel_kat Hzy.
+        -- incl_rel_kat Hyw2.
+Qed.
+*)
+
 Lemma shift_cyc_thm {A:Type} (r1 r2: rlt A):
   (exists x, (r1⋅r2) x x) ->
   exists x, (r2⋅r1) x x.
@@ -2202,4 +2232,5 @@ Lemma cyc_u_of_ac_implies_cyc_seq {A:Type} (r1 r2: rlt A) (x: A):
   (exists y, (r1⋅r2^+)^+ y y).
 Proof.
   intros Hac1 Hac2 Htrans2 Hcyc.
-Admitted.
+Admitted. 
+

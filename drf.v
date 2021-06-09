@@ -263,6 +263,141 @@ Proof.
     apply tc_incl. eapply rfmorb_incl_hbmoscrbsc; eauto.
 Qed.
 
+
+(* We can always get the transitive reduction of the happens-before relation, 
+i.e. we can always reduce the relation to its basic steps *)
+
+Axiom hb_incl_tr_red:
+  forall ex, (hb ex) ≦ ((sb ex ⊔ sw ex) \ (hb ex ⋅ hb ex))^+.
+
+(*
+Lemma rsrf_incl_hbloc (ex: Execution):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  (forall x y, (~(race ex x y /\ (get_mode x <> Sc \/ get_mode y <> Sc)))) ->
+  (rs ex⋅rf ex⋅[R]⋅[Mse Rlx]) \ (hb ex ⋅ hb ex)  ≦ [M Sc]⋅res_eq_loc (hb ex)⋅[M Sc].
+Proof.
+  intros Hval Hrc11 Hnorace x y [Hrel Hnothb].
+  destruct (classic ([M Sc] x x)) as [Hxsc|Hxsc];
+  destruct (classic ([M Sc] y y)) as [Hysc|Hysc].
+  - rewrite res_eq_loc_trt. split;
+    [|apply (rsrf_same_loc ex _ _ Hval); incl_rel_kat Hrel].
+    assert ([Mse Rel] x x) as Hxrel.
+    { split; auto. destruct Hxsc as [_ Hxsc]. unfold M in Hxsc.
+      unfold Mse. rewrite Hxsc. compute; auto. }
+    assert ([Mse Acq] y y) as Hyacq.
+    { split; auto. destruct Hysc as [_ Hysc]. unfold M in Hysc.
+      unfold Mse. rewrite Hysc. compute; auto. }
+    unfold hb, sw. incl_rel_kat (cmp_seq (cmp_seq Hxsc Hxrel) (cmp_seq Hrel (cmp_seq Hyacq Hysc))).
+  - exfalso.
+    do 2 (simpl_rt_rel Hrel);
+    unfold rs in Hrel; simpl_tr_rel Hrel.
+    repeat (rewrite seq_assoc in Hrel). destruct Hrel as [z Hsb Hrel].
+    apply (Hnorace z y). repeat (apply conj).
+    + left. apply (rfrmw_rtc_rf_left_write ex _ y). auto. incl_rel_kat Hrel.
+    + apply (rfrmw_rtc_rf_diff ex); auto. incl_rel_kat Hrel.
+    + apply (rfrmw_rtc_rf_same_loc ex); auto. incl_rel_kat Hrel.
+    + intros Hnot. eapply Hnothb. exists z; auto.
+      
+    + intros Hhbrev. inversion Hrc11 as [Hcoh _].
+      eapply (Hcoh). eapply (incl_rel_thm (cmp_seq Hhbrev Hrel)).
+      unfold rs.
+      rewrite (coherence_rfrmw_incl_mo _ Hval Hrc11).
+      rewrite res_eq_loc_incl_itself.
+      unfold hb, eco. kat.
+    + right. intros H. apply Hysc. split; auto.
+  - exfalso. apply (Hnorace x y). repeat (apply conj).
+    + left. apply (rsrf_left_write ex _ y). incl_rel_kat Hrel.
+    + apply (rsrf_diff ex); auto. incl_rel_kat Hrel.
+    + apply (rsrf_same_loc ex); auto. incl_rel_kat Hrel.
+    + auto.
+    + intros Hhbrev. inversion Hrc11 as [Hcoh _].
+      eapply (Hcoh). eapply (incl_rel_thm (cmp_seq Hhbrev Hrel)).
+      unfold rs.
+      rewrite (coherence_rfrmw_incl_mo _ Hval Hrc11).
+      rewrite res_eq_loc_incl_itself.
+      unfold hb, eco. kat.
+    + left. intros H. apply Hxsc. split; auto.
+  - exfalso. apply (Hnorace x y). repeat (apply conj).
+    + left. apply (rsrf_left_write ex _ y). incl_rel_kat Hrel.
+    + apply (rsrf_diff ex); auto. incl_rel_kat Hrel.
+    + apply (rsrf_same_loc ex); auto. incl_rel_kat Hrel.
+    + auto.
+    + intros Hhbrev. inversion Hrc11 as [Hcoh _].
+      eapply (Hcoh). eapply (incl_rel_thm (cmp_seq Hhbrev Hrel)).
+      unfold rs.
+      rewrite (coherence_rfrmw_incl_mo _ Hval Hrc11).
+      rewrite res_eq_loc_incl_itself.
+      unfold hb, eco. kat.
+    + left. intros H. apply Hxsc. split; auto.
+Qed.
+*)
+
+(*
+Lemma sw_incl_sbrefhblocsbrf (ex: Execution):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  (forall x y, (~(race ex x y /\ (get_mode x <> Sc \/ get_mode y <> Sc)))) ->
+  (sw ex) \ (hb ex ⋅ hb ex) ≦ ([F]⋅(sb ex)) ?⋅res_eq_loc (hb ex)⋅(((sb ex)⋅[F]) ?).
+Proof.
+  intros Hval Hrc11 Hnorace x y [Hsw Hred].
+  unfold sw in Hsw.
+  simpl_tr_rel Hsw; simpl_rt_rel Hsw.
+  destruct Hsw as [z2 Hsw Hright].
+  repeat (rewrite seq_assoc in Hsw).
+  destruct Hsw as [z1 Hleft Hsw].
+  repeat (rewrite <-seq_assoc in Hsw).
+  assert ((!(hb ex ⋅ hb ex) z1 z2)) as Hnot.
+  { intros Hnot. 
+    destruct Hleft as [Hleft|Hleft];
+    destruct Hright as [Hright|Hright].
+    - apply Hred.
+      apply (incl_rel_thm (cmp_seq Hleft (cmp_seq Hnot Hright))).
+      unfold hb. kat.
+    - apply Hred.
+      simpl in Hright. rewrite Hright in Hnot.
+      apply (incl_rel_thm (cmp_seq Hleft Hnot)).
+      unfold hb. kat.
+    - apply Hred.
+      simpl in Hleft. rewrite <-Hleft in Hnot.
+      apply (incl_rel_thm (cmp_seq Hnot Hright)).
+      unfold hb. kat.
+    - simpl in Hright, Hleft. rewrite Hright, <-Hleft in Hnot.
+      apply Hred. auto.
+  }
+  apply (incl_rel_thm (cmp_seq Hleft (cmp_seq (cmp_minus Hsw Hnot) Hright))).
+  erewrite rsrf_incl_hbloc; eauto.
+  kat.
+Qed.
+
+Lemma test (ex: Execution):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  (forall x y, (~(race ex x y /\ (get_mode x <> Sc \/ get_mode y <> Sc)))) ->
+  (
+
+Lemma test (ex: Execution):
+  valid_exec ex ->
+  rc11_consistent ex ->
+  (forall x y, (~(race ex x y /\ (get_mode x <> Sc \/ get_mode y <> Sc)))) ->
+  (exists x, is_write x /\ get_mode x = Sc /\ forall y, ~(hb ex) x y) ->
+  (exists x, is_write x /\ get_mode x = Sc /\ forall y, ~(hb ex) y x) ->
+  forall x y, (hb ex) x y ->
+              (fun w1 w2 => [M Sc] w1 w1 ->
+                            [M Sc] w2 w2 ->
+                            (psc ex) w1 w2) x y.
+Proof.
+  intros Hval Hrc11 Hnorace Hl Hr.
+  eapply tc_ind_right.
+  - intros x y [Hsb|Hsw] Hxsc Hysc.
+    + left. unfold psc_base, scb.
+      incl_rel_kat (cmp_seq Hxsc (cmp_seq Hsb Hysc)).
+    + eapply sw_incl_sbrefhblocsbrf in Hsw; eauto.
+      unfold psc, psc_base, hb, scb.
+      incl_rel_kat (cmp_seq Hxsc (cmp_seq Hsw Hysc)).
+  - intros x y z Hyz HxyIH Hsc1 Hsc2.
+*)
+
 (** For any execution, race is a symmetric relation *)
 
 Lemma race_sym (ex: Execution) (x y: Event):
@@ -523,7 +658,8 @@ Proof.
     apply simpl_rt_hyp in Hrs as [Hrs _].
     apply simpl_trt_hyp in Hrs as [_ [Hsb _]].
     destruct Hsb as [Hsb|Href2].
-    { eapply mcp_sb_last; eauto. }
+    { eapply mcp_sb_last; eauto.
+      destruct Hsb as [Hsb _]. eauto. }
     rewrite refl_trans_refl_union_trans in Hrfrmw.
     destruct Hrfrmw as [Href3 | Hrfrmw].
     { simpl in Href2, Href3. rewrite <- Href2 in Href3. rewrite <- Href3 in Hrf.
@@ -3099,6 +3235,80 @@ Proof.
       + eapply numco_res_chval; eauto.
 Qed.
 
+Lemma change_val_eco_ac2_fail (ex res: Execution) (bound: nat) (j k c d: Event) (l: Loc) (v: Val):
+  complete_exec ex ->
+  rc11_consistent ex ->
+  numbering_coherent ex ->
+  numbering_injective ex ->
+  minimal_conflicting_pair ex bound j k ->
+  numbering k > numbering j ->
+  max_mo_for_loc c (sbrf_before_jk ex bound j k) (mo_res ex bound j k) l ->
+  imm (mo ex) d c ->
+  c = j ->
+  res_chval_k ex res bound j k d l v ->
+  acyclic (sb res ⊔ rf res ⊔ mo res ⊔ rb res).
+Proof.
+  intros Hcomp Hrc11 Hnumco Hnuminj Hmcp Hord Hmax Himmmo Heq Hres.
+  inversion Hcomp as [Hval _].
+  inversion_res_chval Hres.
+  assert (complete_exec (bounded_exec res (numbering k - 1))) as Hbrescomp.
+  { eapply prefix_complete.
+    - eapply complete_res_chval; eauto.
+    - eapply bounded_exec_is_prefix; eauto.
+      + eapply valid_res_chval; eauto.
+      + eapply numco_res_chval; eauto.
+  }
+  inversion Hbrescomp as [Hbresval _].
+  intros x Hnot.
+  apply (tc_incl _ _ (dcmp_eco_chval _ _ _ _ _ _ _ _ Hcomp Hnumco Hnuminj Hmcp Hord Hres)) in Hnot.
+
+  assert (sc_consistent (bounded_exec res (numbering k - 1))) as [_ Hac].
+  { eapply (b_res_chval_sc _ _ _ _ _ _ _ _ Hcomp); eauto. }
+
+  apply (path_impl_pass_through _ _ _ _ (Hac x)) in Hnot.
+  destruct Hnot as [z2 [z1 Hbeg Hmid] Hend].
+  destruct Hmid as [Hmid _].
+  rewrite rtc_inv_dcmp6 in Hbeg. rewrite rtc_inv_dcmp6 in Hend.
+  rewrite tc_inv_dcmp2 in Hbeg. rewrite tc_inv_dcmp2 in Hend.
+  destruct Hbeg as [Hbeg|[z3 Hbeg Hbeg']];
+  destruct Hend as [Hend|[z4 Hend Hend']].
+  - simpl in Hbeg. simpl in Hend.
+    destruct Hmid as [[[Hmid1 Hmid2]|[Hmid1 Hmid2]]|[z3 [Hmid11 Hmid12] Hmid2]];
+    admit.
+  - simpl in Hbeg.
+    rewrite rtc_inv_dcmp6 in Hend'. rewrite tc_inv_dcmp2 in Hend'.
+    destruct Hend' as [Hend'|[z7 Hend' _]].
+    + simpl in Hend'.
+      destruct Hmid as [[[Hmid1 Hmid2]|[Hmid1 Hmid2]]|[z3 [Hmid11 Hmid12] Hmid2]];
+      destruct Hend as [Hend|[[[Hend1 Hend2]|[Hend1 Hend2]]|[z5 [Hend11 Hend12] Hend2]]];
+      admit.
+    + destruct Hmid as [[[Hmid1 Hmid2]|[Hmid1 Hmid2]]|[z3 [Hmid11 Hmid12] Hmid2]];
+      destruct Hend as [Hend|[[[Hend1 Hend2]|[Hend1 Hend2]]|[z5 [Hend11 Hend12] Hend2]]];
+      destruct Hend' as [Hend'|[[[Hend'1 Hend'2]|[Hend'1 Hend'2]]|[z8 [Hend'11 Hend'12] Hend'2]]];
+      admit.
+  - simpl in Hend. rewrite Hend in Hmid.
+    rewrite rtc_inv_dcmp6 in Hbeg'. rewrite tc_inv_dcmp2 in Hbeg'.
+    destruct Hbeg' as [Hbeg'|[z7 Hbeg' _]].
+    + simpl in Hbeg'. rewrite Hbeg' in Hbeg.
+      destruct Hmid as [[[Hmid1 Hmid2]|[Hmid1 Hmid2]]|[z4 [Hmid11 Hmid12] Hmid2]];
+      destruct Hbeg as [Hbeg|[[[Hbeg1 Hbeg2]|[Hbeg1 Hend2]]|[z5 [Hbeg11 Hbeg12] Hbeg2]]];
+      admit.
+    + destruct Hmid as [[[Hmid1 Hmid2]|[Hmid1 Hmid2]]|[z4 [Hmid11 Hmid12] Hmid2]];
+      destruct Hbeg as [Hbeg|[[[Hbeg1 Hbeg2]|[Hbeg1 Hbeg2]]|[z5 [Hbeg11 Hbeg12] Hbeg2]]];
+      destruct Hbeg' as [Hbeg'|[[[Hbeg'1 Hbeg'2]|[Hbeg'1 Hbeg'2]]|[z8 [Hbeg'11 Hbeg'12] Hbeg'2]]];
+      admit.
+  - rewrite rtc_inv_dcmp6 in Hend'. rewrite tc_inv_dcmp2 in Hend'.
+    destruct Hend' as [Hend'|[z7 Hend' _]].
+    + simpl in Hend'. rewrite <-Hend' in Hbeg.
+      destruct Hmid as [[[Hmid1 Hmid2]|[Hmid1 Hmid2]]|[z9 [Hmid11 Hmid12] Hmid2]];
+      destruct Hend as [Hend|[[[Hend1 Hend2]|[Hend1 Hend2]]|[z5 [Hend11 Hend12] Hend2]]];
+      destruct Hbeg as [Hbeg|[[[Hbeg1 Hbeg2]|[Hbeg1 Hbeg2]]|[z8 [Hbeg11 Hbeg12] Hbeg2]]];
+      admit.
+    + destruct Hmid as [[[Hmid1 Hmid2]|[Hmid1 Hmid2]]|[z9 [Hmid11 Hmid12] Hmid2]];
+      destruct Hend as [Hend|[[[Hend1 Hend2]|[Hend1 Hend2]]|[z5 [Hend11 Hend12] Hend2]]];
+      destruct Hend' as [Hend'|[[[Hend'1 Hend'2]|[Hend'1 Hend'2]]|[z8 [Hend'11 Hend'12] Hend'2]]];
+      admit.
+Admitted.
 
 Lemma change_val_eco_ac2 (ex res: Execution) (bound: nat) (j k c d: Event) (l: Loc) (v: Val):
   complete_exec ex ->
@@ -3413,7 +3623,7 @@ Proof.
       * rewrite Hmid11 in Hmid2.
         apply (change_val_eco_ac_aux1 _ _ _ _ _ _ _ _ _ Hcomp Hmax Himmmo Hres) in Hmid2.
         rewrite Hmid2, Heq in Hend1.
-        eapply mcp_not_sb_jk; eauto; incl_rel_kat Hend1.
+        eapply mcp_not_sb_jk; eauto. incl_rel_kat Hend1.
 Qed.
 
 (** The final proof *)
@@ -3755,6 +3965,7 @@ Proof.
   specialize (H e'' Hsame' Hsc' a b Hrace).
   intuition auto.
 Qed.
+
 
 
 
