@@ -7,6 +7,7 @@ Author: Quentin Ladeveze, Inria Paris, France
 Require Import Ensembles.
 Require Import Classical_Prop.
 Require Import Nat.
+Require Import Lia.
 From RC11 Require Import util.
 From RC11 Require Import proprel_classic.
 From RelationAlgebra Require Import 
@@ -30,8 +31,16 @@ Class Event Evt {Val Loc: Type} : Type :=
     W : prop_set Evt;
     (* test if the event is a read *)
     R : prop_set Evt;
+    (* An event can't be both a read and a write *)
+    not_randw: forall e, ~(R e /\ W e);
     (* If an event affects a location, it is either a read or a write *)
     loc_readwrite: forall e, (exists l, get_loc e = Some l) -> W e \/ R e;
+    (* If an event is a write, it affects a location  *)
+    loc_write: forall e, W e -> (exists l, get_loc e = Some l);
+    (* If an event is a read, it affects a location *)
+    loc_read: forall e, R e -> (exists l, get_loc e = Some l);
+    (* If two events have the same event id, they are identical *)
+    same_eid: forall e1 e2, get_eid e1 = get_eid e2 -> e1 = e2;
   }.
 
 (** ** Definition of a well-formed execution *)
@@ -69,6 +78,9 @@ Class Execution Ex {Evt: Type} `{Event Evt} : Type :=
 
     mo_ww {e: Ex}:
       (mo e) = [W]⋅(mo e)⋅[W];
+
+    mo_diff {e: Ex}:
+      forall e1 e2, (mo e) e1 e2 -> e1 <> e2;
   }.
 
 Definition rb {Ex: Type} `{Execution Ex} (e: Ex) :=
@@ -87,6 +99,25 @@ Section ExecutionsLemmas.
     rewrite rf_wr in Hrf.
     eapply simpl_trt_tleft.
     eauto.
+  Qed.
+
+  Lemma rf_r_read {e: Ex} {x y: Evt}:
+    rf e x y -> R y.
+  Proof.
+    intros Hrf.
+    rewrite rf_wr in Hrf.
+    eapply simpl_trt_tright.
+    eauto.
+  Qed.
+
+  Lemma rf_diff {e: Ex} {x y: Evt}:
+    rf e x y -> x <> y.
+  Proof.
+    intros Hrf Heq.
+    rewrite Heq in Hrf.
+    apply rf_l_write in Hrf as Hw;
+    apply rf_r_read in Hrf as Hr.
+    eapply not_randw; eauto.
   Qed.
 
   Lemma mo_l_write {e: Ex} {x y: Evt}:
@@ -116,6 +147,15 @@ Section ExecutionsLemmas.
     eauto.
   Qed.
 
+  Lemma rb_l_read {e: Ex} {x y: Evt}:
+    rb e x y -> R x.
+  Proof.
+    intros Hrb.
+    rewrite rb_rw in Hrb.
+    eapply simpl_trt_tleft.
+    eauto.
+  Qed.
+
   Lemma rb_same_loc {e: Ex} {x y: Evt}:
     rb e x y -> get_loc x = get_loc y.
   Proof.
@@ -124,6 +164,16 @@ Section ExecutionsLemmas.
     apply rf_same_loc in Hrf.
     apply mo_same_loc in Hmo.
     congruence.
+  Qed.
+
+  Lemma rb_diff {e: Ex} {x y: Evt}:
+    rb e x y -> x <> y.
+  Proof.
+    intros Hrb Heq.
+    rewrite Heq in Hrb.
+    apply rb_r_write in Hrb as Hw;
+    apply rb_l_read in Hrb as Hr.
+    eapply not_randw; eauto.
   Qed.
 
 End ExecutionsLemmas.
@@ -142,24 +192,80 @@ Class HasSync Ex `{Execution Ex} : Type :=
     
   }.
 
-Definition race {Ex: Type} `{HasSync Ex} (e: Ex) (x y: Evt) :=
+Section Races.
+
+Context {Ex: Type}.
+Context `{HasSync Ex}.
+
+Definition race (e: Ex) (x y: Evt) :=
   (W x \/ W y) /\
   get_loc x = get_loc y /\
+  x <> y /\
   ~(sync e x y) /\
   ~(sync e y x).
 
-Definition racy {Ex:Type} `{HasSync Ex} (e: Ex) :=
+Lemma race_readwrite_l (e: Ex) (x y: Evt):
+  race e x y ->
+  (W x) \/ (R x).
+Proof.
+  intros [[Hxw|Hyw] [Hsameloc _]]; apply loc_readwrite.
+  - apply loc_write. auto.
+  - apply loc_write in Hyw as [l' Hyloc].
+    rewrite Hyloc in Hsameloc.
+    exists l'; auto.
+Qed.
+
+Lemma race_readwrite_r (e: Ex) (x y: Evt):
+  race e x y ->
+  (W y) \/ (R y).
+Proof.
+  intros [[Hxw|Hyw] [Hsameloc _]]; apply loc_readwrite.
+  - apply loc_write in Hxw as [l' Hxloc].
+    rewrite Hxloc in Hsameloc.
+    exists l'; auto.
+  - apply loc_write. auto.
+Qed.
+
+Lemma race_diff (e: Ex) (x: Evt):
+  ~(race e x x).
+Proof.
+  intros [_ [_ [Heq _]]]. auto.
+Qed.
+
+Lemma race_sym (e: Ex) (x y: Evt):
+  race e x y <-> race e y x.
+Proof.
+  split; intros [Hws [Hloc [Hsync1 Hsync2]]];
+  repeat split; intuition auto.
+Qed.
+
+Definition racy (e: Ex) :=
   exists x y, race e x y.
 
-Definition norace {Ex:Type} `{HasSync Ex} (e: Ex) :=
+Definition norace (e: Ex) :=
   forall x y, ~(race e x y).
 
-Lemma race_readwrite_l {Ex: Type} `{HasSync Ex} (e: Ex) (x y: Evt):
-  race e x y ->
-  (R x) \/ (W x).
+Lemma racy_dcmp (e: Ex):
+  racy e ->
+  exists x y, race e x y /\
+              get_eid x > get_eid y /\
+              (W x \/ R x).
 Proof.
-  intros Hrace.
-Admitted.
+  intros [w [z Hrace]].
+  destruct (classic (get_eid w > get_eid z)) as [Hcomp|Hcomp].
+  - exists w, z. split; [|split]; auto.
+    eapply race_readwrite_l. eauto.
+  - exists z, w. split; [|split].
+    + apply race_sym; auto.
+    + apply Compare_dec.not_gt, Compare_dec.le_lt_eq_dec in Hcomp.
+      destruct Hcomp as [Hcomp|Hcomp].
+      * lia.
+      * apply same_eid in Hcomp. rewrite Hcomp in Hrace.
+        exfalso. eapply race_diff. eauto.
+    + eapply race_readwrite_r. eauto.
+Qed.
+
+End Races.
 
 (** ** Definition of memory models that respect weak DRF-SC *)
 
@@ -201,6 +307,7 @@ Section WeakDRF.
       repeat split; eauto.
       + left. eauto using rf_l_write.
       + eauto using rf_same_loc.
+      + eauto using rf_diff.
   Qed.
 
   Lemma norace_mo_incl_sync {e: Ex}:
@@ -217,6 +324,7 @@ Section WeakDRF.
       repeat split; eauto.
       + left. eauto using mo_l_write.
       + eauto using mo_same_loc.
+      + eauto using mo_diff.
   Qed.
 
   Lemma norace_rb_incl_sync {e: Ex}:
@@ -233,6 +341,7 @@ Section WeakDRF.
       repeat split; eauto.
       + right. eauto using rb_r_write.
       + eauto using rb_same_loc.
+      + eauto using rb_diff.
   Qed.
 
   Lemma weak_drf_sc (e: Ex):
@@ -369,6 +478,24 @@ Axiom smallest_racy_b_exists:
   forall e, racy e ->
             (exists b e2, smallest_racy_b e2 b).
 
+Lemma smallest_racy_b_dcmp (e: Ex) (b: nat):
+  smallest_racy_b e b ->
+  (exists x y, race e x y /\
+               get_eid x > get_eid y /\
+               (W x \/ R x) /\
+               get_eid x = b /\
+               forall n e2, (b_ex e e2 b) ->
+                            racy e2 ->
+                            n >= b).
+Proof.
+  intros [Hracy Hsmallest].
+  apply racy_dcmp in Hracy as [w [z [Hrace [Hord Hwr]]]].
+  exists w, z; intuition auto.
+  - 
+  - 
+
+(** *** Breaking a non-SC cycle by modifying the modification order *)
+
 Lemma drf (e: Ex):
   (exists e2, sameP e2 e /\
               consistent e2 /\
@@ -379,9 +506,10 @@ Lemma drf (e: Ex):
 Proof.
   intros [e2 [Hsame [Hcons Hnotsc]]].
   pose proof (consistent_nonsc_imp_race _ Hcons Hnotsc) as Hracy.
-  apply smallest_racy_b_exists in Hracy 
-    as [n [e3 [Hracy Hsmallest]]].
-
+  apply smallest_racy_b_exists in Hracy as [b [e3 [Hracy Hsmallest]]].
+  apply racy_dcmp in Hracy as [x [y [Hrace [Hord Hxwr]]]].
+  destruct Hxwr as [Hwrite|Hread].
+  - 
 Admitted.
 
 Lemma drf_final (e: Ex):
