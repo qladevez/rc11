@@ -22,7 +22,7 @@ Class Event Evt {Val Loc: Type} : Type :=
     (* get the unique identifier of the event *)
     get_eid : Evt -> nat;
     (* get the location affected by the event *)
-    get_loc : Evt -> option Loc;
+    loc : Evt -> option Loc;
     (* get the value read by the event *)
     get_read : Evt -> option Val;
     (* get the value written by the event *)
@@ -34,11 +34,11 @@ Class Event Evt {Val Loc: Type} : Type :=
     (* An event can't be both a read and a write *)
     not_randw: forall e, ~(R e /\ W e);
     (* If an event affects a location, it is either a read or a write *)
-    loc_readwrite: forall e, (exists l, get_loc e = Some l) -> W e \/ R e;
+    loc_readwrite: forall e, (exists l, loc e = Some l) -> W e \/ R e;
     (* If an event is a write, it affects a location  *)
-    loc_write: forall e, W e -> (exists l, get_loc e = Some l);
+    loc_write: forall e, W e -> (exists l, loc e = Some l);
     (* If an event is a read, it affects a location *)
-    loc_read: forall e, R e -> (exists l, get_loc e = Some l);
+    loc_read: forall e, R e -> (exists l, loc e = Some l);
     (* If two events have the same event id, they are identical *)
     same_eid: forall e1 e2, get_eid e1 = get_eid e2 -> e1 = e2;
   }.
@@ -53,9 +53,26 @@ Class Execution Ex {Evt: Type} `{Event Evt} : Type :=
     rf   (e: Ex) : rlt Evt;
     mo   (e: Ex) : rlt Evt;
 
+    (* We need a constructor for executions *)
+    mkex: Ensemble Evt -> rlt Evt -> rlt Evt -> rlt Evt -> Ex;
+
+    (* We need this constructor to be correct *)
+    mkex_evts (e: Ex) (e: Ensemble Evt) (r1 r2 r3: rlt Evt):
+      evts (mkex e r1 r2 r3) = e;
+
+    mkex_sb (e: Ex) (e: Ensemble Evt) (r1 r2 r3: rlt Evt):
+      sb (mkex e r1 r2 r3) = r1;
+
+    mkex_rf (e: Ex) (e: Ensemble Evt) (r1 r2 r3: rlt Evt):
+      rf (mkex e r1 r2 r3) = r2;
+
+    (* well-formedness of sequenced-before *)
+    sb_l_evts {e: Ex}:
+      forall e1 e2, (sb e) e1 e2 -> In _ (evts e) e1;
+
     (* well-formedness of reads-from *)
     rf_same_loc {e: Ex}:
-      forall e1 e2, (rf e) e1 e2 -> get_loc e1 = get_loc e2;
+      forall e1 e2, (rf e) e1 e2 -> loc e1 = loc e2;
 
     rf_same_val {e:Ex}:
       forall e1 e2, (rf e) e1 e2 -> get_written e1 = get_read e2;
@@ -73,8 +90,11 @@ Class Execution Ex {Evt: Type} `{Event Evt} : Type :=
       forall e1 e2 e3, (rf e) e1 e3 -> (rf e) e2 e3 -> e1 = e2;
 
     (* well-formedness of modification-order *)
+    mo_l_evts {e: Ex}:
+      forall e1 e2, (mo e) e1 e2 -> In _ (evts e) e1;
+
     mo_same_loc {e: Ex}:
-      forall e1 e2, (mo e) e1 e2 -> get_loc e1 = get_loc e2;
+      forall e1 e2, (mo e) e1 e2 -> loc e1 = loc e2;
 
     mo_ww {e: Ex}:
       (mo e) = [W]⋅(mo e)⋅[W];
@@ -91,6 +111,7 @@ Definition rb {Ex: Type} `{Execution Ex} (e: Ex) :=
 Section ExecutionsLemmas.
   Context {Ex:Type}.
   Context `{Execution Ex}.
+
 
   Lemma rf_l_write {e: Ex} {x y: Evt}:
     rf e x y -> W x.
@@ -129,6 +150,15 @@ Section ExecutionsLemmas.
     eauto.
   Qed.
 
+  Lemma rb_l_evts {e: Ex} {x y: Evt}:
+    rb e x y ->
+    In _ (evts e) x.
+  Proof.
+    intros [z Hrf _].
+    rewrite <-cnv_rev in Hrf.
+    eapply rf_r_evts; eauto.
+  Qed.
+
   Lemma rb_rw {e: Ex}:
     rb e = [R]⋅rb e⋅[W].
   Proof.
@@ -157,7 +187,7 @@ Section ExecutionsLemmas.
   Qed.
 
   Lemma rb_same_loc {e: Ex} {x y: Evt}:
-    rb e x y -> get_loc x = get_loc y.
+    rb e x y -> loc x = loc y.
   Proof.
     intros [z Hrf Hmo].
     rewrite <-cnv_rev in Hrf.
@@ -189,7 +219,6 @@ Class HasSync Ex `{Execution Ex} : Type :=
   {
     sync (e: Ex) : rlt Evt;
     sync_trans {e: Ex} : sync e = (sync e)^+;
-    
   }.
 
 Section Races.
@@ -199,10 +228,52 @@ Context `{HasSync Ex}.
 
 Definition race (e: Ex) (x y: Evt) :=
   (W x \/ W y) /\
-  get_loc x = get_loc y /\
+  loc x = loc y /\
   x <> y /\
   ~(sync e x y) /\
   ~(sync e y x).
+
+Lemma race_onewrite (e: Ex) (x y: Evt):
+  race e x y ->
+  (W x) \/ (W y).
+Proof.
+  compute; intuition auto.
+Qed.
+
+Lemma race_loc (e: Ex) (x y: Evt):
+  race e x y ->
+  loc x = loc y.
+Proof.
+  compute; intuition auto.
+Qed.
+
+Lemma race_diff (e: Ex) (x: Evt):
+  ~(race e x x).
+Proof.
+  compute; intuition auto.
+Qed.
+
+Lemma race_diff' (e: Ex) (x y: Evt):
+  race e x y ->
+  x <> y.
+Proof.
+  intros Hrace Heq; rewrite Heq in Hrace; 
+  eapply race_diff; eauto.
+Qed.
+
+Lemma race_syncxy (e: Ex) (x y: Evt):
+  race e x y ->
+  ~(sync e x y).
+Proof.
+  compute; intuition auto.
+Qed.
+
+Lemma race_syncyx (e: Ex) (x y: Evt):
+  race e x y ->
+  ~(sync e y x).
+Proof.
+  compute; intuition auto.
+Qed.
 
 Lemma race_readwrite_l (e: Ex) (x y: Evt):
   race e x y ->
@@ -224,12 +295,6 @@ Proof.
     rewrite Hxloc in Hsameloc.
     exists l'; auto.
   - apply loc_write. auto.
-Qed.
-
-Lemma race_diff (e: Ex) (x: Evt):
-  ~(race e x x).
-Proof.
-  intros [_ [_ [Heq _]]]. auto.
 Qed.
 
 Lemma race_sym (e: Ex) (x y: Evt):
@@ -391,7 +456,19 @@ Definition b_ex (e be: Ex) (n: nat) :=
     evts be = (Intersection _ (evts e) (fun x => n >= get_eid x)) /\
     sb be = ([NLE n] ⋅ (sb e) ⋅ [NLE n]) /\
     rf be = ([NLE n] ⋅ (rf e) ⋅ [NLE n]) /\
-    mo be = ([NLE n] ⋅  (mo e) ⋅ [NLE n]).
+    mo be = ([NLE n] ⋅ (mo e) ⋅ [NLE n]).
+
+Lemma in_b_ex_eid (e be: Ex) (n: nat) (x: Evt):
+  b_ex e be n ->
+  In _ (evts be) x ->
+  n >= get_eid x.
+Proof.
+  intros Hb Hin.
+  destruct Hb as [Hevts _].
+  rewrite Hevts in Hin.
+  destruct Hin as [z _ Hord].
+  unfold In in Hord. auto.
+Qed.
 
 (** *** Execution equality modulo mo *)
 
@@ -429,9 +506,9 @@ Definition ch_read_valid (e: Ex) (old_r new_r new_w: Evt) (v: Val) (l: Loc) :=
   R old_r /\
   R new_r /\
   W new_w /\
-  get_loc old_r = Some l /\
-  get_loc new_r = Some l /\
-  get_loc new_w = Some l /\
+  loc old_r = Some l /\
+  loc new_r = Some l /\
+  loc new_w = Some l /\
   get_read new_r = Some v /\
   get_written new_w = Some v.
 
@@ -455,7 +532,6 @@ Proof.
   apply sameP_mo. compute; intuition auto.
 Qed.
 
-
 End SameProgram.
 
 (** ** Strong DRF-SC *)
@@ -463,38 +539,144 @@ End SameProgram.
 Class StrongDRFSC Ex `{WeakDRFSC Ex} : Type :=
   {
     (* Conditions to go from weak to strong DRF-SC *)
-  }.
+
+    (* 
+    Since we need to transform our executions while
+    preserving races, we need some hypothesis on our
+    synchronisation relation.
+    We propose the following hypothesis : the 
+    synchronisation relation is independant of mo.
+    This is coherent with the sync relation for SC, TSO
+    and C11, which are all dependant only of sb and rf.
+    *)
+
+    sync_mo_ind: forall e1 e2, eq_modmo e1 e2 -> sync e1 = sync e2;
+  }. 
 
 Section StrongDRF.
   Context {Ex:Type} `{StrongDRFSC Ex}.
 
-Definition smallest_racy_b (e: Ex) (b: nat) :=
-  racy e /\
-  (forall n e2, (b_ex e e2 b) ->
-                racy e2 ->
-                n >= b).
+Definition smallest_racy_b (e e2: Ex) (b: nat) :=
+  b_ex e e2 b /\
+  racy e2 /\
+  (forall n e3, n < b ->
+                b_ex e e3 n ->
+                norace e3).
 
 Axiom smallest_racy_b_exists:
   forall e, racy e ->
-            (exists b e2, smallest_racy_b e2 b).
+            (exists b e2, smallest_racy_b e e2 b).
 
-Lemma smallest_racy_b_dcmp (e: Ex) (b: nat):
-  smallest_racy_b e b ->
-  (exists x y, race e x y /\
-               get_eid x > get_eid y /\
-               (W x \/ R x) /\
-               get_eid x = b /\
-               forall n e2, (b_ex e e2 b) ->
-                            racy e2 ->
-                            n >= b).
-Proof.
-  intros [Hracy Hsmallest].
-  apply racy_dcmp in Hracy as [w [z [Hrace [Hord Hwr]]]].
-  exists w, z; intuition auto.
-  - 
-  - 
 
 (** *** Breaking a non-SC cycle by modifying the modification order *)
+
+Definition last_evt_mo (mo: rlt Evt) (x: Evt) :=
+  fun w1 w2 =>
+          (w2 = x /\ loc w1 = loc w2) \/
+          (w1 <> x /\ w2 <> x /\ mo w1 w2).
+
+Definition change_mo (e: Ex) (x: Evt) :=
+  mkex (evts e)
+       (sb e)
+       (rf e)
+       (last_evt_mo (mo e) x).
+
+Lemma change_mo_evts (e: Ex) (x: Evt):
+  evts (change_mo e x) = evts e.
+Proof.
+  unfold change_mo. 
+  rewrite (mkex_evts e (evts e) (sb e) (rf e) (last_evt_mo (mo e) x)).
+  auto.
+Qed.
+
+Lemma change_mo_sb (e: Ex) (x: Evt):
+  sb (change_mo e x) = sb e.
+Proof.
+  unfold change_mo. 
+  rewrite (mkex_sb e (evts e) (sb e) (rf e) (last_evt_mo (mo e) x)).
+  auto.
+Qed.
+
+Lemma change_mo_rf (e: Ex) (x: Evt):
+  rf (change_mo e x) = rf e.
+Proof.
+  unfold change_mo.
+  rewrite (mkex_rf e (evts e) (sb e) (rf e) (last_evt_mo (mo e) x)).
+  auto.
+Qed.
+
+Lemma change_mo_eq_modmo (e: Ex) (x: Evt):
+  eq_modmo (change_mo e x) e.
+Proof.
+  split;[|split].
+  - rewrite change_mo_evts; auto.
+  - rewrite change_mo_sb; auto.
+  - rewrite change_mo_rf; auto.
+Qed.
+
+Lemma change_mo_sameP (e: Ex) (x: Evt):
+  sameP (change_mo e x) e.
+Proof.
+  apply sameP_mo, change_mo_eq_modmo.
+Qed.
+
+Lemma change_mo_sync (e: Ex) (x: Evt):
+  sync (change_mo e x) = sync e.
+Proof.
+  apply sync_mo_ind, change_mo_eq_modmo.
+Qed.
+
+Lemma change_mo_race (e: Ex) (x y z: Evt):
+  race e x y ->
+  race (change_mo e z) x y.
+Proof.
+  intros Hrace.
+  repeat apply conj.
+  - eauto using race_onewrite.
+  - eauto using race_loc.
+  - eauto using race_diff'.
+  - intros Hsync.
+    apply (race_syncxy _ _ _ Hrace).
+    rewrite change_mo_sync in Hsync; auto.
+  - intros Hsync.
+    apply (race_syncyx _ _ _ Hrace).
+    rewrite change_mo_sync in Hsync; auto.
+Qed.
+
+
+(** An nonSC-cycle passes through the last event of the
+smallest non-SC bounding of an execution *)
+
+Lemma sc_cycle_in_evts (e: Ex) (x: Evt):
+  (sb e ⊔ rf e ⊔ mo e ⊔ rb e)^+ x x ->
+  In _ (evts e) x.
+Proof.
+  intros Hcyc.
+  rewrite tc_inv_dcmp2 in Hcyc.
+  destruct Hcyc as [w Hrel _].
+  destruct Hrel as [[[Hsb|Hrf]|Hmo]|Hrb].
+  - eapply sb_l_evts; eauto.
+  - eapply rf_l_evts; eauto.
+  - eapply mo_l_evts; eauto.
+  - eapply rb_l_evts; eauto.
+Qed.
+
+Lemma smallest_b_sc_cycle_last_evt (e e1 e2: Ex) (x:Evt) (n: nat):
+  get_eid x = n ->
+  b_ex e e1 n ->
+  b_ex e e2 (n-1) ->
+  ~(is_sc e1) ->
+  is_sc e2 ->
+  (sb e1 ⊔ rf e1 ⊔ mo e1 ⊔ rb e1)^+ x x.
+Proof.
+  intros Heid Hb1 Hb2 Hnotsc Hsc.
+  apply not_acyclic_is_cyclic in Hnotsc.
+  destruct Hnotsc as [z Hcyc].
+  destruct (Compare_dec.lt_eq_lt_dec n (get_eid z)) as [[Hord|Hord]|Hord].
+  - apply sc_cycle_in_evts in Hcyc.
+    
+Admitted.
+
 
 Lemma drf (e: Ex):
   (exists e2, sameP e2 e /\
@@ -506,10 +688,19 @@ Lemma drf (e: Ex):
 Proof.
   intros [e2 [Hsame [Hcons Hnotsc]]].
   pose proof (consistent_nonsc_imp_race _ Hcons Hnotsc) as Hracy.
-  apply smallest_racy_b_exists in Hracy as [b [e3 [Hracy Hsmallest]]].
+  apply smallest_racy_b_exists in Hracy as [b [e3 [Hbound [Hracy Hsmallest]]]].
   apply racy_dcmp in Hracy as [x [y [Hrace [Hord Hxwr]]]].
   destruct Hxwr as [Hwrite|Hread].
-  - 
+  - exists (change_mo e3 x).
+    split;[|split].
+    + eapply sameP_trans. 
+      * eapply change_mo_sameP.
+      * eapply sameP_trans; eauto.
+        eapply sameP_bex; eauto.
+    + 
+    + exists x, y.
+      eapply change_mo_race. eauto.
+  - admit.
 Admitted.
 
 Lemma drf_final (e: Ex):
