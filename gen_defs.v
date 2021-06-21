@@ -43,6 +43,17 @@ Class Event Evt {Val Loc: Type} : Type :=
     same_eid: forall e1 e2, get_eid e1 = get_eid e2 -> e1 = e2;
   }.
 
+Section EventLemmas.
+  Context {Evt:Type} `{Event Evt}.
+  
+  Lemma diff_evts_eid (e1 e2: Evt):
+    e1 <> e2 -> get_eid e1 <> get_eid e2.
+  Proof.
+    intros Hdiff Hnot. apply Hdiff.
+    apply same_eid. auto.
+  Qed.
+End EventLemmas.
+
 (** ** Definition of a well-formed execution *)
 
 Class Execution Ex {Evt: Type} `{Event Evt} : Type :=
@@ -67,8 +78,14 @@ Class Execution Ex {Evt: Type} `{Event Evt} : Type :=
       rf (mkex e r1 r2 r3) = r2;
 
     (* well-formedness of sequenced-before *)
+    sb_diff {e: Ex}:
+      forall e1 e2, (sb e) e1 e2 -> e1 <> e2;
+
     sb_l_evts {e: Ex}:
       forall e1 e2, (sb e) e1 e2 -> In _ (evts e) e1;
+
+    sb_r_evts {e: Ex}:
+      forall e1 e2, (sb e) e1 e2 -> In _ (evts e) e2;
 
     (* well-formedness of reads-from *)
     rf_same_loc {e: Ex}:
@@ -92,6 +109,9 @@ Class Execution Ex {Evt: Type} `{Event Evt} : Type :=
     (* well-formedness of modification-order *)
     mo_l_evts {e: Ex}:
       forall e1 e2, (mo e) e1 e2 -> In _ (evts e) e1;
+
+    mo_r_evts {e: Ex}:
+      forall e1 e2, (mo e) e1 e2 -> In _ (evts e) e2;
 
     mo_same_loc {e: Ex}:
       forall e1 e2, (mo e) e1 e2 -> loc e1 = loc e2;
@@ -159,6 +179,14 @@ Section ExecutionsLemmas.
     eapply rf_r_evts; eauto.
   Qed.
 
+  Lemma rb_r_evts {e: Ex} {x y: Evt}:
+    rb e x y ->
+    In _ (evts e) y.
+  Proof.
+    intros [z _ Hmo].
+    eapply mo_r_evts; eauto.
+  Qed.
+
   Lemma rb_rw {e: Ex}:
     rb e = [R]⋅rb e⋅[W].
   Proof.
@@ -210,8 +238,11 @@ End ExecutionsLemmas.
 
 (** ** Definition of a SC execution *)
 
+Definition eco_sb {Ex: Type} `{Execution Ex} (e: Ex) :=
+  (sb e) ⊔ (rf e) ⊔ (mo e) ⊔ (rb e).
+
 Definition is_sc {Ex: Type} `{Execution Ex} (e: Ex) :=
-  acyclic ((sb e) ⊔ (rf e) ⊔ (mo e) ⊔ (rb e)). 
+  acyclic (eco_sb e). 
 
 (** ** Definition of synchronization and races *)
 
@@ -417,6 +448,7 @@ Section WeakDRF.
     intros Hnorace Hcons x Hnot.
     apply (sync_irr Hcons x).
     apply (incl_rel_thm Hnot).
+    unfold eco_sb.
     rewrite (sb_incl_sync Hcons).
     rewrite (norace_rf_incl_sync Hnorace Hcons).
     rewrite (norace_mo_incl_sync Hnorace Hcons).
@@ -450,6 +482,24 @@ Context {Ex:Type} `{Execution Ex}.
 Definition NLE (b: nat) : prop_set Evt :=
   fun e => b >= (get_eid e).
 
+Lemma NLE_incl {b1 b2: nat}:
+  b1 < b2 ->
+  [NLE b1] ≦ [NLE b2].
+Proof.
+  intros Hord x y [Heq Hb1]. split; auto.
+  unfold NLE in *. lia.
+Qed.
+
+Lemma NLE_dbl {b1 b2: nat}:
+  b1 < b2 ->
+  [NLE b1] = [NLE b1]⋅[NLE b2].
+Proof.
+  intros Hord. apply ext_rel, antisym; intros x y Hrel.
+  - destruct Hrel as [Heq Hrel]. exists x; split; (try congruence).
+    unfold NLE in *; lia.
+  - incl_rel_kat Hrel.
+Qed.
+
 (** [be] is the execution [e] bounded by [n] *)
 
 Definition b_ex (e be: Ex) (n: nat) :=
@@ -457,6 +507,26 @@ Definition b_ex (e be: Ex) (n: nat) :=
     sb be = ([NLE n] ⋅ (sb e) ⋅ [NLE n]) /\
     rf be = ([NLE n] ⋅ (rf e) ⋅ [NLE n]) /\
     mo be = ([NLE n] ⋅ (mo e) ⋅ [NLE n]).
+
+Lemma b_ex_evts {e be: Ex} {n: nat}:
+  b_ex e be n ->
+  evts be = Intersection _ (evts e) (fun x => n >= get_eid x).
+Proof. compute; intuition auto. Qed.
+
+Lemma b_ex_sb {e be: Ex} {n: nat}:
+  b_ex e be n ->
+  sb be = ([NLE n] ⋅ (sb e) ⋅ [NLE n]).
+Proof. compute; intuition auto. Qed.
+
+Lemma b_ex_rf {e be: Ex} {n: nat}:
+  b_ex e be n ->
+  rf be = ([NLE n] ⋅ (rf e) ⋅ [NLE n]).
+Proof. compute; intuition auto. Qed.
+
+Lemma b_ex_mo {e be: Ex} {n: nat}:
+  b_ex e be n ->
+  mo be = ([NLE n] ⋅ (mo e) ⋅ [NLE n]).
+Proof. compute; intuition auto. Qed.
 
 Lemma in_b_ex_eid (e be: Ex) (n: nat) (x: Evt):
   b_ex e be n ->
@@ -468,6 +538,48 @@ Proof.
   rewrite Hevts in Hin.
   destruct Hin as [z _ Hord].
   unfold In in Hord. auto.
+Qed.
+
+Lemma b_ex_rb {e be: Ex} {n: nat}:
+  b_ex e be n ->
+  rb be ≦ ([NLE n]⋅rb e⋅[NLE n]).
+Proof.
+  intros Hb x y Hrel.
+  unfold rb in *. destruct Hrel as [z H1 H2].
+  rewrite <-cnv_rev in H1.
+  rewrite (b_ex_rf Hb) in H1.
+  rewrite (b_ex_mo Hb) in H2.
+  apply simpl_trt_hyp in H1 as [H11 [H12 H13]].
+  apply simpl_trt_hyp in H2 as [H21 [H22 H23]].
+  exists y; [|split; auto].
+  exists x; [split;auto|].
+  exists z; auto.
+Qed.
+
+Lemma be_trans {e e1 e2: Ex} {m n: nat}:
+  m < n ->
+  b_ex e e1 n ->
+  b_ex e e2 m ->
+  b_ex e1 e2 m.
+Proof.
+  intros Hord Hb1 Hb2.
+  repeat split.
+  - rewrite (b_ex_evts Hb1), (b_ex_evts Hb2). 
+    apply ext_set; intros x.
+    apply antisym. 
+    + intros [z Hset1 Hset2].
+      unfold In in Hset2; split;[split|]; auto;
+      unfold In; lia.
+    + intros [z [z2 Hset1 Hset2] Hset3]; split; auto.
+  - rewrite (b_ex_sb Hb1), (b_ex_sb Hb2).
+    apply ext_rel, antisym; intros x y Hrel;
+    [rewrite (NLE_dbl Hord) in Hrel|]; incl_rel_kat Hrel.
+  - rewrite (b_ex_rf Hb1), (b_ex_rf Hb2).
+    apply ext_rel, antisym; intros x y Hrel;
+    [rewrite (NLE_dbl Hord) in Hrel|]; incl_rel_kat Hrel.
+  - rewrite (b_ex_mo Hb1), (b_ex_mo Hb2). 
+    apply ext_rel, antisym; intros x y Hrel;
+    [rewrite (NLE_dbl Hord) in Hrel|]; incl_rel_kat Hrel.
 Qed.
 
 (** *** Execution equality modulo mo *)
@@ -551,6 +663,8 @@ Class StrongDRFSC Ex `{WeakDRFSC Ex} : Type :=
     *)
 
     sync_mo_ind: forall e1 e2, eq_modmo e1 e2 -> sync e1 = sync e2;
+
+    rf_num_ord: forall e e1 e2, rf e e1 e2 -> get_eid e1 < get_eid e2;
   }. 
 
 Section StrongDRF.
@@ -644,21 +758,134 @@ Proof.
 Qed.
 
 
-(** An nonSC-cycle passes through the last event of the
+(** An non-SC-cycle passes through the last event of the
 smallest non-SC bounding of an execution *)
 
-Lemma sc_cycle_in_evts (e: Ex) (x: Evt):
-  (sb e ⊔ rf e ⊔ mo e ⊔ rb e)^+ x x ->
+Lemma eco_sb_diff (e: Ex) (x y: Evt):
+  eco_sb e x y ->
+  x <> y.
+Proof.
+  intros [[[Hsb|Hrf]|Hmo]|Hrb].
+  - eauto using sb_diff.
+  - eauto using rf_diff.
+  - eauto using mo_diff.
+  - eauto using rb_diff.
+Qed.
+
+Lemma eco_sb_in_evts_l (e: Ex) (x y: Evt):
+  eco_sb e x y ->
   In _ (evts e) x.
 Proof.
-  intros Hcyc.
-  rewrite tc_inv_dcmp2 in Hcyc.
-  destruct Hcyc as [w Hrel _].
+  intros Hrel.
   destruct Hrel as [[[Hsb|Hrf]|Hmo]|Hrb].
   - eapply sb_l_evts; eauto.
   - eapply rf_l_evts; eauto.
   - eapply mo_l_evts; eauto.
   - eapply rb_l_evts; eauto.
+Qed.
+
+Lemma eco_sb_in_evts_r (e: Ex) (x y: Evt):
+  eco_sb e x y ->
+  In _ (evts e) y.
+Proof.
+  intros Hrel.
+  destruct Hrel as [[[Hsb|Hrf]|Hmo]|Hrb].
+  - eapply sb_r_evts; eauto.
+  - eapply rf_r_evts; eauto.
+  - eapply mo_r_evts; eauto.
+  - eapply rb_r_evts; eauto.
+Qed. 
+
+Lemma sc_cycle_in_evts_l (e: Ex) (x y: Evt):
+  (eco_sb e)^+ x y ->
+  In _ (evts e) x.
+Proof.
+  intros Hcyc.
+  rewrite tc_inv_dcmp2 in Hcyc.
+  destruct Hcyc as [w Hrel _].
+  eapply eco_sb_in_evts_l; eauto.
+Qed.
+
+Lemma eco_sb_bnd_incl {e1 e2: Ex} {n: nat}:
+  b_ex e1 e2 n ->
+  (eco_sb e2) ≦ (eco_sb e1).
+Proof.
+  intros Hbe. unfold eco_sb.
+  rewrite (b_ex_sb Hbe);
+  rewrite (b_ex_rf Hbe);
+  rewrite (b_ex_mo Hbe);
+  rewrite (b_ex_rb Hbe).
+  kat.
+Qed.
+
+Lemma eco_sb_bnd_incl_rev {e e1 e2: Ex} {x y: Evt} {m n: nat}:
+  m < n ->
+  b_ex e e1 n ->
+  b_ex e e2 m ->
+  eco_sb e1 x y ->
+  get_eid x <= m ->
+  get_eid y <= m ->
+  eco_sb e2 x y.
+Proof.
+  intros Hord Hb1 Hb2 Hrel Hord1 Hord2.
+  destruct Hrel as [[[Hrel|Hrel]|Hrel]|Hrel].
+  - rewrite (b_ex_sb Hb1) in Hrel. apply simpl_trt_rel in Hrel.
+    left; left; left. 
+    rewrite (b_ex_sb Hb2); simpl_trt; auto;
+    unfold NLE; lia.
+  - rewrite (b_ex_rf Hb1) in Hrel. apply simpl_trt_rel in Hrel.
+    left; left; right. 
+    rewrite (b_ex_rf Hb2); simpl_trt; auto;
+    unfold NLE; lia.
+  - rewrite (b_ex_mo Hb1) in Hrel. apply simpl_trt_rel in Hrel.
+    left; right. 
+    rewrite (b_ex_mo Hb2); simpl_trt; auto;
+    unfold NLE; lia.
+  - destruct Hrel as [z Hrel1 Hrel2].
+    rewrite <-cnv_rev, (b_ex_rf Hb1) in Hrel1. apply simpl_trt_rel in Hrel1.
+    rewrite (b_ex_mo Hb1) in Hrel2. apply simpl_trt_rel in Hrel2.
+    apply rf_num_ord in Hrel1 as Hord3.
+    right. exists z.
+    + rewrite <-cnv_rev, (b_ex_rf Hb2). simpl_trt; auto;
+      unfold NLE; lia.
+    + rewrite (b_ex_mo Hb2). simpl_trt; auto; unfold NLE; lia.
+Qed.
+
+Lemma eco_sb_nminone_lt_one {e e1: Ex} {x y: Evt} {n: nat}:
+  b_ex e e1 n ->
+  eco_sb e1 x y ->
+  n-1 < n.
+Proof.
+  intros Hb Hrel.
+  apply nminone_lt_n.
+  destruct (Compare_dec.zerop n) as [Hzero|Hgtz]; auto.
+  rewrite Hzero in Hb.
+  apply eco_sb_in_evts_l in Hrel as Hx.
+  apply eco_sb_in_evts_r in Hrel as Hy.
+  rewrite (b_ex_evts Hb) in Hx, Hy.
+  destruct Hx as [x _ Hx]. destruct Hy as [y _ Hy].
+  unfold In in Hx, Hy.
+  apply eco_sb_diff in Hrel. apply diff_evts_eid in Hrel.
+  lia.
+Qed.
+
+Lemma eco_sb_e1_not_e2 {e e1 e2: Ex} {x y: Evt} {n: nat}:
+  b_ex e e1 n ->
+  b_ex e e2 (n-1) ->
+  (eco_sb e1 \ eco_sb e2) x y ->
+  (get_eid x = n \/ get_eid y = n).
+Proof.
+  intros Hb1 Hb2 [Hrel Hnotrel].
+  destruct (Compare_dec.lt_eq_lt_dec n (get_eid x)) as [[Hord|Hord]|Hord].
+  - apply eco_sb_in_evts_l in Hrel. rewrite (b_ex_evts Hb1) in Hrel.
+    destruct Hrel as [z _ Hrel]. unfold In in Hrel. lia.
+  - left; lia.
+  - destruct (Compare_dec.lt_eq_lt_dec n (get_eid y)) as [[Hord'|Hord']|Hord'].
+    + apply eco_sb_in_evts_r in Hrel. rewrite (b_ex_evts Hb1) in Hrel.
+      destruct Hrel as [z _ Hrel]. unfold In in Hrel. lia.
+    + right; lia.
+    + exfalso; eapply Hnotrel.
+      eapply (eco_sb_bnd_incl_rev (eco_sb_nminone_lt_one Hb1 Hrel)); eauto; lia.
 Qed.
 
 Lemma smallest_b_sc_cycle_last_evt (e e1 e2: Ex) (x:Evt) (n: nat):
@@ -667,16 +894,27 @@ Lemma smallest_b_sc_cycle_last_evt (e e1 e2: Ex) (x:Evt) (n: nat):
   b_ex e e2 (n-1) ->
   ~(is_sc e1) ->
   is_sc e2 ->
-  (sb e1 ⊔ rf e1 ⊔ mo e1 ⊔ rb e1)^+ x x.
+  (eco_sb e1)^+ x x.
 Proof.
   intros Heid Hb1 Hb2 Hnotsc Hsc.
   apply not_acyclic_is_cyclic in Hnotsc.
   destruct Hnotsc as [z Hcyc].
-  destruct (Compare_dec.lt_eq_lt_dec n (get_eid z)) as [[Hord|Hord]|Hord].
-  - apply sc_cycle_in_evts in Hcyc.
-    
-Admitted.
-
+  apply (cycle_ext _ (eco_sb e2)) in Hcyc.
+  rewrite union_comm in Hcyc.
+  apply (added_cycle_pass_through_addition2 _ _ _ Hsc) in Hcyc.
+  destruct Hcyc as [y [w Hres Hcycrest]].
+  destruct (eco_sb_e1_not_e2 Hb1 Hb2 Hres) as [Hy|Hw].
+  - rewrite <-Hy in Heid. apply same_eid in Heid. rewrite Heid.
+    destruct Hres as [Hres _].
+    apply (be_trans (eco_sb_nminone_lt_one Hb1 Hres) Hb1) in Hb2.
+    apply (incl_unionincl_rtc _ _ (eco_sb_bnd_incl Hb2)) in Hcycrest.
+    incl_rel_kat (cmp_seq Hres Hcycrest).
+  - rewrite <-Hw in Heid. apply same_eid in Heid. rewrite Heid.
+    destruct Hres as [Hres _].
+    apply (be_trans (eco_sb_nminone_lt_one Hb1 Hres) Hb1) in Hb2.
+    apply (incl_unionincl_rtc _ _ (eco_sb_bnd_incl Hb2)) in Hcycrest.
+    incl_rel_kat (cmp_seq Hcycrest Hres).
+Qed.
 
 Lemma drf (e: Ex):
   (exists e2, sameP e2 e /\
