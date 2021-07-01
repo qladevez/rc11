@@ -73,6 +73,9 @@ Class Execution Ex {Evt: Type} `{Event Evt} : Type :=
       forall e1 e2 e3, (rf e) e1 e3 -> (rf e) e2 e3 -> e1 = e2;
 
     (* well-formedness of modification-order *)
+    mo_r_evts {e:Ex}:
+      forall e1 e2, (mo e) e1 e2 -> In _ (evts e) e2;
+
     mo_same_loc {e: Ex}:
       forall e1 e2, (mo e) e1 e2 -> get_loc e1 = get_loc e2;
 
@@ -129,6 +132,20 @@ Section ExecutionsLemmas.
     eauto.
   Qed.
 
+  Lemma rb_l_evts {e: Ex} {x y: Evt}:
+    rb e x y -> In _ (evts e) x.
+  Proof.
+    intros [z Hrf _]. rewrite <-cnv_rev in Hrf.
+    eapply rf_r_evts. eauto.
+  Qed.
+
+  Lemma rb_r_evts {e: Ex} {x y: Evt}:
+    rb e x y -> In _ (evts e) y.
+  Proof.
+    intros [z _ Hmo].
+    eapply mo_r_evts. eauto.
+  Qed.
+
   Lemma rb_rw {e: Ex}:
     rb e = [R]⋅rb e⋅[W].
   Proof.
@@ -178,10 +195,106 @@ Section ExecutionsLemmas.
 
 End ExecutionsLemmas.
 
+Section ScDefs.
+
+Context {Ex:Type}.
+Context `{Execution Ex}.
+
 (** ** Definition of a SC execution *)
 
-Definition is_sc {Ex: Type} `{Execution Ex} (e: Ex) :=
-  acyclic ((sb e) ⊔ (rf e) ⊔ (mo e) ⊔ (rb e)). 
+(** Two definitions of SC, one as the acyclicity of the union of the program
+order and of the communication relations, one as a total order on all events
+compatible with program order, and a proof of equivalence between both
+definitions *)
+
+Definition is_sc (e: Ex) :=
+  acyclic ((sb e) ⊔ (rf e) ⊔ (mo e) ⊔ (rb e)).
+
+Definition is_sc' (e: Ex) (tot: rlt Evt) :=
+  linear_strict_order tot (evts e) /\
+  (sb e) ≦ tot /\
+  (forall w r, 
+    (rf e) w r ->
+    tot w r /\
+    (forall w', R w' \/
+                get_loc w' <> get_loc r \/
+                tot w' w \/
+                tot r w')) /\
+  (forall w1 w2, 
+    (mo e) w1 w2 ->
+    tot w1 w2 /\
+    (forall w', get_loc w' <> get_loc w2 \/
+                R w' \/
+                tot w' w1 \/
+                tot w2 w')).
+
+Lemma sc'_sb_incl_tot (e: Ex) (tot: rlt Evt):
+  is_sc' e tot ->
+  (sb e) ≦ tot.
+Proof. compute; intuition auto. Qed.
+
+Lemma sc'_rf_incl_tot (e: Ex) (tot: rlt Evt):
+  is_sc' e tot ->
+  (rf e) ≦ tot.
+Proof.
+  intros [_ [_ [Hrf _]]] x y Hrel.
+  apply Hrf in Hrel as [Htot _]. auto.
+Qed.
+
+Lemma sc'_mo_incl_tot (e: Ex) (tot: rlt Evt):
+  is_sc' e tot ->
+  (mo e) ≦ tot.
+Proof.
+  intros [_ [_ [_ Hmo]]] x y Hrel.
+  apply Hmo in Hrel as [Htot _]. auto.
+Qed.
+
+Lemma sc'_rb_incl_tot (e: Ex) (tot: rlt Evt):
+  is_sc' e tot ->
+  (rb e) ≦ tot.
+Proof.
+  intros [Hlse [_ [Hrf Hmo]]] x y Hrb.
+  apply rb_l_evts in Hrb as Hin1;
+  apply rb_r_evts in Hrb as Hin2;
+  apply rb_diff in Hrb as Hdiff.
+  destruct Hrb as [z Hrel1 Hrel2]; rewrite <-cnv_rev in Hrel1.
+  apply rf_same_loc in Hrel1 as Hloc1.
+  apply mo_same_loc in Hrel2 as Hloc2.
+  apply rf_l_write in Hrel1 as Hzw.
+  destruct (lso_rel _ _ _ _ Hlse Hdiff Hin1 Hin2) as [Hxy|Hxy];[auto|].
+  apply Hrf in Hrel1 as [Hzx H1].
+  apply Hmo in Hrel2 as [Hzy _].
+  destruct (H1 z) as [Hr|[Hdiffloc|[Htot1|Htot2]]].
+  - exfalso; eapply not_randw; eauto.
+  - congruence.
+  - apply lin_strict_ac in Hlse. exfalso; apply (Hlse z).
+    incl_rel_kat Htot1.
+  - apply lin_strict_ac in Hlse. exfalso; apply (Hlse z).
+    incl_rel_kat (cmp_seq Hzy (cmp_seq Hxy Htot2)).
+Qed.
+
+(** The first definition of SC is equivalent to the second *)
+
+Lemma sc_defs_equiv1 (e: Ex):
+  is_sc e -> (exists tot, is_sc' e tot).
+Proof.
+  intros Hsc.
+Admitted.
+
+Lemma sc_defs_equiv2 (e: Ex) (tot: rlt Evt):
+  is_sc' e tot -> is_sc e.
+Proof.
+  intros Hsc' x Hcyc.
+  Search (_^+ _ _ -> _ ≦ _ ->  _^+ _ _).
+  inversion Hsc' as [Hlse _].
+  apply lin_strict_ac in Hlse. apply (Hlse x).
+  apply (incl_rel_thm Hcyc).
+  rewrite (sc'_sb_incl_tot _ _ Hsc').
+  rewrite (sc'_rf_incl_tot _ _ Hsc').
+  rewrite (sc'_mo_incl_tot _ _ Hsc').
+  rewrite (sc'_rb_incl_tot _ _ Hsc').
+  kat.
+Qed.
 
 (** ** Definition of synchronization and races *)
 

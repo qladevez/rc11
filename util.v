@@ -327,6 +327,19 @@ Proof.
   unfold In, id. auto.
 Qed.
 
+(** Two elements of a set are related by a linear strict order in a direction *)
+
+Lemma lso_rel {A:Type} (e: Ensemble A) (r: rlt A) (x y: A):
+  linear_strict_order r e ->
+  x <> y ->
+  In _ e x ->
+  In _ e y ->
+  (r x y) \/ (r y x).
+Proof.
+  intros [_ Htot] Hdiff Hin1 Hin2.
+  apply Htot; auto.
+Qed.
+
 (** If not all elements are not related by a relation, two elements exists such
 that they are related by the relation *)
 
