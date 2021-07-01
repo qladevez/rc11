@@ -73,6 +73,13 @@ Proof.
   destruct k; lia.
 Qed.
 
+Lemma nminone_lt_n (k: nat):
+  0 < k ->
+  k - 1 < k.
+Proof.
+  intros H. lia.
+Qed.
+
 (** ** Sets *)
 
 (** Tactic to unfold all occurences of [In] in the current goal and its
@@ -976,6 +983,13 @@ Proof.
   intros H. rewrite H. kat.
 Qed.
 
+Lemma incl_unionincl_rtc {A:Type} (r1 r2: rlt A):
+  r1 ≦ r2 ->
+  (r1 ⊔ r2)^* ≦ r2^*.
+Proof.
+  intros Hincl. eapply rtc_incl. 
+  rewrite Hincl. kat.
+Qed.
 
 (** The transitive closure of the transitive closure of a relation is the
 transitive closure of this relation *)
@@ -1140,7 +1154,17 @@ Proof.
   intros H. exists x; auto.
 Qed.
 
-(** If there is a path in the sequence of :
+(** If there is a cycle in a relation, we can extend this relation and keep the
+cycle *)
+
+Lemma cycle_ext {A:Type} (r1 r2: rlt A) (x: A):
+  r1^+ x x ->
+  (r1 ⊔ r2)^+ x x.
+Proof.
+  intros Hrel. incl_rel_kat Hrel.
+Qed.
+(* (*
+(** If there is a path in the sequence of : *) *)
 
 - A first relation
 - The transitive closure of a second relation
@@ -1861,7 +1885,7 @@ Proof.
   intros Hac Hcyc.
   apply (path_impl_pass_through _ _ _ _ (Hac x) Hcyc).
 Qed.
-
+  
 (** The union of two relations is equivalent to the union of the first relation
 with the second relation minus the first one *)
 
@@ -2216,3 +2240,16 @@ Lemma cyc_u_of_ac_implies_cyc_seq {A:Type} (r1 r2: rlt A) (x: A):
 Proof.
   intros Hac1 Hac2 Htrans2 Hcyc.
 Admitted.
+
+
+Lemma added_cycle_pass_through_addition2 {A:Type} (r1 r2: rlt A) (x: A):
+  acyclic r1 ->
+  (r1 ⊔ r2)^+ x x ->
+  exists y, ((r2 \ r1) ⋅ (r1 ⊔ r2)^*) y y.
+Proof.
+  intros Hac Hcyc.
+  pose proof (added_cycle_pass_through_addition _ _ _ Hac Hcyc) as H.
+  destruct H as [z [y H1 H2] H3].
+  exists y. exists z; auto.
+  incl_rel_kat (cmp_seq H3 H1).
+Qed.
