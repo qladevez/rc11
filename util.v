@@ -293,25 +293,24 @@ Definition bidir {A:Type} (r: rlt A) :=
 
 (** *** Linear extension *)
 
-Module Type OrdExt.
-Parameter Elt : Type.
+Section OrdExt.
+Context {Elt:Type}.
 
 (** LE (linear extension) extends a partial order to a total order *)
 
-Parameter LE : relation Elt -> relation Elt.
+Parameter LE : rlt Elt -> rlt Elt.
 
 (** A relation is included in its own linear extension and a linear extension
     is a strict linear order *)
 
-Axiom OE : forall (s S:Ensemble Elt) (r:relation Elt),
-  Included _ s S ->
-  partial_order r s ->
+Axiom OE : forall (e: Ensemble Elt) (r: rlt Elt),
+  partial_order r e ->
   r ≦ (LE r) /\
-  linear_strict_order (LE r) S.
+  linear_strict_order (LE r) e.
 
 (** The extension of a strict linear order is itself *)
 
-Axiom le_lso : forall (s:Ensemble Elt) (r:relation Elt),
+Axiom le_lso : forall (s:Ensemble Elt) (r:rlt Elt),
   linear_strict_order r s -> LE r = r.
 
 End OrdExt.
@@ -332,6 +331,19 @@ Lemma in_id {A:Type} (x y: A):
   In _ (id x) y -> x = y.
 Proof.
   unfold In, id. auto.
+Qed.
+
+(** Two elements of a set are related by a linear strict order in a direction *)
+
+Lemma lso_rel {A:Type} (e: Ensemble A) (r: rlt A) (x y: A):
+  linear_strict_order r e ->
+  x <> y ->
+  In _ e x ->
+  In _ e y ->
+  (r x y) \/ (r y x).
+Proof.
+  intros [_ Htot] Hdiff Hin1 Hin2.
+  apply Htot; auto.
 Qed.
 
 (** If not all elements are not related by a relation, two elements exists such
@@ -2239,4 +2251,16 @@ Proof.
   destruct H as [z [y H1 H2] H3].
   exists y. exists z; auto.
   incl_rel_kat (cmp_seq H3 H1).
+Qed.
+
+Lemma le_trans {Elt:Type} (r: rlt Elt) (s: Ensemble Elt) (x y z: Elt):
+  partial_order r s ->
+  (LE r) x y ->
+  (LE r) y z ->
+  (LE r) x z.
+Proof.
+  intros Hpo H1 H2.
+  destruct (OE _ _ Hpo) as [_ [[_ [Htrans _]] _]].
+  eapply Htrans.
+  incl_rel_kat (cmp_seq H1 H2).
 Qed.

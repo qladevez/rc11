@@ -87,6 +87,9 @@ Class Execution Ex {Evt: Type} `{Event Evt} : Type :=
     sb_r_evts {e: Ex}:
       forall e1 e2, (sb e) e1 e2 -> In _ (evts e) e2;
 
+    sb_trans {e: Ex}:
+      sb e ⋅ sb e ≦ sb e;
+
     (* well-formedness of reads-from *)
     rf_same_loc {e: Ex}:
       forall e1 e2, (rf e) e1 e2 -> loc e1 = loc e2;
@@ -121,6 +124,15 @@ Class Execution Ex {Evt: Type} `{Event Evt} : Type :=
 
     mo_diff {e: Ex}:
       forall e1 e2, (mo e) e1 e2 -> e1 <> e2;
+
+    mo_tot_loc {e: Ex} {x y: Evt}:
+      In _ (evts e) x ->
+      In _ (evts e) y ->
+      x <> y ->
+      loc x = loc y ->
+      W x ->
+      W y ->
+      (mo e x y) \/ (mo e y x);
   }.
 
 Definition rb {Ex: Type} `{Execution Ex} (e: Ex) :=
@@ -132,6 +144,24 @@ Section ExecutionsLemmas.
   Context {Ex:Type}.
   Context `{Execution Ex}.
 
+  Lemma sb_evts_tests {e: Ex}:
+    sb e = [I (evts e)]⋅sb e⋅[I (evts e)].
+  Proof.
+    apply ext_rel, antisym; [|kat].
+    intros x y Hsb.
+    apply sb_l_evts in Hsb as Hl.
+    apply sb_r_evts in Hsb as Hr.
+    simpl_trt; auto.
+  Qed.
+
+  Lemma sb_partial_order {e: Ex}:
+    partial_order (sb e) (evts e).
+  Proof.
+    split;[|split].
+    - rewrite sb_evts_tests at 1. auto.
+    - apply sb_trans.
+    - intros x Hsb. eapply sb_diff; eauto.
+  Qed.
 
   Lemma rf_l_write {e: Ex} {x y: Evt}:
     rf e x y -> W x.
@@ -161,6 +191,16 @@ Section ExecutionsLemmas.
     eapply not_randw; eauto.
   Qed.
 
+  Lemma rf_evts_tests {e: Ex}:
+    rf e = [I (evts e)]⋅rf e⋅[I (evts e)].
+  Proof.
+    apply ext_rel, antisym; [|kat].
+    intros x y Hrf.
+    apply rf_l_evts in Hrf as Hl.
+    apply rf_r_evts in Hrf as Hr.
+    simpl_trt; auto.
+  Qed.
+
   Lemma mo_l_write {e: Ex} {x y: Evt}:
     mo e x y -> W x.
   Proof.
@@ -170,21 +210,37 @@ Section ExecutionsLemmas.
     eauto.
   Qed.
 
-  Lemma rb_l_evts {e: Ex} {x y: Evt}:
-    rb e x y ->
-    In _ (evts e) x.
+  Lemma mo_r_write {e: Ex} {x y: Evt}:
+    mo e x y -> W y.
   Proof.
-    intros [z Hrf _].
-    rewrite <-cnv_rev in Hrf.
-    eapply rf_r_evts; eauto.
+    intros Hmo.
+    rewrite mo_ww in Hmo.
+    eapply simpl_trt_tright.
+    eauto.
+  Qed.
+
+  Lemma mo_evts_tests {e: Ex}:
+    mo e = [I (evts e)]⋅mo e⋅[I (evts e)].
+  Proof.
+    apply ext_rel, antisym; [|kat].
+    intros x y Hmo.
+    apply mo_l_evts in Hmo as Hl.
+    apply mo_r_evts in Hmo as Hr.
+    simpl_trt; auto.
+  Qed.
+
+  Lemma rb_l_evts {e: Ex} {x y: Evt}:
+    rb e x y -> In _ (evts e) x.
+  Proof.
+    intros [z Hrf _]. rewrite <-cnv_rev in Hrf.
+    eapply rf_r_evts. eauto.
   Qed.
 
   Lemma rb_r_evts {e: Ex} {x y: Evt}:
-    rb e x y ->
-    In _ (evts e) y.
+    rb e x y -> In _ (evts e) y.
   Proof.
     intros [z _ Hmo].
-    eapply mo_r_evts; eauto.
+    eapply mo_r_evts. eauto.
   Qed.
 
   Lemma rb_rw {e: Ex}:
@@ -234,15 +290,170 @@ Section ExecutionsLemmas.
     eapply not_randw; eauto.
   Qed.
 
+  Lemma rb_evts_tests {e: Ex}:
+    rb e = [I (evts e)]⋅rb e⋅[I (evts e)].
+  Proof.
+    apply ext_rel, antisym; [|kat].
+    intros x y Hrb.
+    simpl_trt; auto.
+    - eapply rb_l_evts. eauto.
+    - eapply rb_r_evts. eauto.
+  Qed.
+
+  Lemma sbrfmorb_partial_ord {e: Ex}:
+    acyclic (sb e ⊔ rf e ⊔ mo e ⊔ rb e) ->
+    partial_order (sb e ⊔ rf e ⊔ mo e ⊔ rb e)^+ (evts e).
+  Proof.
+    intros Hac. split;[|split].
+    - rewrite sb_evts_tests.
+      rewrite rf_evts_tests.
+      rewrite mo_evts_tests.
+      rewrite rb_evts_tests.
+      apply ext_rel. kat.
+    - kat.
+    - apply Hac.
+  Qed.
+
 End ExecutionsLemmas.
+
+Section ScDefs.
+
+Context {Ex:Type}.
+Context `{Execution Ex}.
 
 (** ** Definition of a SC execution *)
 
-Definition eco_sb {Ex: Type} `{Execution Ex} (e: Ex) :=
-  (sb e) ⊔ (rf e) ⊔ (mo e) ⊔ (rb e).
+(** Two definitions of SC, one as the acyclicity of the union of the program
+order and of the communication relations, one as a total order on all events
+compatible with program order, and a proof of equivalence between both
+definitions *)
 
-Definition is_sc {Ex: Type} `{Execution Ex} (e: Ex) :=
-  acyclic (eco_sb e). 
+Definition is_sc (e: Ex) :=
+  acyclic ((sb e) ⊔ (rf e) ⊔ (mo e) ⊔ (rb e)).
+
+Definition is_sc' (e: Ex) (tot: rlt Evt) :=
+  linear_strict_order tot (evts e) /\
+  (sb e) ≦ tot /\
+  (forall w r, 
+    (rf e) w r ->
+    tot w r /\
+    (forall w', In _ (evts e) w' ->
+                w' = w \/
+                ~(W w') \/
+                loc w' <> loc r \/
+                tot w' w \/
+                tot r w')) /\
+  (mo e) ≦ tot.
+
+Lemma sc'_sb_incl_tot (e: Ex) (tot: rlt Evt):
+  is_sc' e tot ->
+  (sb e) ≦ tot.
+Proof. compute; intuition auto. Qed.
+
+Lemma sc'_rf_incl_tot (e: Ex) (tot: rlt Evt):
+  is_sc' e tot ->
+  (rf e) ≦ tot.
+Proof.
+  intros [_ [_ [Hrf _]]] x y Hrel.
+  apply Hrf in Hrel as [Htot _]. auto.
+Qed.
+
+Lemma sc'_mo_incl_tot (e: Ex) (tot: rlt Evt):
+  is_sc' e tot ->
+  (mo e) ≦ tot.
+Proof.
+  intros [_ [_ [_ Hmo]]] x y Hrel.
+  apply Hmo. auto.
+Qed.
+
+Lemma sc'_rb_incl_tot (e: Ex) (tot: rlt Evt):
+  is_sc' e tot ->
+  (rb e) ≦ tot.
+Proof.
+  intros [Hlse [_ [Hrf Hmo]]] x y Hrb.
+  apply rb_l_evts in Hrb as Hin1;
+  apply rb_r_evts in Hrb as Hin2;
+  apply rb_diff in Hrb as Hdiff.
+  destruct Hrb as [z Hrel1 Hrel2]; rewrite <-cnv_rev in Hrel1.
+  apply rf_same_loc in Hrel1 as Hloc1.
+  apply mo_same_loc in Hrel2 as Hloc2.
+  apply mo_r_write in Hrel2 as Hyw.
+  apply mo_r_evts in Hrel2 as Hiny.
+  destruct (lso_rel _ _ _ _ Hlse Hdiff Hin1 Hin2) as [Hxy|Hxy];[auto|].
+  apply Hrf in Hrel1 as [Hzx H1].
+  apply Hmo in Hrel2 as Hzy.
+  destruct (H1 y) as [Heq|[Hr|[Hdiffloc|[Htot1|Htot2]]]].
+  - auto.
+  - rewrite Heq in Hzy.
+    apply lin_strict_ac in Hlse. exfalso; apply (Hlse z).
+    incl_rel_kat Hzy.
+  - intuition.
+  - congruence.
+  - apply lin_strict_ac in Hlse. exfalso; apply (Hlse z).
+    incl_rel_kat (cmp_seq Hzy Htot1).
+  - apply lin_strict_ac in Hlse. exfalso; apply (Hlse x).
+    incl_rel_kat (cmp_seq Htot2 Hxy).
+Qed.
+
+(** The first definition of SC is equivalent to the second *)
+
+Lemma sc_defs_equiv1 (e: Ex):
+  is_sc e -> (exists tot, is_sc' e tot).
+Proof.
+  intros Hsc.
+  exists (LE ((sb e) ⊔ (rf e) ⊔ (mo e) ⊔ (rb e))^+).
+  split;[|split;[|split]].
+  - eapply OE, sbrfmorb_partial_ord, Hsc.
+  - destruct (OE _ _ (sbrfmorb_partial_ord Hsc)) as [Hincl _].
+    eapply (incl_trans2 _ _ _ Hincl). kat.
+  - intros w r Hrf. split.
+    + destruct (OE _ _ (sbrfmorb_partial_ord Hsc)) as [Hincl _].
+      unshelve eapply (incl_rel_thm _ Hincl).
+      incl_rel_kat Hrf.
+    + intros w' Hin.
+      apply rf_l_write in Hrf as Hw; apply rf_r_read in Hrf as Hr.
+      destruct (classic (W w')) as [Hw'W|?]; [|intuition auto].
+      destruct (classic (loc w' = loc r)) as [Hloc|?]; [|intuition].
+      destruct (classic (w' = w)) as [?|Hdiff]; [intuition|].
+      destruct (OE _ _ (sbrfmorb_partial_ord Hsc)) as [Hincl Hlse].
+      inversion Hlse as [_ Htot].
+      destruct (Htot w' w Hdiff Hin (rf_l_evts _ _ Hrf)) as [Hrel|Hrel];[auto|].
+      assert (w' <> r) as Hdiff'.
+      { intros Heq. rewrite Heq in Hw'W. eapply not_randw; intuition eauto. }
+      destruct (Htot w' r Hdiff' Hin (rf_r_evts _ _ Hrf)) as [Hrel1|Hrel1];[|auto].
+      assert (loc w' = loc w) as Hloc'.
+      { apply rf_same_loc in Hrf; congruence. }
+      apply rf_l_evts in Hrf as Hin'.
+      destruct (mo_tot_loc Hin Hin' Hdiff Hloc' Hw'W Hw) as [Hmo|Hmo].
+      * apply lin_strict_ac in Hlse. exfalso; apply (Hlse w').
+        eapply (tc_trans _ _ w _); [|incl_rel_kat Hrel].
+        apply tc_incl_itself. unshelve eapply (incl_rel_thm _ Hincl).
+        incl_rel_kat Hmo.
+      * apply lin_strict_ac in Hlse. exfalso; apply (Hlse w').
+        eapply (tc_trans _ _ r _); [incl_rel_kat Hrel1|].
+        apply tc_incl_itself. unshelve eapply (incl_rel_thm _ Hincl).
+        assert (rb e r w') as Hrb. { exists w; auto. }
+        incl_rel_kat Hrb.
+  - destruct (OE _ _ (sbrfmorb_partial_ord Hsc)) as [Hincl _].
+    eapply (incl_trans2 _ _ _ Hincl). kat.
+Qed.
+
+Lemma sc_defs_equiv2 (e: Ex) (tot: rlt Evt):
+  is_sc' e tot -> is_sc e.
+Proof.
+  intros Hsc' x Hcyc.
+  Search (_^+ _ _ -> _ ≦ _ ->  _^+ _ _).
+  inversion Hsc' as [Hlse _].
+  apply lin_strict_ac in Hlse. apply (Hlse x).
+  apply (incl_rel_thm Hcyc).
+  rewrite (sc'_sb_incl_tot _ _ Hsc').
+  rewrite (sc'_rf_incl_tot _ _ Hsc').
+  rewrite (sc'_mo_incl_tot _ _ Hsc').
+  rewrite (sc'_rb_incl_tot _ _ Hsc').
+  kat.
+Qed.
+
+End ScDefs.
 
 (** ** Definition of synchronization and races *)
 
@@ -448,7 +659,6 @@ Section WeakDRF.
     intros Hnorace Hcons x Hnot.
     apply (sync_irr Hcons x).
     apply (incl_rel_thm Hnot).
-    unfold eco_sb.
     rewrite (sb_incl_sync Hcons).
     rewrite (norace_rf_incl_sync Hnorace Hcons).
     rewrite (norace_mo_incl_sync Hnorace Hcons).
@@ -781,7 +991,7 @@ Qed.
 smallest non-SC bounding of an execution *)
 
 Lemma eco_sb_diff (e: Ex) (x y: Evt):
-  eco_sb e x y ->
+  (sb e ⊔ rf e ⊔ mo e ⊔ rb e) x y ->
   x <> y.
 Proof.
   intros [[[Hsb|Hrf]|Hmo]|Hrb].
@@ -792,7 +1002,7 @@ Proof.
 Qed.
 
 Lemma eco_sb_in_evts_l (e: Ex) (x y: Evt):
-  eco_sb e x y ->
+  (sb e ⊔ rf e ⊔ mo e ⊔ rb e) x y ->
   In _ (evts e) x.
 Proof.
   intros Hrel.
@@ -804,7 +1014,7 @@ Proof.
 Qed.
 
 Lemma eco_sb_in_evts_r (e: Ex) (x y: Evt):
-  eco_sb e x y ->
+  (sb e ⊔ rf e ⊔ mo e ⊔ rb e) x y ->
   In _ (evts e) y.
 Proof.
   intros Hrel.
@@ -816,7 +1026,7 @@ Proof.
 Qed. 
 
 Lemma sc_cycle_in_evts_l (e: Ex) (x y: Evt):
-  (eco_sb e)^+ x y ->
+  (sb e ⊔ rf e ⊔ mo e ⊔ rb e)^+ x y ->
   In _ (evts e) x.
 Proof.
   intros Hcyc.
@@ -827,9 +1037,9 @@ Qed.
 
 Lemma eco_sb_bnd_incl {e1 e2: Ex} {n: nat}:
   b_ex e1 e2 n ->
-  (eco_sb e2) ≦ (eco_sb e1).
+  (sb e2 ⊔ rf e2 ⊔ mo e2 ⊔ rb e2) ≦ (sb e1 ⊔ rf e1 ⊔ mo e1 ⊔ rb e1).
 Proof.
-  intros Hbe. unfold eco_sb.
+  intros Hbe.
   rewrite (b_ex_sb Hbe);
   rewrite (b_ex_rf Hbe);
   rewrite (b_ex_mo Hbe);
@@ -841,10 +1051,10 @@ Lemma eco_sb_bnd_incl_rev {e e1 e2: Ex} {x y: Evt} {m n: nat}:
   m < n ->
   b_ex e e1 n ->
   b_ex e e2 m ->
-  eco_sb e1 x y ->
+  (sb e1 ⊔ rf e1 ⊔ mo e1 ⊔ rb e1) x y ->
   get_eid x <= m ->
   get_eid y <= m ->
-  eco_sb e2 x y.
+  (sb e2 ⊔ rf e2 ⊔ mo e2 ⊔ rb e2) x y.
 Proof.
   intros Hord Hb1 Hb2 Hrel Hord1 Hord2.
   destruct Hrel as [[[Hrel|Hrel]|Hrel]|Hrel].
@@ -872,7 +1082,7 @@ Qed.
 
 Lemma eco_sb_nminone_lt_one {e e1: Ex} {x y: Evt} {n: nat}:
   b_ex e e1 n ->
-  eco_sb e1 x y ->
+  (sb e1 ⊔ rf e1 ⊔ mo e1 ⊔ rb e1) x y ->
   n-1 < n.
 Proof.
   intros Hb Hrel.
@@ -891,7 +1101,8 @@ Qed.
 Lemma eco_sb_e1_not_e2 {e e1 e2: Ex} {x y: Evt} {n: nat}:
   b_ex e e1 n ->
   b_ex e e2 (n-1) ->
-  (eco_sb e1 \ eco_sb e2) x y ->
+  ((sb e1 ⊔ rf e1 ⊔ mo e1 ⊔ rb e1) \ 
+   (sb e2 ⊔ rf e2 ⊔ mo e2 ⊔ rb e2)) x y ->
   (get_eid x = n \/ get_eid y = n).
 Proof.
   intros Hb1 Hb2 [Hrel Hnotrel].
@@ -913,12 +1124,12 @@ Lemma smallest_b_sc_cycle_last_evt (e e1 e2: Ex) (x:Evt) (n: nat):
   b_ex e e2 (n-1) ->
   ~(is_sc e1) ->
   is_sc e2 ->
-  (eco_sb e1)^+ x x.
+  (sb e1 ⊔ rf e1 ⊔ mo e1 ⊔ rb e1)^+ x x.
 Proof.
   intros Heid Hb1 Hb2 Hnotsc Hsc.
   apply not_acyclic_is_cyclic in Hnotsc.
   destruct Hnotsc as [z Hcyc].
-  apply (cycle_ext _ (eco_sb e2)) in Hcyc.
+  apply (cycle_ext _ (sb e2 ⊔ rf e2 ⊔ mo e2 ⊔ rb e2)) in Hcyc.
   rewrite union_comm in Hcyc.
   apply (added_cycle_pass_through_addition2 _ _ _ Hsc) in Hcyc.
   destruct Hcyc as [y [w Hres Hcycrest]].
@@ -954,7 +1165,7 @@ Proof.
       * eapply change_mo_sameP.
       * eapply sameP_trans; eauto.
         eapply sameP_bex; eauto.
-    + 
+    + admit.
     + exists x, y.
       eapply change_mo_race. eauto.
   - admit.
