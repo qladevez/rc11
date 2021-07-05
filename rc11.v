@@ -96,8 +96,8 @@ Lemma sw_incl_sbrf:
   sw ≦ ((sb ex) ⊔ (rf ex))^+.
 Proof.
   intros Hval.
-  unfold sw, rs. rewrite rmw_incl_sb.
-  rewrite res_eq_loc_incl_itself. kat. auto using Hval.
+  unfold sw, rs. rewrite (rmw_incl_sb _ Hval).
+  rewrite res_eq_loc_incl_itself. kat.
 Qed.
   
 (** ** Happens-before *)

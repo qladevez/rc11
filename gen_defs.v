@@ -1,4 +1,4 @@
-(* 
+(*
 Abstraction of the strong DRF-SC proof through typeclasses.
 
 Author: Quentin Ladeveze, Inria Paris, France
@@ -653,18 +653,37 @@ Class StrongDRFSC Ex `{WeakDRFSC Ex} : Type :=
     (* Conditions to go from weak to strong DRF-SC *)
 
     (* 
-    Since we need to transform our executions while
-    preserving races, we need some hypothesis on our
-    synchronisation relation.
-    We propose the following hypothesis : the 
-    synchronisation relation is independant of mo.
-    This is coherent with the sync relation for SC, TSO
-    and C11, which are all dependant only of sb and rf.
+    Since we need to transform our executions while preserving races, we need
+    some hypothesis on our synchronisation relation.
+    We propose the following hypothesis : the synchronisation relation is 
+    independant of mo. This is coherent with the sync relation for SC, TSO and
+    C11, which are all dependant only of sb and rf.
     *)
 
     sync_mo_ind: forall e1 e2, eq_modmo e1 e2 -> sync e1 = sync e2;
 
-    rf_num_ord: forall e e1 e2, rf e e1 e2 -> get_eid e1 < get_eid e2;
+    (*
+    In order to be able to turn an execution into another of the same program,
+    we need to be able to take the prefixes of an execution. To do so, we force
+    the unique identifiers of events to be such that bounding the identifiers
+    of an execution creates a coherent prefix. We thus pose the following
+    hypotheses on the identifiers of the events:
+    - a write event has a strictly lower identifier than all the reads that read
+      the value it writes to memory.
+    - there is a relation deps of dependencies. This relation is a subset of
+      the sequenced-before relation, and any event has a lower identifier than
+      all the events that depend of it.
+
+    Note that for these hypotheses to be true depends crucially on the model
+    forbidding out-of-thin-air executions (by enforcing rf ⊔ deps being acyclic
+    with an accurate notion of dependencies).
+    *)
+
+    rf_ord: forall e e1 e2, rf e e1 e2 -> get_eid e1 < get_eid e2;
+
+    deps (e: Ex) : rlt Evt;
+    deps_incl_sb: forall e, deps e ≦ sb e;
+    deps_ord: forall e e1 e2, deps e e1 e2 -> get_eid e1 < get_eid e2;
   }. 
 
 Section StrongDRF.
@@ -844,7 +863,7 @@ Proof.
   - destruct Hrel as [z Hrel1 Hrel2].
     rewrite <-cnv_rev, (b_ex_rf Hb1) in Hrel1. apply simpl_trt_rel in Hrel1.
     rewrite (b_ex_mo Hb1) in Hrel2. apply simpl_trt_rel in Hrel2.
-    apply rf_num_ord in Hrel1 as Hord3.
+    apply rf_ord in Hrel1 as Hord3.
     right. exists z.
     + rewrite <-cnv_rev, (b_ex_rf Hb2). simpl_trt; auto;
       unfold NLE; lia.
@@ -927,7 +946,7 @@ Proof.
   intros [e2 [Hsame [Hcons Hnotsc]]].
   pose proof (consistent_nonsc_imp_race _ Hcons Hnotsc) as Hracy.
   apply smallest_racy_b_exists in Hracy as [b [e3 [Hbound [Hracy Hsmallest]]]].
-  apply racy_dcmp in Hracy as [x [y [Hrace [Hord Hxwr]]]].
+  apply racy_dcmp in Hracy as [x [y [Hrace [Hord Hxwr]]]]. 
   destruct Hxwr as [Hwrite|Hread].
   - exists (change_mo e3 x).
     split;[|split].
