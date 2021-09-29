@@ -273,6 +273,7 @@ the properties of linear extension of events, and satisfies the general
 module type [OrdExt].
 *)
 
+(*
 Module OEEvt <: OrdExt.
 
 Definition Elt := Event.
@@ -297,6 +298,7 @@ Axiom le_lso : forall (s:Ensemble Event) (r:rlt Event),
 End OEEvt.
 
 Import OEEvt.
+*)
 
 (** * Basic relations *)
 

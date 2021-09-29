@@ -1189,3 +1189,5 @@ Proof.
   eapply (Hnorace ex3); eauto.
   eapply sameP_trans; eauto.
 Qed.
+
+End StrongDRF.
